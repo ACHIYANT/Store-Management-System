@@ -1,80 +1,70 @@
-# SMS - Store Management Suite
+# Backend Services
 
-A multi-service inventory and requisition platform with:
-- `AuthService` for identity, roles, approval-stage configuration, and forensic audit logs
-- `StoreManagementService` for daybook, stock, issue/return, requisitions, migrations, and operational audit trails
-- `frontend` (React + Vite) for role-based UI and operational workflows
+Backend layer of the Store Management System, organized as two services:
 
-This repository is structured as a practical monorepo where backend services and frontend evolve together.
+- `AuthService` (port `3001`)
+- `StoreManagementService` (port `3000`)
 
-## Repository Structure
+## Backend Layout
 
 ```text
-sms/
-├── backend/
-│   ├── AuthService/
-│   ├── StoreManagementService/
-│   ├── FLOW_SWIMLANE.md
-│   ├── DB_ERD.md
-│   └── ...
-└── frontend/
+backend/
+├── AuthService/
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── services/
+│   │   ├── repository/
+│   │   ├── middlewares/
+│   │   ├── models/
+│   │   ├── migrations/
+│   │   └── routes/
+│   └── package.json
+├── StoreManagementService/
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── services/
+│   │   ├── repository/
+│   │   ├── middlewares/
+│   │   ├── models/
+│   │   ├── migrations/
+│   │   └── routes/
+│   ├── docs/                  # migration templates and generation scripts
+│   └── package.json
+└── README.md
 ```
 
-## Core Functional Areas
+## Service Responsibilities
 
-1. Authentication and Authorization
-- Sign-in/sign-up and role assignment
-- Approval stage master and flow-type support
-- Cookie-based auth support + CSRF integration
-- Forensic audit event capture
+## AuthService
+- Authentication and session/token issuance
+- Role and approval-stage management
+- Security middleware (cookies, CSRF, request hardening)
+- Forensic audit log APIs and archival support
 
-2. Procurement and Inventory
-- Daybook entries with multi-stage approval
-- Item category head/group/category master hierarchy
-- Stock lots + issue + return + retain/lost flows
-- Asset records + asset events + serial tracking
+## StoreManagementService
+- Category master (head/group/category)
+- Daybook, daybook items, and serials
+- Stocks, stock movements, issue and return flows
+- Assets and asset events
+- Requisition lifecycle and mapping
+- Migration APIs (validate + execute)
 
-3. Requisition Management
-- Employee digital requisitions
-- Multi-level approvals (division/admin/store flows)
-- Store mapping of requisition items to stock/category
-- Requisition queue/history/detail and timeline tracking
+## API Surface
 
-4. Data Migration Utilities
-- Opening stock migration (validate + execute)
-- Issued-items migration (validate + execute)
-- Employee migration (validate + execute)
-- Vendor migration (validate + execute)
-- Category master migration (validate + execute)
+Base prefixes:
+- AuthService: `http://localhost:3001/api/v1`
+- StoreManagementService: `http://localhost:3000/api/v1`
 
-5. Security and Audit
-- CSRF checks for state-changing requests
-- Role-aware access middleware
-- Upload validation and safe error handling
-- Forensic logs with searchable window + archive path
+Most mutating routes are protected by auth + role checks, and CSRF where configured.
 
-## Tech Stack
-
-### Backend
-- Node.js, Express
-- Sequelize ORM
-- MySQL
-- Multer (uploads)
-- XLSX/ExcelJS (migration templates)
-
-### Frontend
-- React 19 + Vite
-- React Router
-- Tailwind + component-level UI utilities
-
-## Local Development
+## Local Setup
 
 ## Prerequisites
 - Node.js 20+
 - MySQL 8+
 - npm 9+
 
-## 1) AuthService
+## AuthService
 
 ```bash
 cd backend/AuthService
@@ -82,9 +72,12 @@ npm install
 npm run dev
 ```
 
-Runs by default on `http://localhost:3001`.
+Migration:
+```bash
+npx sequelize-cli db:migrate --config src/config/config.json --migrations-path src/migrations --models-path src/models --seeders-path src/seeders
+```
 
-## 2) StoreManagementService
+## StoreManagementService
 
 ```bash
 cd backend/StoreManagementService
@@ -92,96 +85,58 @@ npm install
 npm start
 ```
 
-Runs by default on `http://localhost:3000`.
-
-## 3) Frontend
-
+Migration:
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Runs by default on `http://localhost:5173`.
-
-## Database Migrations
-
-AuthService:
-```bash
-cd backend/AuthService
 npx sequelize-cli db:migrate --config src/config/config.json --migrations-path src/migrations --models-path src/models --seeders-path src/seeders
 ```
 
-StoreManagementService:
-```bash
-cd backend/StoreManagementService
-npx sequelize-cli db:migrate --config src/config/config.json --migrations-path src/migrations --models-path src/models --seeders-path src/seeders
-```
+## Environment Files
 
-## Environment Configuration
+Create `.env` from `.env.example` for each service and set:
+- DB connection credentials
+- JWT secret + expiry
+- cookie/CSRF settings
+- CORS allowlist
+- upload security settings
+- audit retention/archive settings
 
-Create `.env` from `.env.example` in each service and fill production-grade values.
+Do not commit real secrets.
 
-Minimum environment groups to set:
-- Database: host, port, user, password, db name
-- JWT: secret key and expiry
-- CORS: explicit frontend origins (no wildcard in production)
-- Cookies/CSRF: secure flags and trusted origins
-- Upload security: file encryption secret and max limits
-- Forensic logging: retention and archive settings
+## Migration Utilities (StoreManagementService)
 
-Do not commit real `.env` files.
+Template generators and samples are under:
+- `backend/StoreManagementService/docs/category-master-migration/`
+- `backend/StoreManagementService/docs/employee-migration/`
+- `backend/StoreManagementService/docs/vendor-migration/`
+- `backend/StoreManagementService/docs/opening-stock-migration/`
+- `backend/StoreManagementService/docs/issued-migration/`
 
-## Operational Workflow (High-Level)
+Recommended process for every bulk migration:
+1. Generate/fill template
+2. Call `validate` endpoint
+3. Fix failed rows
+4. Call `execute` endpoint
 
-1. Category master setup -> heads/groups/categories
-2. Daybook entry -> approval -> stock lot creation
-3. Employee requisition -> approval chain -> store mapping
-4. Issue from stock -> issued item + stock movement + optional asset event
-5. Return/retain/lost -> stock/asset movement updates + audit logs
+## Security and Audit Guidelines
 
-## Data Migration Workflow (Recommended)
+- Keep strict role checks on all write routes
+- Keep CSRF enabled on mutating requests
+- Avoid logging secrets/personal sensitive fields
+- Store forensic logs with searchable hot window and cold archive
+- Run periodic backup and restore drills
 
-For every migration API:
-1. Generate template from docs script
-2. Fill sheet with validated master values
-3. Call `validate` endpoint first
-4. Fix all failed rows
-5. Call `execute` endpoint
+## Troubleshooting
 
-Use execute APIs in transaction mode (all-or-none) for consistency.
+1. Migration shows "already up to date" but schema mismatch exists
+- verify `SequelizeMeta` table and migration paths used in command
 
-## Security Baseline
+2. Build/runtime fails in Linux but works on macOS
+- check import path case sensitivity (`FileName` vs `filename`)
 
-- Use HttpOnly secure cookies in production
-- Enforce CSRF for mutating requests
-- Enforce role checks at route and service layers
-- Never log plaintext passwords or sensitive secrets
-- Keep upload directories outside version control
-- Add regular database backups and restore drills
+3. Upload errors returning HTML stack traces
+- keep centralized error middleware enabled for structured JSON responses
 
-## What To Commit / What Not To Commit
+## Notes
 
-Commit:
-- Source code in `backend/**/src` and `frontend/src`
-- Migration files, seeders, models, routes, services, docs scripts
-- `package.json`, `package-lock.json`, `.env.example`, markdown docs
-
-Never commit:
-- `.env`
-- `uploads/` content
-- `.DS_Store`
-- backup zips (`*.zip`)
-- local build artifacts (`dist`, `.vite`, logs)
-
-## Suggested Next Improvements
-
-1. Add root-level `.gitignore` for monorepo-wide protection
-2. Add CI checks for lint + migration validation
-3. Add OpenAPI docs for both backend services
-4. Add smoke tests for critical flows (signin, daybook, issue, requisition)
-
-## Contributors
-
-Internal team at HARTRON Store Management initiative.
-
+For frontend setup and UI workflows, see `../frontend/README.md`.
+For monorepo-level overview, see `../README.md`.
