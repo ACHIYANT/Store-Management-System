@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ListPage from "@/components/ListPage";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import ViewImagePopup from "@/components/ViewImagePopUp";
+import ViewImagePopup from "@/components/ViewImagePopup";
 import PopupMessage from "@/components/PopupMessage";
 import FilterPanel from "@/components/FilterPanel";
 import useDebounce from "@/hooks/useDebounce";

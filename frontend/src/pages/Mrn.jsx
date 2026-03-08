@@ -3,7 +3,7 @@ import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import ViewImagePopup from "@/components/ViewImagePopUp";
+import ViewImagePopup from "@/components/ViewImagePopup";
 import { useRef } from "react";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
