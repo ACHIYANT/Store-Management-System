@@ -7,18 +7,7 @@ import axios from "axios";
 import PopupMessage from "@/components/PopupMessage";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const typePrefixes = {
-  "Fixed Assets": "FA",
-  "Consumable Items": "CI",
-  "Vehicle Items": "VI",
-  "Stationary Items": "SI",
-};
-
-const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
-  // const navigate = useNavigate();
-  const [billImageFile, setBillImageFile] = useState(null);
-  const [itemImageFile, setItemImageFile] = useState(null);
-
+const DayBookFormUpdate = () => {
   const [existingBillImage, setExistingBillImage] = useState(null);
   const [existingItemImage, setExistingItemImage] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -39,7 +28,6 @@ const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
   const navigate = useNavigate();
 
   const { daybook, entryType, finYear } = state;
-  const [formValues, setFormValues] = useState({});
 
   useEffect(() => {
     if (!daybook) return;
@@ -129,18 +117,23 @@ const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
     const timer = setTimeout(async () => {
       try {
         setIsVendorLookupLoading(true);
-        const response = await axios.get("http://localhost:3000/api/v1/vendor/search", {
-          params: {
-            name: query,
-            page: 1,
-            limit: 20,
-            cursorMode: false,
+        const response = await axios.get(
+          "http://localhost:3000/api/v1/vendor/search",
+          {
+            params: {
+              name: query,
+              page: 1,
+              limit: 20,
+              cursorMode: false,
+            },
           },
-        });
+        );
 
         if (isCancelled) return;
 
-        const matches = Array.isArray(response?.data?.data) ? response.data.data : [];
+        const matches = Array.isArray(response?.data?.data)
+          ? response.data.data
+          : [];
         setVendorOptions(matches);
       } catch (error) {
         if (isCancelled) return;
@@ -210,7 +203,7 @@ const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
 
       setExistingBillImage(url);
       setValue("bill_image_url", url);
-    } catch (err) {
+    } catch {
       alert("Bill image upload failed");
     } finally {
       setUploading(false);
@@ -232,7 +225,7 @@ const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
 
       setExistingItemImage(url);
       setValue("item_image_url", url);
-    } catch (err) {
+    } catch {
       alert("Item image upload failed");
     } finally {
       setUploading(false);
@@ -356,7 +349,9 @@ const DayBookFormUpdate = ({ vendors = [], defaultType, defaultFinYear }) => {
                         onClick={() => applyVendorSelection(vendor)}
                         className="flex w-full flex-col border-b border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 last:border-b-0"
                       >
-                        <span className="font-medium text-slate-800">{vendor.name}</span>
+                        <span className="font-medium text-slate-800">
+                          {vendor.name}
+                        </span>
                         <span className="text-xs text-slate-600">
                           {vendor.mobile_no}
                           {vendor.gst_no ? ` | ${vendor.gst_no}` : " | NO GST"}

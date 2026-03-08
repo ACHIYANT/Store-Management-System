@@ -105,7 +105,7 @@ export default function EmployeeIssuedItems() {
       try {
         const res = await axios.get(`${API}/itemCategories`);
         setCategories(res.data?.data || []);
-      } catch (_err) {
+      } catch {
         setCategories([]);
       }
     })();
@@ -114,7 +114,7 @@ export default function EmployeeIssuedItems() {
       try {
         const res = await axios.get(`${API}/stocks`);
         setStockOptions(res.data?.data || []);
-      } catch (_err) {
+      } catch {
         setStockOptions([]);
       }
     })();

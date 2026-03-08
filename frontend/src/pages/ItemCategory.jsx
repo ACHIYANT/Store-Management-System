@@ -27,7 +27,6 @@ export default function ItemCategory() {
 
   const [showFilters, setShowFilters] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [isBackdropClosing, setIsBackdropClosing] = useState(false);
   const filterRef = useRef(null);
   const itemCategoryFilterFields = [
     {
@@ -84,7 +83,6 @@ export default function ItemCategory() {
       )
       .then((res) => setCategoryGroups(res.data.data || []));
   }, [filters.head_id]);
-
 
   const fetchItemCategoriesPage = useCallback(
     async ({ cursor, limit }) => {
@@ -147,10 +145,7 @@ export default function ItemCategory() {
       label: "Asset",
       render: (_, row) => (row.serialized_required ? "Yes" : "No"),
     },
-    
   ];
-
-
 
   const navigate = useNavigate();
   function handleAdd() {
@@ -171,12 +166,10 @@ export default function ItemCategory() {
   }
   const closeFilterPanel = () => {
     setIsClosing(true);
-    setIsBackdropClosing(true);
 
     setTimeout(() => {
       setShowFilters(false);
       setIsClosing(false);
-      setIsBackdropClosing(false);
     }, 160); // must match CSS animation duration
   };
 

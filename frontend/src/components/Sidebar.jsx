@@ -46,7 +46,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import IssueQtyForm from "./Forms/IssueQtyForm";
 
 export default function Sidebar() {
@@ -390,84 +390,90 @@ export default function Sidebar() {
     );
   }, [location.pathname]);
 
-  const NavItem = ({ icon: Icon, label, children, collapsible, onClick }) => (
-    <div className="overflow-hidden print:hidden">
-      <motion.div
-        whileHover={{ x: 1 }}
-        whileTap={{ scale: 0.99 }}
-        className={`group relative flex items-center justify-between px-2.5 py-2 text-xs sm:text-[13px] rounded-xl cursor-pointer transition-all print:hidden ${
-          expanded[label]
-            ? "bg-white/80 text-slate-900 ring-1 ring-slate-200/70 shadow-[0_6px_14px_rgba(15,23,42,0.08)]"
-            : "text-slate-600 hover:text-slate-900 hover:bg-white/70"
-        }`}
-        onClick={() => {
-          if (onClick) return onClick(); // handle redirect
-          if (collapsible) toggleSection(label); // handle expand/collapse
-        }}
-      >
-        <div className="flex items-center gap-2.5 print:hidden">
-          <span className="grid place-items-center h-7 w-7 rounded-lg bg-gradient-to-br from-sky-50 via-white to-indigo-50 ring-1 ring-slate-200/70">
-            <motion.div
-              className="h-3.5 w-3.5 print:hidden"
-              animate={{
-                rotate: expanded[label] ? 90 : 0,
-                transition: { duration: 0.3 },
+  const NavItem = ({ icon, label, children, collapsible, onClick }) => {
+    const Icon = icon;
+    return (
+      <div className="overflow-hidden print:hidden">
+        <Motion.div
+          whileHover={{ x: 1 }}
+          whileTap={{ scale: 0.99 }}
+          className={`group relative flex items-center justify-between px-2.5 py-2 text-xs sm:text-[13px] rounded-xl cursor-pointer transition-all print:hidden ${
+            expanded[label]
+              ? "bg-white/80 text-slate-900 ring-1 ring-slate-200/70 shadow-[0_6px_14px_rgba(15,23,42,0.08)]"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/70"
+          }`}
+          onClick={() => {
+            if (onClick) return onClick(); // handle redirect
+            if (collapsible) toggleSection(label); // handle expand/collapse
+          }}
+        >
+          <div className="flex items-center gap-2.5 print:hidden">
+            <span className="grid place-items-center h-7 w-7 rounded-lg bg-gradient-to-br from-sky-50 via-white to-indigo-50 ring-1 ring-slate-200/70">
+              <Motion.div
+                className="h-3.5 w-3.5 print:hidden"
+                animate={{
+                  rotate: expanded[label] ? 90 : 0,
+                  transition: { duration: 0.3 },
+                }}
+              >
+                <Icon className="h-3.5 w-3.5 print:hidden" />
+              </Motion.div>
+            </span>
+            <span className="font-medium tracking-wide">{label}</span>
+          </div>
+          {collapsible &&
+            (expanded[label] ? (
+              <ChevronUp className="h-4 w-4 opacity-80 print:hidden" />
+            ) : (
+              <ChevronRight className="h-4 w-4 opacity-60 print:hidden" />
+            ))}
+        </Motion.div>
+
+        <AnimatePresence initial={false}>
+          {collapsible && (
+            <Motion.div
+              className="ml-9 mt-0.5 overflow-hidden"
+              initial="collapsed"
+              animate={expanded[label] ? "open" : "collapsed"}
+              exit="collapsed"
+              variants={{
+                open: {
+                  opacity: 1,
+                  height: "auto",
+                  transition: { staggerChildren: 0.1 },
+                },
+                collapsed: { opacity: 0, height: 0 },
+              }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 30,
               }}
             >
-              <Icon className="h-3.5 w-3.5 print:hidden" />
-            </motion.div>
-          </span>
-          <span className="font-medium tracking-wide">{label}</span>
-        </div>
-        {collapsible &&
-          (expanded[label] ? (
-            <ChevronUp className="h-4 w-4 opacity-80 print:hidden" />
-          ) : (
-            <ChevronRight className="h-4 w-4 opacity-60 print:hidden" />
-          ))}
-      </motion.div>
+              <div className="space-y-1">{children}</div>
+            </Motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
-      <AnimatePresence initial={false}>
-        {collapsible && (
-          <motion.div
-            className="ml-9 mt-0.5 overflow-hidden"
-            initial="collapsed"
-            animate={expanded[label] ? "open" : "collapsed"}
-            exit="collapsed"
-            variants={{
-              open: {
-                opacity: 1,
-                height: "auto",
-                transition: { staggerChildren: 0.1 },
-              },
-              collapsed: { opacity: 0, height: 0 },
-            }}
-            transition={{
-              type: "spring",
-              stiffness: 300,
-              damping: 30,
-            }}
-          >
-            <div className="space-y-1">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-
-  const SubItem = ({ icon: Icon, label, onClick }) => (
-    <motion.div
-      className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs text-slate-500 hover:bg-white/70 hover:text-slate-900 cursor-pointer print:hidden"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      onClick={onClick}
-    >
-      <Icon className="h-3.5 w-3.5 print:hidden opacity-80" />
-      <span>{label}</span>
-    </motion.div>
-  );
+  const SubItem = ({ icon, label, onClick }) => {
+    const Icon = icon;
+    return (
+      <Motion.div
+        className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs text-slate-500 hover:bg-white/70 hover:text-slate-900 cursor-pointer print:hidden"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClick}
+      >
+        <Icon className="h-3.5 w-3.5 print:hidden opacity-80" />
+        <span>{label}</span>
+      </Motion.div>
+    );
+  };
 
   const GroupCard = ({ title, children }) => (
     <div className="relative rounded-2xl bg-white/70 backdrop-blur-md ring-1 ring-slate-200/70 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
@@ -496,7 +502,7 @@ export default function Sidebar() {
         </div>
       </PopoverTrigger>
       <PopoverContent side="right" align="start" className="w-64 print:hidden">
-        <motion.div
+        <Motion.div
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 20, opacity: 0 }}
@@ -508,7 +514,7 @@ export default function Sidebar() {
           <SubItem icon={CreditCard} label="Billing" />
           <SubItem icon={Bell} label="Notifications" />
           <SubItem icon={LogOut} label="Log out" />
-        </motion.div>
+        </Motion.div>
       </PopoverContent>
     </Popover>
   );

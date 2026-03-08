@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import PopupMessage from "@/components/PopupMessage";
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 
 import axios from "axios";
 
@@ -21,7 +20,6 @@ const ItemCategoryAddForm = () => {
     category_name: "",
     serialized_required: false,
   });
-  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -93,7 +91,7 @@ const ItemCategoryAddForm = () => {
         category_name: "",
         serialized_required: false,
       });
-    } catch (error) {
+    } catch {
       setPopup({
         open: true,
         type: "error",

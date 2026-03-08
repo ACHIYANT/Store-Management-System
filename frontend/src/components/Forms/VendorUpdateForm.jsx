@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
 import axios from "axios";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 const VendorUpdateForm = ({ onUpdateSuccess }) => {
   // Accessing the selected employee passed via navigation
@@ -21,8 +21,6 @@ const VendorUpdateForm = ({ onUpdateSuccess }) => {
     formState: { errors },
   } = useForm();
   const [popup, setPopup] = useState({ open: false, type: "", message: "" });
-  const [division, setDivision] = useState("");
-  const navigate = useNavigate();
 
   // Prefill form fields when selected employee data is available
   useEffect(() => {

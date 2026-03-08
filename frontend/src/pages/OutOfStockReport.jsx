@@ -292,7 +292,7 @@ export default function OutOfStockReport() {
                 head.id,
                 Array.isArray(res?.data?.data) ? res.data.data : [],
               );
-            } catch (_err) {
+            } catch {
               groupsByHeadId.set(head.id, []);
             }
           }),
@@ -318,7 +318,7 @@ export default function OutOfStockReport() {
                 group_id: group.id,
               });
               categoriesByGroupId.set(group.id, categories || []);
-            } catch (_err) {
+            } catch {
               categoriesByGroupId.set(group.id, []);
             }
           }),
@@ -359,7 +359,7 @@ export default function OutOfStockReport() {
                 .sort((a, b) => a.item_name.localeCompare(b.item_name));
 
               itemsByCategoryId.set(category.id, items);
-            } catch (_err) {
+            } catch {
               itemsByCategoryId.set(category.id, []);
             }
           }),

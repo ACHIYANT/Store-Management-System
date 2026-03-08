@@ -1,16 +1,13 @@
 import { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
 import PopupMessage from "@/components/PopupMessage";
+import { motion as Motion } from "framer-motion";
 
 import logo from "/logo.svg";
 import govt from "/govt.svg";
 
 
 export default function ResetPassword() {
-  const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState({
     open: false,
     type: "info",
@@ -18,18 +15,9 @@ export default function ResetPassword() {
     moveTo: "",
   });
 
-  const showPopup = ({ type = "info", message = "", moveTo = "" }) => {
-    setPopup({ open: true, type, message, moveTo });
-  };
-
-  const handleLogin = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 2000);
-  };
-
   return (
     <div className="flex bg-gray-100 min-h-screen items-center justify-center p-4">
-      <motion.div
+      <Motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -56,7 +44,7 @@ export default function ResetPassword() {
             </div>
           </CardContent>
         </Card>
-      </motion.div>
+      </Motion.div>
 
       <PopupMessage
         open={popup.open}

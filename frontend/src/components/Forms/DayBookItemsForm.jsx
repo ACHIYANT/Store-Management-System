@@ -9,7 +9,6 @@ import { SKU_UNITS, DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
 const DayBookItemsForm = () => {
   const { state } = useLocation();
   const [categories, setCategories] = useState([]);
-  const [search, setSearch] = useState("");
   const [showAdditionalCharges, setShowAdditionalCharges] = useState(false);
   const [categoryHeads, setCategoryHeads] = useState([]);
   const [popup, setPopup] = useState({
