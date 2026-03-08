@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
 import {
   Select,
   SelectTrigger,
@@ -15,8 +14,7 @@ import NavBar from "../NavBar";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const DayBookFormFirstStepUpdate = ({ vendors = [], onSubmit }) => {
-
+const DayBookFormFirstStepUpdate = () => {
   const [availableYears, setAvailableYears] = useState([]);
 
   const { id } = useParams();

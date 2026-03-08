@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect } from "react";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import ViewImagePopup from "@/components/ViewImagePopUp";
 import { useRef } from "react";
@@ -172,8 +172,6 @@ export default function Mrn() {
     },
     { key: "remarks", label: "Remarks" },
   ];
-
-
 
   const filterPermissions = {
     finYear: true,

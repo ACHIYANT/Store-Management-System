@@ -99,22 +99,6 @@ export default function DayBook() {
 
   // Read roles once for action buttons (used below)
   const roles = JSON.parse(localStorage.getItem("roles")) || [];
-
-  const filterPermissions = (() => {
-    if (roles.includes("STORE_ENTRY")) {
-      return { finYear: true, status: true, entryType: true };
-    }
-    if (roles.includes("SUPER_APPROVER")) {
-      return { finYear: true, status: true, entryType: true };
-    }
-    if (roles.includes("ADMIN_APPROVER")) {
-      return { finYear: false, status: true, entryType: true };
-    }
-    if (roles.includes("INSPECTION_OFFICER")) {
-      return { finYear: false, status: true, entryType: false };
-    }
-    return { finYear: false, status: false, entryType: false };
-  })();
   function handleViewImage(url) {
     if (!url) {
       setPopup({

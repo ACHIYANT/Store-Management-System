@@ -96,7 +96,7 @@ export default function useCursorWindowedList({
 
         setHasMore(Boolean(meta.hasMore));
         setNextCursor(fetchedNextCursor);
-      } catch (_error) {
+      } catch {
         if (requestId !== requestIdRef.current) return;
         if (!append) {
           rowsRef.current = [];

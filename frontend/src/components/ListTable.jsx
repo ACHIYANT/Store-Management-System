@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
@@ -159,7 +159,28 @@ export default function ListTable({
   }, [onLoadMore, hasMore, loading]);
 
 
-  const sortedData = data;
+  const sortedData = useMemo(() => {
+    if (!sortConfig) return data;
+    const { key, direction } = sortConfig;
+    const multiplier = direction === "asc" ? 1 : -1;
+
+    return [...data].sort((a, b) => {
+      const av = a?.[key];
+      const bv = b?.[key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * multiplier;
+      }
+
+      return String(av).localeCompare(String(bv), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }) * multiplier;
+    });
+  }, [data, sortConfig]);
 
   const toggleSort = (key) => {
     setSortConfig((prev) => {
@@ -415,7 +436,7 @@ export default function ListTable({
               </tr>
             )}
 
-            {virtualRows.map((vr, idx) => {
+            {virtualRows.map((vr) => {
               const row = sortedData[vr.index];
               if (!row) return null;
               const isSelected = Array.isArray(selectedRows)

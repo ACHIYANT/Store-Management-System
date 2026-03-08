@@ -7,14 +7,7 @@ import axios from "axios";
 import PopupMessage from "@/components/PopupMessage";
 import { useNavigate } from "react-router-dom";
 
-const typePrefixes = {
-  "Fixed Assets": "FA",
-  "Consumable Items": "CI",
-  "Vehicle Items": "VI",
-  "Stationary Items": "SI",
-};
-
-const DayBookForm = ({ vendors = [], defaultType, defaultFinYear }) => {
+const DayBookForm = ({ defaultType, defaultFinYear }) => {
   const navigate = useNavigate();
   const [billImageFile, setBillImageFile] = useState(null);
   const [itemImageFile, setItemImageFile] = useState(null);
@@ -38,7 +31,7 @@ const DayBookForm = ({ vendors = [], defaultType, defaultFinYear }) => {
 
     setValue("entry_type", defaultType);
     setValue("fin_year", defaultFinYear);
-  }, [defaultType, defaultFinYear]);
+  }, [defaultType, defaultFinYear, setValue]);
 
   const applyVendorSelection = (vendor) => {
     if (!vendor) return;
