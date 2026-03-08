@@ -1,0 +1,27 @@
+{
+  "name": "storemanagement",
+  "version": "1.0.0",
+  "description": "Micro Service for handling Store Management of Hartron",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx nodemon src/index"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.11.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.2",
+    "mysql2": "^3.14.0",
+    "nodemon": "^3.1.9",
+    "sequelize": "^6.37.7",
+    "sequelize-cli": "^6.6.2",
+    "xlsx": "^0.18.5"
+  }
+}

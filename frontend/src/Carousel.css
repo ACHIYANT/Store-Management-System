@@ -1,0 +1,87 @@
+.App-cr {
+  font-family: sans-serif;
+  text-align: center;
+  margin-top: 10px;
+}
+.slide-cr {
+  position: relative;
+  left: 10%;
+  width: 80%;
+  height: 50vh;
+  border-radius: 2rem;
+}
+.show-cr {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  animation: fade 1.5s ease-in-out;
+}
+
+.show-cr > div {
+  width: 100%;
+  height: 100%;
+}
+
+.img-cr {
+  width: 100%;
+  height: 100%;
+  border-radius: 1rem;
+}
+
+
+@keyframes fade {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.not-show-cr {
+  display: none;
+}
+
+.prev-cr {
+  position: absolute;
+  top: 50%;
+  left: 1px;
+  transform: translateY(-50%);
+}
+
+.next-cr {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  transform: translateY(-50%);
+}
+
+.button-cr {
+  border: 0;
+  background-color: Transparent;
+  font-size: 20px;
+}
+
+.page-cr {
+  text-align: center;
+}
+.dot-cr {
+  cursor: pointer;
+  height: 5px;
+  width: 20px;
+  margin: 0 2px;
+  background-color: #ddd;
+  display: inline-flex;
+  transition: background-color 0.6s ease;
+}
+
+.button-cr:hover,
+.dot:hover,
+.active {
+  background-color: #717171;
+  opacity: 1;
+}

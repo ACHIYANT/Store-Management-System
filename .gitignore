@@ -1,0 +1,43 @@
+# OS / Editor
+**/.DS_Store
+.vscode/
+.idea/
+
+# Secrets / env
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# Node / build / cache
+**/node_modules/
+**/dist/
+**/.vite/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime uploads
+backend/StoreManagementService/src/uploads/
+backend/StoreManagementService/uploads/
+dump/
+**/dump/
+
+# Backups / temporary files
+*.zip
+*.tar
+*.gz
+* copy*
+*-old.*
+*.bak
+*.tmp
+
+
+ready_to_commit.txt
+ignored.txt
+*.code-workspace
+**/* [0-9][0-9]_[0-9][0-9]_*.jsx
+**/* [0-9][0-9]_[0-9][0-9]_*.css
+

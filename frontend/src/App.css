@@ -1,0 +1,102 @@
+/* ============================= */
+/* PRINT STYLES (CLEAN VERSION)  */
+/* ============================= */
+
+.print-watermark {
+  display: none;
+}
+
+.print-top-spacer {
+  display: none;
+}
+
+.print-container {
+  position: relative;
+}
+
+/* -------- PRINT MODE -------- */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  
+
+  /* Physical printer margins */
+  @page {
+    size: A4;
+    /* margin-top: 1mm; */
+    margin-left: 8mm;
+    margin-right: 8mm;
+    margin-bottom: 6mm;
+  }
+
+  /* Hide UI buttons */
+  .no-print,
+  .print-hidden {
+    display: none !important;
+  }
+
+  .print-watermark {
+    
+    display: block;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 64px;
+    font-weight: 700;
+    color: rgba(0, 0, 0, 0.08);
+    text-transform: uppercase;
+    z-index: 9999;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .print-watermark span {
+    font-size: 72px;
+    font-weight: 700;
+    color: rgba(200, 0, 0, 0.08);
+    transform: rotate(-30deg);
+    white-space: nowrap;
+  }
+  
+  .flex {
+    display: block !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  .no-print,
+  .navbar,
+  .sidebar,
+  .app-layout,
+  button {
+    display: none !important;
+  }
+
+  .display-block-force {
+    display: flex !important;
+  }
+
+  /* Force background colors to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+*::-webkit-scrollbar {
+  display: none !important;
+}
