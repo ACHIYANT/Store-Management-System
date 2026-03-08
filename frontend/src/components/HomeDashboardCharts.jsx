@@ -12,8 +12,8 @@ import axios from "axios";
 import MotionGrid from "@/components/MotionGrid";
 
 const API_BASE = "http://localhost:3000/api/v1";
-const UserDashboardWidgets = lazy(() =>
-  import("@/components/dashboard/user/UserDashboardWidgets"),
+const UserDashboardWidgets = lazy(
+  () => import("@/components/dashboard/user/UserDashboardWidgets"),
 );
 
 const formatNumber = (n) =>
@@ -144,19 +144,22 @@ export default function HomeDashboardCharts() {
     }
 
     try {
-      const res = await axios.get(`${API_BASE}/requisitions/dashboard/my-summary`, {
-        params: {
-          queueLimit: 8,
-          historyLimit: 8,
-          recentLimit: 8,
-          actionNeededLimit: 6,
-          months: 6,
+      const res = await axios.get(
+        `${API_BASE}/requisitions/dashboard/my-summary`,
+        {
+          params: {
+            queueLimit: 8,
+            historyLimit: 8,
+            recentLimit: 8,
+            actionNeededLimit: 6,
+            months: 6,
+          },
         },
-      });
+      );
 
       setUserSummary(res?.data?.data || null);
       setLastUserRefreshAt(new Date().toISOString());
-    } catch (_error) {
+    } catch {
       if (!silent) {
         setUserSummary(null);
       }
@@ -186,13 +189,35 @@ export default function HomeDashboardCharts() {
       axios.get(`${API_BASE}/asset-events/recent`, { params: { limit: 8 } }),
     ]);
 
-    setStocks(stocksRes.status === "fulfilled" ? stocksRes.value.data?.data || [] : []);
-    setDaybooks(daybookRes.status === "fulfilled" ? daybookRes.value.data?.data || [] : []);
-    setAssets(assetsRes.status === "fulfilled" ? assetsRes.value.data?.data || [] : []);
-    setVendorsCount(vendorRes.status === "fulfilled" ? (vendorRes.value.data?.data || []).length : 0);
-    setEmployeesCount(employeeRes.status === "fulfilled" ? (employeeRes.value.data?.data || []).length : 0);
-    setCategoriesCount(categoryRes.status === "fulfilled" ? (categoryRes.value.data?.data || []).length : 0);
-    setRecentEvents(recentRes.status === "fulfilled" ? recentRes.value.data?.data || [] : []);
+    setStocks(
+      stocksRes.status === "fulfilled" ? stocksRes.value.data?.data || [] : [],
+    );
+    setDaybooks(
+      daybookRes.status === "fulfilled"
+        ? daybookRes.value.data?.data || []
+        : [],
+    );
+    setAssets(
+      assetsRes.status === "fulfilled" ? assetsRes.value.data?.data || [] : [],
+    );
+    setVendorsCount(
+      vendorRes.status === "fulfilled"
+        ? (vendorRes.value.data?.data || []).length
+        : 0,
+    );
+    setEmployeesCount(
+      employeeRes.status === "fulfilled"
+        ? (employeeRes.value.data?.data || []).length
+        : 0,
+    );
+    setCategoriesCount(
+      categoryRes.status === "fulfilled"
+        ? (categoryRes.value.data?.data || []).length
+        : 0,
+    );
+    setRecentEvents(
+      recentRes.status === "fulfilled" ? recentRes.value.data?.data || [] : [],
+    );
   }, []);
 
   useEffect(() => {
@@ -420,10 +445,12 @@ export default function HomeDashboardCharts() {
         type: "pie",
         radius: ["55%", "75%"],
         label: { formatter: "{b}\\n{c}" },
-        data: Object.entries(derived.assetStatusCounts).map(([name, value]) => ({
-          name,
-          value,
-        })),
+        data: Object.entries(derived.assetStatusCounts).map(
+          ([name, value]) => ({
+            name,
+            value,
+          }),
+        ),
         color: ["#22c55e", "#f59e0b", "#ef4444", "#6366f1", "#94a3b8"],
       },
     ],
@@ -527,7 +554,11 @@ export default function HomeDashboardCharts() {
     <div className="mt-6 space-y-6">
       <MotionGrid className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <KpiCard label="Categories" value={categoriesCount} tone="blue" />
-        <KpiCard label="Total Stock" value={derived.totalStockQty} tone="green" />
+        <KpiCard
+          label="Total Stock"
+          value={derived.totalStockQty}
+          tone="green"
+        />
         <KpiCard
           label="Low Stock Cats"
           value={derived.statusCounts["Low Stock"]}
@@ -552,7 +583,10 @@ export default function HomeDashboardCharts() {
         <KpiCard label="Employees" value={employeesCount} tone="slate" />
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-1 lg:grid-cols-3 gap-4" stagger={90}>
+      <MotionGrid
+        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+        stagger={90}
+      >
         <div className="bg-white rounded-xl border p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             Availability Score
@@ -598,7 +632,9 @@ export default function HomeDashboardCharts() {
           </h3>
           <div className="space-y-2">
             {derived.lowCategories.length === 0 && (
-              <div className="text-sm text-gray-500">All categories healthy</div>
+              <div className="text-sm text-gray-500">
+                All categories healthy
+              </div>
             )}
             {derived.lowCategories.map((c) => (
               <div
@@ -617,7 +653,10 @@ export default function HomeDashboardCharts() {
         </div>
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-1 lg:grid-cols-3 gap-4" stagger={90}>
+      <MotionGrid
+        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+        stagger={90}
+      >
         <div className="bg-white rounded-xl border p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             Stock Health
@@ -640,7 +679,10 @@ export default function HomeDashboardCharts() {
         </div>
       </MotionGrid>
 
-      <MotionGrid className="grid grid-cols-1 lg:grid-cols-2 gap-4" stagger={100}>
+      <MotionGrid
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+        stagger={100}
+      >
         <div className="bg-white rounded-xl border p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             DayBook Value Trend

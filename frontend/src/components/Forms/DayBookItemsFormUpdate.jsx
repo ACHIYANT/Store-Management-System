@@ -13,8 +13,6 @@ const DayBookItemsFormUpdate = () => {
   console.log("DI", daybookId);
   const [categories, setCategories] = useState([]);
   const [categoryHeads, setCategoryHeads] = useState([]);
-  const [categoryGroups, setCategoryGroups] = useState([]);
-  const [search, setSearch] = useState("");
   const [showAdditionalCharges, setShowAdditionalCharges] = useState(false);
   const [items, setItems] = useState([
     {
@@ -53,21 +51,17 @@ const DayBookItemsFormUpdate = () => {
     e.target.blur();
   };
   useEffect(() => {
-    async function fetchCategoryHeadsAndGroups() {
+    async function fetchCategoryHeads() {
       try {
         const res = await axios.get(
           "http://localhost:3000/api/v1/category-head",
         );
-        const resGroups = await axios.get(
-          "http://localhost:3000/api/v1/category-group",
-        );
         setCategoryHeads(res.data.data || []);
-        setCategoryGroups(resGroups.data.data || []);
       } catch (err) {
         console.error("Error fetching category heads", err);
       }
     }
-    fetchCategoryHeadsAndGroups();
+    fetchCategoryHeads();
   }, []);
 
   useEffect(() => {

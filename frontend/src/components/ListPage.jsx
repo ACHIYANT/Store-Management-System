@@ -13,7 +13,6 @@ const ListPage = ({
   onFilter,
   actions,
   idCol = "id",
-  apiRequestConfig = {}, // optional
   onSearch,
   searchValue,
   selectedRows, // optional

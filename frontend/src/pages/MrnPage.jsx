@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import logo from "/logo.svg";
 import axios from "axios";
-const hartronLogo = "/logo.svg";
 import { QRCodeSVG } from "qrcode.react";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
 
@@ -15,8 +14,6 @@ export default function MRNPage() {
   const [printTimestamp, setPrintTimestamp] = useState("");
   const [gstType, setGstType] = useState(null);
   const [additionalCharges, setAdditionalCharges] = useState([]);
-  const printRef = useRef(null);
-  const tableRef = useRef(null);
   const navigate = useNavigate();
   const getSkuUnit = (item) =>
     item?.sku_unit || item?.skuUnit || DEFAULT_SKU_UNIT;
@@ -44,7 +41,7 @@ export default function MRNPage() {
           `http://localhost:3000/api/v1/daybook-items/${daybookId}/additional-charges`,
         );
         setAdditionalCharges(res.data.data || []);
-      } catch (err) {
+      } catch {
         setAdditionalCharges([]);
       }
     }
@@ -119,7 +116,6 @@ export default function MRNPage() {
     const quantity = Number(item.quantity);
     const rate = Number(item.rate);
     const subtotal = quantity * rate;
-    const gst_rate = Number(item.gst_rate);
 
     console.log(
       `Item ${index + 1}: qty=${quantity}, rate=${rate}, subtotal=${subtotal}`,
@@ -128,7 +124,7 @@ export default function MRNPage() {
     return sum + subtotal;
   }, 0);
 
-  const totalAmount = items.reduce((sum, item, index) => {
+  const totalAmount = items.reduce((sum, item) => {
     const amount = Number(item.amount);
     return sum + amount;
   }, 0);
@@ -168,34 +164,6 @@ export default function MRNPage() {
     finalCGST = finalTotalGST / 2;
     finalSGST = finalTotalGST / 2;
   }
-
-  const combinedRows = [
-    // Existing item rows (UNCHANGED STRUCTURE)
-    ...items.map((item, index) => ({
-      rowType: "ITEM",
-      sr: index + 1,
-      name: item.item_name,
-      category: item.category_name || "",
-      quantity: item.quantity,
-      rate: item.rate,
-      gst_type: item.gst_type,
-      gst_rate: item.gst_rate,
-      amount: item.amount,
-    })),
-
-    // Additional Charges as item-like rows
-    ...additionalCharges.map((charge) => ({
-      rowType: "CHARGE",
-      sr: "",
-      name: `${charge.charge_type} (Charge)`,
-      category: "—",
-      quantity: charge.quantity,
-      rate: charge.rate,
-      gst_type: charge.gst_type,
-      gst_rate: charge.gst_rate,
-      amount: charge.total_amount,
-    })),
-  ];
 
   const handleCancelMrn = async () => {
     const ok = window.confirm("Are you sure you want to cancel this MRN?");

@@ -120,13 +120,9 @@ export default function EmployeeIssuedStatement() {
   const { rows, totalAssets, totalConsumables } = useMemo(() => {
     const flattened = [];
 
-    let assetsCount = 0;
-    let consumableQty = 0;
-
     issuedItems.forEach((item) => {
       if (item.serialized && Array.isArray(item.assets) && item.assets.length) {
         item.assets.forEach((asset) => {
-          assetsCount += 1;
           flattened.push({
             item_name: item.item_name,
             category_name: item.category_name,
@@ -138,7 +134,6 @@ export default function EmployeeIssuedStatement() {
           });
         });
       } else {
-        consumableQty += Number(item.quantity || 0);
         flattened.push({
           item_name: item.item_name,
           category_name: item.category_name,

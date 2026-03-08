@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import {
   AlertCircle,
   AlertTriangle,
@@ -108,7 +108,7 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
     <Dialog open={localOpen} onOpenChange={(nextOpen) => !nextOpen && handleClose()}>
       <AnimatePresence>
         {localOpen ? (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 18, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -164,7 +164,7 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
                 </div>
               </div>
             </DialogContent>
-          </motion.div>
+          </Motion.div>
         ) : null}
       </AnimatePresence>
     </Dialog>

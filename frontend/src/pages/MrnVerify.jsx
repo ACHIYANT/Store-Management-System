@@ -13,7 +13,7 @@ function extractCode(raw) {
     const maybeUrl = new URL(value);
     const fromUrl = maybeUrl.searchParams.get("code");
     if (fromUrl) return fromUrl.trim();
-  } catch (_err) {
+  } catch {
     // not a URL, keep raw value
   }
 

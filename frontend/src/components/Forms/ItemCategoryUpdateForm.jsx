@@ -6,9 +6,9 @@ import { useState, useEffect } from "react";
 import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
 import axios from "axios";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
-const ItemCategoryUpdateForm = ({ onUpdateSuccess }) => {
+const ItemCategoryUpdateForm = () => {
   // Accessing the selected employee passed via navigation
   const location = useLocation();
   const selectedItemCategory = location.state?.selectedItemCategory;
@@ -21,7 +21,6 @@ const ItemCategoryUpdateForm = ({ onUpdateSuccess }) => {
     formState: { errors },
   } = useForm();
   const [popup, setPopup] = useState({ open: false, type: "", message: "" });
-  const navigate = useNavigate();
 
   const [categoryHeads, setCategoryHeads] = useState([]);
   const [categoryGroups, setCategoryGroups] = useState([]);
