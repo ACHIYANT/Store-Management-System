@@ -6,6 +6,7 @@ import ListTable from "@/components/ListTable";
 import FilterPanel from "@/components/FilterPanel";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -62,9 +63,7 @@ function buildApprovalViewUrl(encryptedPath) {
   const relativePath = normalized.startsWith("uploads/")
     ? normalized.slice("uploads/".length)
     : normalized;
-  return `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(
-    relativePath,
-  )}`;
+  return toStoreApiUrl(`/view-image?path=${encodeURIComponent(relativePath)}`);
 }
 
 function formatPerson(person, fallbackId) {
@@ -173,7 +172,7 @@ export default function AssetEvents() {
         if (String(v || "").trim()) params[k] = v;
       });
 
-      const res = await axios.get("http://localhost:3000/api/v1/asset-events", {
+      const res = await axios.get(toStoreApiUrl("/asset-events"), {
         params,
       });
       const nextMeta = res?.data?.meta || {};
@@ -205,7 +204,7 @@ export default function AssetEvents() {
 
   useEffect(() => {
     axios
-      .get("http://localhost:3000/api/v1/employee")
+      .get(toStoreApiUrl("/employee"))
       .then((r) => setEmployees(r.data?.data || []))
       .catch(() => setEmployees([]));
   }, []);

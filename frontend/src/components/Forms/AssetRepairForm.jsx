@@ -4,8 +4,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState, useMemo, useRef } from "react";
 import PopupMessage from "@/components/PopupMessage";
 import { useNavigate } from "react-router-dom";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 
 export default function AssetRepairForm({
   mode = "out",

@@ -10,8 +10,9 @@ import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
 import axios from "axios";
 import MotionGrid from "@/components/MotionGrid";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API_BASE = "http://localhost:3000/api/v1";
+const API_BASE = STORE_API_BASE_URL;
 const UserDashboardWidgets = lazy(
   () => import("@/components/dashboard/user/UserDashboardWidgets"),
 );

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -22,7 +23,7 @@ export default function EmployeeIssues() {
 
   const fetchEmployeesPage = useCallback(
     async ({ cursor, limit }) => {
-      const response = await axios.get("http://localhost:3000/api/v1/employee", {
+      const response = await axios.get(toStoreApiUrl("/employee"), {
         params: {
           search: debouncedSearch || undefined,
           division: filters.division || undefined,

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import PopupMessage from "@/components/PopupMessage";
 import { useState, useEffect } from "react";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 import axios from "axios";
 
@@ -28,7 +29,7 @@ const ItemCategoryAddForm = () => {
   } = useForm();
 
   useEffect(() => {
-    fetch("http://localhost:3000/api/v1/category-head")
+    fetch(toStoreApiUrl("/category-head"))
       .then((res) => res.json())
       .then((res) => {
         setCategoryHeads(res.data || []);
@@ -50,7 +51,7 @@ const ItemCategoryAddForm = () => {
     }
     setLoadingGroups(true);
     const res = await fetch(
-      `http://localhost:3000/api/v1/category-group/by-head/${headId}`,
+      toStoreApiUrl(`/category-group/by-head/${headId}`),
     );
     const json = await res.json();
     setCategoryGroups(json.data || []);
@@ -74,7 +75,7 @@ const ItemCategoryAddForm = () => {
 
     try {
       setSubmitting(true);
-      await axios.post("http://localhost:3000/api/v1/itemCategory", payload, {
+      await axios.post(toStoreApiUrl("/itemCategory"), payload, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
       setSubmitting(false);

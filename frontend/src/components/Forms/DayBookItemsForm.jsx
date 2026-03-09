@@ -5,6 +5,7 @@ import SerialEntryPanel from "../ui/SerialEntryPanel";
 import { Icon, Trash2 } from "lucide-react";
 import PopupMessage from "@/components/PopupMessage";
 import { SKU_UNITS, DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const DayBookItemsForm = () => {
   const { state } = useLocation();
@@ -60,7 +61,7 @@ const DayBookItemsForm = () => {
     async function fetchCategories() {
       try {
         const res = await axios.get(
-          "http://localhost:3000/api/v1/itemCategories",
+          toStoreApiUrl("/itemCategories"),
         );
         setCategories(res.data.data || []);
         console.log("data fetchCategories:", res.data.data);
@@ -101,7 +102,7 @@ const DayBookItemsForm = () => {
       updated[index].serials = [];
       updated[index].groupOptions = []; // ✅ ADD
       axios
-        .get(`http://localhost:3000/api/v1/category-group/by-head/${value}`)
+        .get(toStoreApiUrl(`/category-group/by-head/${value}`))
         .then((res) => {
           const updatedGroups = res.data.data || [];
 
@@ -288,7 +289,7 @@ const DayBookItemsForm = () => {
       console.log(payload);
 
       const res = await axios.post(
-        "http://localhost:3000/api/v1/daybook/full",
+        toStoreApiUrl("/daybook/full"),
         payload,
         { headers: { "Content-Type": "application/json" } },
       );
@@ -317,7 +318,7 @@ const DayBookItemsForm = () => {
     async function fetchCategoryHeads() {
       try {
         const res = await axios.get(
-          "http://localhost:3000/api/v1/category-head",
+          toStoreApiUrl("/category-head"),
         );
         setCategoryHeads(res.data.data || []);
       } catch (err) {

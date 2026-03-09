@@ -4,14 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import PopupMessage from "@/components/PopupMessage";
+import { toAuthApiUrl } from "@/lib/api-config";
 
 import logo from "/logo.svg";
 import govt from "/govt.svg";
 
 import { SelectScrollable } from "@/components/SelectScrollable";
-
-const AUTH_API =
-  import.meta.env.VITE_AUTH_API_URL || "http://localhost:3001/api/v1";
 
 const parseApiMessage = async (response, fallbackMessage) => {
   try {
@@ -87,7 +85,7 @@ export default function Signup() {
     formData.append("division", payload.division);
 
     try {
-      const response = await fetch(`${AUTH_API}/signup`, {
+      const response = await fetch(toAuthApiUrl("/signup"), {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import ListPage from "@/components/ListPage";
 import axios from "axios";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { STORE_API_BASE_URL, toStoreApiUrl } from "@/lib/api-config";
 
 export default function DayBookItems() {
   const { id } = useParams();
@@ -17,7 +18,7 @@ export default function DayBookItems() {
     async function fetchDayBook() {
       try {
         const res = await axios.get(
-          `http://localhost:3000/api/v1/daybook/${id}/full`,
+          toStoreApiUrl(`/daybook/${id}/full`),
         );
         console.log("day book data data", res.data.data);
         setDaybook(res.data.data);
@@ -254,7 +255,7 @@ export default function DayBookItems() {
         columns={columns}
         data={data}
         onAdd={handleAdd}
-        apiUrl={`http://localhost:3000/api/v1/daybook-items/${id}`}
+        apiUrl={`${STORE_API_BASE_URL}/daybook-items/${id}`}
         searchParam="name"
         idCol="id"
         belowContent={

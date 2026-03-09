@@ -15,8 +15,9 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 
 export default function IssueUnifiedForm({
   stockId,

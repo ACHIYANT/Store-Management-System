@@ -7,6 +7,7 @@ import { useState } from "react";
 import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
 import axios from "axios";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const EmployeesForm = () => {
   const {
@@ -27,7 +28,7 @@ const EmployeesForm = () => {
 
     try {
       const response = await axios.post(
-        "http://localhost:3000/api/v1/employee",
+        toStoreApiUrl("/employee"),
         new URLSearchParams(formData).toString(),
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
       );

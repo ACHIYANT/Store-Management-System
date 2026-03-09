@@ -7,6 +7,7 @@ import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { Link } from "react-router-dom";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -33,11 +34,11 @@ export default function IssuedItems() {
 
   useEffect(() => {
     axios
-      .get("http://localhost:3000/api/v1/employee")
+      .get(toStoreApiUrl("/employee"))
       .then((r) => setEmployees(r.data.data || []));
 
     axios
-      .get("http://localhost:3000/api/v1/itemCategories")
+      .get(toStoreApiUrl("/itemCategories"))
       .then((r) => setCategories(r.data.data || []));
   }, []);
 
@@ -46,13 +47,11 @@ export default function IssuedItems() {
     if (!storedUrl) return "";
     // storedUrl looks like "/uploads/requisitions/CI-2025-...enc"
     const rel = storedUrl.replace(/^\/?uploads\//, ""); // -> "requisitions/....enc"
-    return `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(
-      rel,
-    )}`;
+    return toStoreApiUrl(`/view-image?path=${encodeURIComponent(rel)}`);
   };
   const fetchIssuedPage = useCallback(
     async ({ cursor, limit }) => {
-      const res = await axios.get("http://localhost:3000/api/v1/issued-items", {
+      const res = await axios.get(toStoreApiUrl("/issued-items"), {
         params: {
           search: debouncedSearch || undefined,
           ...filters,
