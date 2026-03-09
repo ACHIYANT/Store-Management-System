@@ -4,8 +4,9 @@ import TopBar from "@/components/TopBar";
 import PopupMessage from "@/components/PopupMessage";
 import useDragToScroll from "@/hooks/useDragToScroll";
 import { SKU_UNITS, DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 
 function emptyItem(itemNo) {
   return {

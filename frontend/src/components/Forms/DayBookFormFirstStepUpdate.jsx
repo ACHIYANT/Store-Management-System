@@ -13,6 +13,7 @@ import NavBar from "../NavBar";
 
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const DayBookFormFirstStepUpdate = () => {
   const [availableYears, setAvailableYears] = useState([]);
@@ -50,7 +51,7 @@ const DayBookFormFirstStepUpdate = () => {
   useEffect(() => {
     async function load() {
       const res = await axios.get(
-        `http://localhost:3000/api/v1/daybook/${id}/full`
+        toStoreApiUrl(`/daybook/${id}/full`),
       );
 
       const db = res.data.data;

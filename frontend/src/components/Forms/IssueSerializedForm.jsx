@@ -3,6 +3,7 @@ import axios from "axios";
 import ListTable from "@/components/ListTable";
 import { Button } from "@/components/ui/button";
 import PopupMessage from "@/components/PopupMessage";
+import { toStoreApiUrl } from "@/lib/api-config";
 import {
   Select,
   SelectTrigger,
@@ -26,17 +27,17 @@ export default function IssueSerializedForm({
   useEffect(() => {
     // Adjust to your actual endpoints
     axios
-      .get("http://localhost:3000/api/v1/stocks")
+      .get(toStoreApiUrl("/stocks"))
       .then((r) => setStocks(r.data?.data || []));
     axios
-      .get("http://localhost:3000/api/v1/employee")
+      .get(toStoreApiUrl("/employee"))
       .then((r) => setEmployees(r.data?.data || []));
   }, []);
 
   useEffect(() => {
     if (!stockId) return setAssets([]);
     axios
-      .get(`http://localhost:3000/api/v1/assets/instore/${stockId}`)
+      .get(toStoreApiUrl(`/assets/instore/${stockId}`))
       .then((r) => setAssets(r.data?.data || []));
   }, [stockId]);
 
@@ -46,7 +47,7 @@ export default function IssueSerializedForm({
         type: "error",
         text: "Select stock, employee, and assets",
       });
-    await axios.post("http://localhost:3000/api/v1/issue", {
+    await axios.post(toStoreApiUrl("/issue"), {
       stockId,
       employeeId,
       assetIds: selected,

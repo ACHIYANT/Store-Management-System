@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toStoreApiUrl } from "@/lib/api-config";
 export default function ViewImagePopup({ imagePath, onClose }) {
   const handleDownload = () => {
     const link = document.createElement("a");
@@ -11,9 +12,9 @@ export default function ViewImagePopup({ imagePath, onClose }) {
   //   const cleanPath = imagePath.replace(/^\/uploads\//, "");
   const cleanPath = imagePath.replace(/^\/uploads\//, "");
 
-  const fileUrl = `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(
-    cleanPath,
-  )}`;
+  const fileUrl = toStoreApiUrl(
+    `/view-image?path=${encodeURIComponent(cleanPath)}`,
+  );
   const isPdf = cleanPath.toLowerCase().endsWith(".pdf.enc");
 
   // ✅ Hook ALWAYS runs

@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useMemo, useState } from "react";
 import PopupMessage from "@/components/PopupMessage";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 
 export default function AssetTransferForm({ assetIds = [], onDone }) {
   const [employees, setEmployees] = useState([]);

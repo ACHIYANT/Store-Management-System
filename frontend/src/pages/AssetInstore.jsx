@@ -5,6 +5,7 @@ import ListTable from "@/components/ListTable";
 import axios from "axios";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -22,7 +23,7 @@ export default function AssetInStore() {
   const fetchAssetsPage = useCallback(
     async ({ cursor, limit }) => {
       const res = await axios.get(
-        `http://localhost:3000/api/v1/assets/instore/${stockId}`,
+        toStoreApiUrl(`/assets/instore/${stockId}`),
         {
           params: {
             search: debouncedSearch || undefined,

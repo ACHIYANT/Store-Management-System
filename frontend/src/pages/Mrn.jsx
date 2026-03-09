@@ -7,6 +7,7 @@ import ViewImagePopup from "@/components/ViewImagePopup";
 import { useRef } from "react";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { STORE_API_BASE_URL, toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -57,7 +58,7 @@ export default function Mrn() {
       setIsFiltering(true);
       try {
         const response = await axios.get(
-          "http://localhost:3000/api/v1/mrn/filter",
+          toStoreApiUrl("/mrn/filter"),
           {
             params: {
               search: debouncedSearchTerm || undefined,
@@ -322,7 +323,7 @@ export default function Mrn() {
         columns={columns}
         data={data}
         onAdd={handleAdd}
-        apiUrl="http://localhost:3000/api/v1/daybook-with-approval-3"
+        apiUrl={`${STORE_API_BASE_URL}/daybook-with-approval-3`}
         searchParam="name"
         idCol="id"
         searchPlaceholder={"Search by DayBook Entry No."}

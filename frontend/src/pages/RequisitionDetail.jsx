@@ -5,8 +5,9 @@ import PopupMessage from "@/components/PopupMessage";
 import useDragToScroll from "@/hooks/useDragToScroll";
 import logo from "/logo.svg";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { STORE_API_BASE_URL, toStoreApiUrl } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 
 const FINAL_STATUSES = new Set([
   "Approved",
@@ -218,7 +219,7 @@ const normalizeStockRows = (rows = []) =>
 function buildAttachmentViewUrl(storedUrl) {
   if (!storedUrl) return "";
   const rel = String(storedUrl).replace(/^\/?uploads\//, "");
-  return `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(rel)}`;
+  return toStoreApiUrl(`/view-image?path=${encodeURIComponent(rel)}`);
 }
 
 export default function RequisitionDetail() {

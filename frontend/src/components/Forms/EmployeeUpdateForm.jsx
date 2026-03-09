@@ -7,6 +7,7 @@ import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
   // Accessing the selected employee passed via navigation
@@ -58,7 +59,7 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
       body.append("mobile_no", data.mobile_no);
 
       const response = await axios.patch(
-        `http://localhost:3000/api/v1/employee/${data.emp_id}`,
+        toStoreApiUrl(`/employee/${data.emp_id}`),
         body,
         {
           headers: {

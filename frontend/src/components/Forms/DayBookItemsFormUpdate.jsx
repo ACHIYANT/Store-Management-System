@@ -5,6 +5,7 @@ import SerialEntryPanel from "../ui/SerialEntryPanel";
 import { Icon, Trash2 } from "lucide-react";
 import PopupMessage from "../PopupMessage"; // adjust path if needed
 import { SKU_UNITS, DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const DayBookItemsFormUpdate = () => {
   const { state } = useLocation();
@@ -54,7 +55,7 @@ const DayBookItemsFormUpdate = () => {
     async function fetchCategoryHeads() {
       try {
         const res = await axios.get(
-          "http://localhost:3000/api/v1/category-head",
+          toStoreApiUrl("/category-head"),
         );
         setCategoryHeads(res.data.data || []);
       } catch (err) {
@@ -68,7 +69,7 @@ const DayBookItemsFormUpdate = () => {
     async function fetchCategories() {
       try {
         const res = await axios.get(
-          "http://localhost:3000/api/v1/itemCategories",
+          toStoreApiUrl("/itemCategories"),
         );
         setCategories(res.data.data || []);
         console.log("data fetchCategories:", res.data.data);
@@ -87,7 +88,7 @@ const DayBookItemsFormUpdate = () => {
     async function loadExistingData() {
       try {
         const res = await axios.get(
-          `http://localhost:3000/api/v1/daybook/${daybookId}/full`,
+          toStoreApiUrl(`/daybook/${daybookId}/full`),
         );
 
         if (!isMounted) return;
@@ -170,7 +171,7 @@ const DayBookItemsFormUpdate = () => {
             uniqueHeadIds.map((headId) =>
               axios
                 .get(
-                  `http://localhost:3000/api/v1/category-group/by-head/${headId}`,
+                  toStoreApiUrl(`/category-group/by-head/${headId}`),
                 )
                 .then((res) => ({ headId, groups: res.data.data || [] })),
             ),
@@ -258,7 +259,7 @@ const DayBookItemsFormUpdate = () => {
       }
 
       axios
-        .get(`http://localhost:3000/api/v1/category-group/by-head/${value}`)
+        .get(toStoreApiUrl(`/category-group/by-head/${value}`))
         .then((res) => {
 
           setItems((prev) => {
@@ -441,7 +442,7 @@ const DayBookItemsFormUpdate = () => {
 
       console.log(payload);
       const res = await axios.put(
-        `http://localhost:3000/api/v1/daybook/${daybookId}/items`,
+        toStoreApiUrl(`/daybook/${daybookId}/items`),
         payload,
         { headers: { "Content-Type": "application/json" } },
       );
@@ -492,7 +493,7 @@ const DayBookItemsFormUpdate = () => {
         };
 
         await axios.post(
-          "http://localhost:3000/api/v1/daybook-item-serials/bulk",
+          toStoreApiUrl("/daybook-item-serials/bulk"),
           body,
           { headers: { "Content-Type": "application/json" } },
         );

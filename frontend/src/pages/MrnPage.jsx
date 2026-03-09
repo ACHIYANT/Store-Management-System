@@ -4,6 +4,7 @@ import logo from "/logo.svg";
 import axios from "axios";
 import { QRCodeSVG } from "qrcode.react";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 export default function MRNPage() {
   const { daybookId } = useParams();
@@ -38,7 +39,7 @@ export default function MRNPage() {
     async function fetchCharges() {
       try {
         const res = await axios.get(
-          `http://localhost:3000/api/v1/daybook-items/${daybookId}/additional-charges`,
+          toStoreApiUrl(`/daybook-items/${daybookId}/additional-charges`),
         );
         setAdditionalCharges(res.data.data || []);
       } catch {
@@ -54,10 +55,10 @@ export default function MRNPage() {
   useEffect(() => {
     async function fetchData() {
       const daybookRes = await axios.get(
-        `http://localhost:3000/api/v1/daybookById/${daybookId}`,
+        toStoreApiUrl(`/daybookById/${daybookId}`),
       );
       const itemsRes = await axios.get(
-        `http://localhost:3000/api/v1/daybook-items/${daybookId}`,
+        toStoreApiUrl(`/daybook-items/${daybookId}`),
       );
 
       setDaybook(daybookRes.data.data);
@@ -84,7 +85,7 @@ export default function MRNPage() {
       if (!daybook || !daybook.vendor_id) return;
       try {
         const vendorRes = await axios.get(
-          `http://localhost:3000/api/v1/vendor-by-id/${daybook.vendor_id}`,
+          toStoreApiUrl(`/vendor-by-id/${daybook.vendor_id}`),
         );
         console.log("Vendor API response:", vendorRes.data); // 👈 ADD THIS
         setVendor(vendorRes.data);
@@ -171,7 +172,7 @@ export default function MRNPage() {
 
     try {
       const res = await axios.post(
-        `http://localhost:3000/api/v1/daybook/${daybookId}/cancel-mrn`,
+        toStoreApiUrl(`/daybook/${daybookId}/cancel-mrn`),
         { confirmedNonSerialized: false },
       );
 
@@ -190,7 +191,7 @@ export default function MRNPage() {
         if (!confirm2) return;
 
         await axios.post(
-          `http://localhost:3000/api/v1/daybook/${daybookId}/cancel-mrn`,
+          toStoreApiUrl(`/daybook/${daybookId}/cancel-mrn`),
           { confirmedNonSerialized: true },
         );
       }

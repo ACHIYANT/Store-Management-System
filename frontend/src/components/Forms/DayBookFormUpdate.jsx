@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import axios from "axios";
 import PopupMessage from "@/components/PopupMessage";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const DayBookFormUpdate = () => {
   const [existingBillImage, setExistingBillImage] = useState(null);
@@ -76,7 +77,7 @@ const DayBookFormUpdate = () => {
       }
 
       await axios.put(
-        `http://localhost:3000/api/v1/daybook/${daybook.id}`,
+        toStoreApiUrl(`/daybook/${daybook.id}`),
         payload,
       );
 
@@ -118,7 +119,7 @@ const DayBookFormUpdate = () => {
       try {
         setIsVendorLookupLoading(true);
         const response = await axios.get(
-          "http://localhost:3000/api/v1/vendor/search",
+          toStoreApiUrl("/vendor/search"),
           {
             params: {
               name: query,
@@ -162,7 +163,7 @@ const DayBookFormUpdate = () => {
     try {
       console.log("Inside try");
       const response = await axios.post(
-        `http://localhost:3000/api/v1/upload/${type}`,
+        toStoreApiUrl(`/upload/${type}`),
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -181,9 +182,9 @@ const DayBookFormUpdate = () => {
     const cleanPath = encryptedPath.replace(/^\/uploads\//, "");
 
     // 🔐 Backend decrypt endpoint
-    const url = `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(
-      cleanPath,
-    )}`;
+    const url = toStoreApiUrl(
+      `/view-image?path=${encodeURIComponent(cleanPath)}`,
+    );
     console.log("url", url);
     setPreviewImageUrl(url);
   };

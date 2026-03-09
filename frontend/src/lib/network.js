@@ -1,21 +1,14 @@
 import axios from "axios";
+import { AUTH_API_BASE_URL, STORE_API_BASE_URL } from "./api-config";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 let forcedLogoutInProgress = false;
-
-function getRuntimeHostname() {
-  if (typeof window === "undefined") return "localhost";
-  return window.location.hostname || "localhost";
-}
 
 function isLoopbackHost(hostname = "") {
   return LOOPBACK_HOSTS.has(String(hostname).toLowerCase());
 }
 
-function shouldRewriteLoopback() {
-  const runtimeHost = getRuntimeHostname();
-  return !isLoopbackHost(runtimeHost);
-}
+const API_V1_PREFIX = "/api/v1";
 
 function parseCookieValue(rawCookie = "") {
   return String(rawCookie || "")
@@ -124,17 +117,37 @@ export function rewriteLocalApiUrl(inputUrl) {
     return inputUrl;
   }
 
-  // Only rewrite absolute loopback URLs when app is opened via LAN IP/host.
-  if (!isLoopbackHost(parsed.hostname) || !shouldRewriteLoopback()) {
+  if (!isLoopbackHost(parsed.hostname)) {
     return inputUrl;
   }
 
-  parsed.hostname = getRuntimeHostname();
-  if (typeof window !== "undefined" && window.location.protocol) {
-    parsed.protocol = window.location.protocol;
+  const resolvedPort = String(parsed.port || "");
+  if (resolvedPort === "3000") {
+    return rewriteToApiBase(parsed, STORE_API_BASE_URL);
+  }
+  if (resolvedPort === "3001") {
+    return rewriteToApiBase(parsed, AUTH_API_BASE_URL);
   }
 
-  return parsed.toString();
+  return inputUrl;
+}
+
+function rewriteToApiBase(parsedUrl, targetBase) {
+  try {
+    const target = new URL(targetBase, window.location.origin);
+    const targetBasePath = String(target.pathname || "").replace(/\/+$/, "");
+    const sourcePath = String(parsedUrl.pathname || "");
+    const suffix = sourcePath.startsWith(API_V1_PREFIX)
+      ? sourcePath.slice(API_V1_PREFIX.length)
+      : sourcePath;
+
+    target.pathname = `${targetBasePath}${suffix}`.replace(/\/{2,}/g, "/");
+    target.search = parsedUrl.search || "";
+    target.hash = parsedUrl.hash || "";
+    return target.toString();
+  } catch {
+    return parsedUrl.toString();
+  }
 }
 
 function isApiRequestUrl(inputUrl) {
