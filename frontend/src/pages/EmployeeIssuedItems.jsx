@@ -6,8 +6,9 @@ import ListTable from "@/components/ListTable";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { STORE_API_BASE_URL, toStoreApiUrl } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
@@ -240,7 +241,7 @@ export default function EmployeeIssuedItems() {
   const previewUrl = useCallback((storedUrl) => {
     if (!storedUrl) return "";
     const rel = storedUrl.replace(/^\/?uploads\//, "");
-    return `${API}/view-image?path=${encodeURIComponent(rel)}`;
+    return toStoreApiUrl(`/view-image?path=${encodeURIComponent(rel)}`);
   }, []);
 
   const columns = useMemo(

@@ -3,6 +3,7 @@ import govt from "/govt.svg";
 import { useEffect, useState } from "react";
 import { ExitIcon } from "@radix-ui/react-icons";
 import { Link } from "react-router-dom";
+import { toAuthApiUrl } from "@/lib/api-config";
 
 export default function NavBar() {
   const [userName, setUserName] = useState("Login Name");
@@ -15,9 +16,7 @@ export default function NavBar() {
   }, []);
 
   const handleLogout = () => {
-    const AUTH_API =
-      import.meta.env.VITE_AUTH_API_URL || "http://localhost:3001/api/v1";
-    fetch(`${AUTH_API}/signout`, {
+    fetch(toAuthApiUrl("/signout"), {
       method: "POST",
       credentials: "include",
     })

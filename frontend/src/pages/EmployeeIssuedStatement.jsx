@@ -3,8 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import logo from "/logo.svg";
 import loaderVideo from "../assets/Paperplane.webm";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API_BASE = "http://localhost:3000/api/v1";
+const API_BASE = STORE_API_BASE_URL;
 const ISSUED_PAGE_SIZE = 500;
 const MAX_STATEMENT_ROWS = 50000;
 

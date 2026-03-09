@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import axios from "axios";
 import PopupMessage from "@/components/PopupMessage";
 import { useNavigate } from "react-router-dom";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const DayBookForm = ({ defaultType, defaultFinYear }) => {
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ const DayBookForm = ({ defaultType, defaultFinYear }) => {
       try {
         setIsVendorLookupLoading(true);
         const response = await axios.get(
-          "http://localhost:3000/api/v1/vendor/search",
+          toStoreApiUrl("/vendor/search"),
           {
             params: {
               name: query,
@@ -102,7 +103,7 @@ const DayBookForm = ({ defaultType, defaultFinYear }) => {
     try {
       console.log("Inside try");
       const response = await axios.post(
-        `http://localhost:3000/api/v1/upload/${type}`,
+        toStoreApiUrl(`/upload/${type}`),
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },

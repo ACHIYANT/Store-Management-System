@@ -13,6 +13,7 @@ import FilterPanel from "@/components/FilterPanel";
 import useDebounce from "@/hooks/useDebounce";
 import { useNavigate } from "react-router-dom";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -116,7 +117,7 @@ export default function Assets() {
   ];
   const fetchAssetsPage = useCallback(
     async ({ cursor, limit }) => {
-      const res = await axios.get("http://localhost:3000/api/v1/assets/search", {
+      const res = await axios.get(toStoreApiUrl("/assets/search"), {
         params: {
           search: debouncedSearch || undefined,
           ...filters,
@@ -157,7 +158,7 @@ export default function Assets() {
 
   useEffect(() => {
     axios
-      .get("http://localhost:3000/api/v1/category-head")
+      .get(toStoreApiUrl("/category-head"))
       .then((res) => setCategoryHeads(res.data.data || []));
   }, []);
 
@@ -169,14 +170,14 @@ export default function Assets() {
 
     axios
       .get(
-        `http://localhost:3000/api/v1/category-group/by-head/${filters.categoryHeadId}`,
+        toStoreApiUrl(`/category-group/by-head/${filters.categoryHeadId}`),
       )
       .then((res) => setCategoryGroups(res.data.data || []));
   }, [filters.categoryHeadId]);
 
   useEffect(() => {
     axios
-      .get("http://localhost:3000/api/v1/employee")
+      .get(toStoreApiUrl("/employee"))
       .then((res) => setEmployees(res.data.data || []));
   }, []);
 

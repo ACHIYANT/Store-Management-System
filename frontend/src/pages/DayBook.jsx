@@ -7,6 +7,7 @@ import PopupMessage from "@/components/PopupMessage";
 import FilterPanel from "@/components/FilterPanel";
 import useDebounce from "@/hooks/useDebounce";
 import ListTable from "@/components/ListTable";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 // 🟢 Add LegendItem helper (same style as AssetTimeline)
 function LegendItem({ color = "gray", label }) {
@@ -135,7 +136,7 @@ export default function DayBook() {
         }
 
         const roles = JSON.parse(localStorage.getItem("roles")) || [];
-        let apiUrl = "http://localhost:3000/api/v1/daybook";
+        let apiUrl = toStoreApiUrl("/daybook");
 
         console.log(roles);
         let level = null;
@@ -544,7 +545,7 @@ export default function DayBook() {
               setSending(true);
               try {
                 await axios.patch(
-                  `http://localhost:3000/api/v1/daybook/${selectedRows}/approve`,
+                  toStoreApiUrl(`/daybook/${selectedRows}/approve`),
                 );
                 setPopup({
                   open: true,
@@ -584,7 +585,7 @@ export default function DayBook() {
                       prompt("Optional: add remarks for rejection") || "";
                     try {
                       await axios.patch(
-                        `http://localhost:3000/api/v1/daybook/${selectedRows}/reject`,
+                        toStoreApiUrl(`/daybook/${selectedRows}/reject`),
                         { remarks },
                       );
                       setPopup({

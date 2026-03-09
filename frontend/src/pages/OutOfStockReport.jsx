@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import logo from "/logo.svg";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 const PAGE_LIMIT = 200;
 const PARALLEL_BATCH = 8;
 

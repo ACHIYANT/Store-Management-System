@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import ListPage from "@/components/ListPage";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { STORE_API_BASE_URL } from "@/lib/api-config";
 
-const API = "http://localhost:3000/api/v1";
+const API = STORE_API_BASE_URL;
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -59,7 +60,7 @@ export default function Stock() {
 
   const fetchStocksPage = useCallback(
     async ({ cursor, limit }) => {
-      const res = await axios.get("http://localhost:3000/api/v1/stocks-by-category", {
+      const res = await axios.get(toStoreApiUrl("/stocks-by-category"), {
         params: {
           search: debouncedSearch || undefined,
           categoryHeadId: filters.categoryHeadId || undefined,
@@ -126,7 +127,7 @@ export default function Stock() {
   });
   /* 📥 Load Category Heads */
   useEffect(() => {
-    axios.get("http://localhost:3000/api/v1/category-head").then((res) => {
+    axios.get(toStoreApiUrl("/category-head")).then((res) => {
       setHeads(res.data.data || []);
     });
   }, []);
@@ -140,7 +141,7 @@ export default function Stock() {
 
     axios
       .get(
-        `http://localhost:3000/api/v1/category-group/by-head/${filters.categoryHeadId}`,
+        toStoreApiUrl(`/category-group/by-head/${filters.categoryHeadId}`),
       )
       .then((res) => {
         setGroups(res.data.data || []);

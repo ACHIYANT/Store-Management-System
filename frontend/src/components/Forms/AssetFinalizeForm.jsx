@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { useRef, useState } from "react";
 import PopupMessage from "@/components/PopupMessage";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 export default function AssetFinalizeForm({ assetIds = [], onDone }) {
   const [type, setType] = useState("Disposed");
@@ -42,7 +43,7 @@ export default function AssetFinalizeForm({ assetIds = [], onDone }) {
       formData.append("bill_no", `${Date.now()}-${assetIds.length}`);
       formData.append("file", approvalFile);
 
-      await axios.patch("http://localhost:3000/api/v1/assets/finalize", formData, {
+      await axios.patch(toStoreApiUrl("/assets/finalize"), formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
