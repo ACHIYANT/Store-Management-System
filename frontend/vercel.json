@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth/:path*",
+      "destination": "https://store-backend-6hv1.onrender.com/api/v1/:path*"
+    },
+    {
+      "source": "/api/store/:path*",
+      "destination": "https://store-management-system-fcg5.onrender.com/api/v1/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
