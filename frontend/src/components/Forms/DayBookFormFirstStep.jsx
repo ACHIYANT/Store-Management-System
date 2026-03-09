@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion as Motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -49,7 +50,7 @@ const DayBookFormFirstStep = ({ vendors = [], onSubmit }) => {
 
       <div className="min-h-screen bg-white justify-items-center">
         {step === 1 && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -101,7 +102,7 @@ const DayBookFormFirstStep = ({ vendors = [], onSubmit }) => {
                 </Button>
               </CardContent>
             </Card>
-          </motion.div>
+          </Motion.div>
         )}
 
         {step === 2 && (
