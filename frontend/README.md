@@ -93,25 +93,21 @@ Frontend talks to:
 - AuthService: `http://localhost:3001/api/v1`
 - StoreManagementService: `http://localhost:3000/api/v1`
 
-### Recommended Production Setup (single API domain)
-
-Use Vercel rewrites (`frontend/vercel.json`) as edge proxy:
-- `/api/auth/* -> AuthService /api/v1/*`
-- `/api/store/* -> StoreManagementService /api/v1/*`
-
-Set these in Vercel env:
-- `VITE_AUTH_API_URL=/api/auth`
-- `VITE_STORE_API_URL=/api/store`
-
-This keeps browser requests same-origin and avoids cross-domain cookie/session issues.
-
-### Local Development Setup
-- `VITE_AUTH_API_URL=http://localhost:3001/api/v1`
-- `VITE_STORE_API_URL=http://localhost:3000/api/v1`
+<<<<<<< HEAD
+Network/client helpers are maintained in `src/lib/network.js`.
+=======
+<<<<<<< HEAD
+Set these at deploy time (Vercel):
+- `VITE_AUTH_API_URL=https://<your-auth-service>/api/v1`
+- `VITE_STORE_API_URL=https://<your-store-service>/api/v1`
 
 Single-point API config and runtime URL rewriting:
 - `src/lib/api-config.js`
 - `src/lib/network.js`
+=======
+Network/client helpers are maintained in `src/lib/network.js`.
+>>>>>>> origin/main
+>>>>>>> origin/develop
 
 ## UI and Data Notes
 
