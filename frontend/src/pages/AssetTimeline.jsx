@@ -3,6 +3,7 @@ import axios from "axios";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useNavigate, useParams } from "react-router-dom";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 function getEventStyle(eventType) {
   const value = String(eventType || "")
@@ -136,9 +137,7 @@ function buildApprovalViewUrl(encryptedPath) {
   const relativePath = normalized.startsWith("uploads/")
     ? normalized.slice("uploads/".length)
     : normalized;
-  return `http://localhost:3000/api/v1/view-image?path=${encodeURIComponent(
-    relativePath,
-  )}`;
+  return toStoreApiUrl(`/view-image?path=${encodeURIComponent(relativePath)}`);
 }
 
 function normalizeEvent(event) {
@@ -204,7 +203,7 @@ export default function AssetTimeline() {
     setError("");
 
     axios
-      .get(`http://localhost:3000/api/v1/asset-events/timeline/${assetId}`)
+      .get(toStoreApiUrl(`/asset-events/timeline/${assetId}`))
       .then((res) => {
         const payload = res.data;
         const data = Array.isArray(payload?.data)

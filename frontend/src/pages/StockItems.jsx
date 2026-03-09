@@ -8,6 +8,7 @@ import useDebounce from "@/hooks/useDebounce";
 import { Divide } from "lucide-react";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -92,7 +93,7 @@ export default function StockItems() {
   const fetchStockItemsPage = useCallback(
     async ({ cursor, limit }) => {
       const res = await axios.get(
-        `http://localhost:3000/api/v1/stock-items-all/${id}`,
+        toStoreApiUrl(`/stock-items-all/${id}`),
         {
           params: {
             search: debouncedSearch || undefined,

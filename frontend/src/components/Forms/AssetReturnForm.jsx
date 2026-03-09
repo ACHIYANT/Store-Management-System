@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useRef, useState } from "react";
 import PopupMessage from "@/components/PopupMessage";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 export default function AssetReturnForm({ assetIds = [], onDone }) {
   const [notes, setNotes] = useState("");
@@ -34,7 +35,7 @@ export default function AssetReturnForm({ assetIds = [], onDone }) {
       formData.append("bill_no", `${Date.now()}-${assetIds.length}`);
       formData.append("file", approvalFile);
 
-      await axios.patch("http://localhost:3000/api/v1/assets/return", formData, {
+      await axios.patch(toStoreApiUrl("/assets/return"), formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

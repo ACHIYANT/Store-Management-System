@@ -3,8 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
-import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
+import { toStoreApiUrl } from "@/lib/api-config";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
 
@@ -31,7 +31,7 @@ const ItemCategoryUpdateForm = () => {
   });
 
   useEffect(() => {
-    fetch("http://localhost:3000/api/v1/category-head")
+    fetch(toStoreApiUrl("/category-head"))
       .then((res) => res.json())
       .then((res) => setCategoryHeads(res.data || []));
   }, []);
@@ -56,7 +56,7 @@ const ItemCategoryUpdateForm = () => {
     });
 
     if (headId) {
-      fetch(`http://localhost:3000/api/v1/category-group/by-head/${headId}`)
+      fetch(toStoreApiUrl(`/category-group/by-head/${headId}`))
         .then((res) => res.json())
         .then((res) => setCategoryGroups(res.data || []));
     }
@@ -75,7 +75,7 @@ const ItemCategoryUpdateForm = () => {
     if (!headId) return;
 
     const res = await fetch(
-      `http://localhost:3000/api/v1/category-group/by-head/${headId}`,
+      toStoreApiUrl(`/category-group/by-head/${headId}`),
     );
     const json = await res.json();
     setCategoryGroups(json.data || []);
@@ -92,11 +92,9 @@ const ItemCategoryUpdateForm = () => {
     body.append("group_id", formMeta.category_group_id);
     body.append("serialized_required", data.serialized_required === "true");
 
-    await axios.patch(
-      `http://localhost:3000/api/v1/itemCategory/${data.id}`,
-      body,
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-    );
+    await axios.patch(toStoreApiUrl(`/itemCategory/${data.id}`), body, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
 
     setPopup({
       open: true,

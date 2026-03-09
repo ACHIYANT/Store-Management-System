@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import axios from "axios";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const VendorForm = () => {
   const {
@@ -26,7 +27,7 @@ const VendorForm = () => {
     try {
       // Send POST request with x-www-form-urlencoded content-type
       const response = await axios.post(
-        "http://localhost:3000/api/v1/vendor",
+        toStoreApiUrl("/vendor"),
         formData,
         {
           headers: {

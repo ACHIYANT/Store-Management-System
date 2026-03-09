@@ -6,6 +6,7 @@ import axios from "axios";
 import useDebounce from "@/hooks/useDebounce";
 import FilterPanel from "@/components/FilterPanel";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
+import { toStoreApiUrl } from "@/lib/api-config";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -67,7 +68,7 @@ export default function ItemCategory() {
 
   useEffect(() => {
     axios
-      .get("http://localhost:3000/api/v1/category-head")
+      .get(toStoreApiUrl("/category-head"))
       .then((res) => setCategoryHeads(res.data.data || []));
   }, []);
 
@@ -79,7 +80,7 @@ export default function ItemCategory() {
 
     axios
       .get(
-        `http://localhost:3000/api/v1/category-group/by-head/${filters.head_id}`,
+        toStoreApiUrl(`/category-group/by-head/${filters.head_id}`),
       )
       .then((res) => setCategoryGroups(res.data.data || []));
   }, [filters.head_id]);
@@ -87,7 +88,7 @@ export default function ItemCategory() {
   const fetchItemCategoriesPage = useCallback(
     async ({ cursor, limit }) => {
       const response = await axios.get(
-        "http://localhost:3000/api/v1/itemCategory/search",
+        toStoreApiUrl("/itemCategory/search"),
         {
           params: {
             category_name: debouncedSearchTerm || undefined,
@@ -179,7 +180,7 @@ export default function ItemCategory() {
       columns={columns}
       data={data}
       onAdd={handleAdd}
-      // apiUrl="http://localhost:3000/api/v1/itemCategory/search"
+      // apiUrl={toStoreApiUrl("/itemCategory/search")}
       loading={loading}
       // searchParam="name"
       idCol="id"

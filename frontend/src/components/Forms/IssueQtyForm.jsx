@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { toStoreApiUrl } from "@/lib/api-config";
 // import { SelectScrollable } from "@/components/SelectScrollable";
 import PopupMessage from "@/components/PopupMessage";
 import {
@@ -29,13 +30,13 @@ export default function IssueQtyForm({
   useEffect(() => {
     // Adjust endpoints if yours differ
     axios
-      .get("http://localhost:3000/api/v1/stocks")
+      .get(toStoreApiUrl("/stocks"))
       .then((r) => setStocks(r.data?.data || []));
     axios
-      .get("http://localhost:3000/api/v1/employee")
+      .get(toStoreApiUrl("/employee"))
       .then((r) => setEmployees(r.data?.data || []));
     axios
-      .get("http://localhost:3000/api/v1/itemCategories")
+      .get(toStoreApiUrl("/itemCategories"))
       .then((r) => setItemCategories(r.data?.data || []));
   }, []);
 
@@ -50,7 +51,7 @@ export default function IssueQtyForm({
     );
     const isSerialized = Boolean(category?.serialized_required);
     axios
-      .get(`http://localhost:3000/api/v1/stock-items-all/${itemCategoryId}`, {
+      .get(toStoreApiUrl(`/stock-items-all/${itemCategoryId}`), {
         params: {
           onlyInStock: true,
           groupByMaster: !isSerialized,
@@ -74,7 +75,7 @@ export default function IssueQtyForm({
       return setMsg({ type: "error", text: "Fill all fields" });
     if (stockQty != null && Number(qty) > Number(stockQty))
       return setMsg({ type: "error", text: "Insufficient stock" });
-    await axios.post("http://localhost:3000/api/v1/issue", {
+    await axios.post(toStoreApiUrl("/issue"), {
       stockId,
       employeeId,
       quantity: Number(qty),
