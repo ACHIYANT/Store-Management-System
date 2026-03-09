@@ -55,7 +55,11 @@ const DayBookItemsFormUpdate = () => {
     async function fetchCategoryHeads() {
       try {
         const res = await axios.get(
+<<<<<<< HEAD
           toStoreApiUrl("/category-head"),
+=======
+          "http://localhost:3000/api/v1/category-head",
+>>>>>>> origin/main
         );
         setCategoryHeads(res.data.data || []);
       } catch (err) {
