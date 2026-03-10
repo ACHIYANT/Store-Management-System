@@ -150,10 +150,7 @@ function normalizeEvent(event) {
     fromPerson?.emp_id ??
     null;
   const toId =
-    event.to_employee_id ??
-    event.toEmployeeId ??
-    toPerson?.emp_id ??
-    null;
+    event.to_employee_id ?? event.toEmployeeId ?? toPerson?.emp_id ?? null;
 
   const assetId = event.asset_id ?? event.assetId ?? event.Asset?.id ?? null;
   const asset = normalizeAsset(event.asset || event.Asset, assetId);
@@ -269,7 +266,9 @@ export default function AssetTimeline() {
 
             return (
               <div
-                key={event.id ?? `${event.event_type}-${event.event_date}-${idx}`}
+                key={
+                  event.id ?? `${event.event_type}-${event.event_date}-${idx}`
+                }
                 className="relative mb-4"
               >
                 <span
@@ -345,7 +344,9 @@ export default function AssetTimeline() {
                       <div className="mt-1 text-slate-800">
                         {buildApprovalViewUrl(event.approval_document_url) ? (
                           <a
-                            href={buildApprovalViewUrl(event.approval_document_url)}
+                            href={buildApprovalViewUrl(
+                              event.approval_document_url,
+                            )}
                             target="_blank"
                             rel="noreferrer"
                             className="text-blue-600 underline"
