@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
@@ -14,6 +14,22 @@ const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
 const PRINT_PAGE_SIZE = 500;
 const PRINT_MAX_ROWS = 20000;
+const isValidAssetId = (value) => {
+  if (value == null) return false;
+  const normalized = String(value).trim();
+  return normalized !== "" && normalized !== "-";
+};
+const renderAssetLink = (assetId, label) => {
+  if (!isValidAssetId(assetId)) return label ?? "-";
+  return (
+    <Link
+      to={`/asset/${assetId}/timeline`}
+      className="text-blue-600 underline hover:text-blue-800"
+    >
+      {label ?? "-"}
+    </Link>
+  );
+};
 
 function StyledModal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
@@ -261,9 +277,21 @@ export default function EmployeeIssuedItems() {
         render: (val) => (val ? new Date(val).toLocaleString() : "-"),
       },
       { key: "daybook_no", label: "DayBook Ref" },
-      { key: "asset_id", label: "Asset Id" },
-      { key: "asset_tag", label: "Asset Tag" },
-      { key: "serial_number", label: "Serial Number" },
+      {
+        key: "asset_id",
+        label: "Asset Id",
+        render: (val, row) => renderAssetLink(row?.asset_id, val),
+      },
+      {
+        key: "asset_tag",
+        label: "Asset Tag",
+        render: (val, row) => renderAssetLink(row?.asset_id, val),
+      },
+      {
+        key: "serial_number",
+        label: "Serial Number",
+        render: (val, row) => renderAssetLink(row?.asset_id, val),
+      },
       {
         key: "requisition_url",
         label: "Requisition",
