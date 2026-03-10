@@ -227,7 +227,7 @@ export default function AssetTimeline() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4">
+      <div className="sticky top-4 z-20 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs tracking-wide uppercase text-slate-500">
