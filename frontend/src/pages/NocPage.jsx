@@ -1,11 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import logo from "/logo.svg";
 import { STORE_API_BASE_URL } from "@/lib/api-config";
 
 const API = STORE_API_BASE_URL;
 const safe = (value) => (value == null || value === "" ? "-" : value);
+const isValidAssetId = (value) => {
+  if (value == null) return false;
+  const normalized = String(value).trim();
+  return normalized !== "" && normalized !== "-";
+};
+const renderAssetLink = (assetId, label) => {
+  if (!isValidAssetId(assetId)) return safe(label);
+  return (
+    <Link
+      to={`/asset/${assetId}/timeline`}
+      className="text-blue-600 underline hover:text-blue-800 print:text-black print:no-underline"
+    >
+      {safe(label)}
+    </Link>
+  );
+};
 
 function buildNocNumber(employeeId) {
   const now = new Date();
@@ -177,18 +193,27 @@ export default function NocPage() {
               </tr>
             </thead>
             <tbody>
-              {outstandingAssets.map((asset, idx) => (
-                <tr key={asset.id || idx}>
-                  <td className="border p-1">{idx + 1}</td>
-                  <td className="border p-1">{safe(asset.id)}</td>
-                  <td className="border p-1">{safe(asset.asset_tag)}</td>
-                  <td className="border p-1">{safe(asset.serial_number)}</td>
-                  <td className="border p-1">{safe(asset.status)}</td>
-                  <td className="border p-1">
-                    {safe(asset?.ItemCategory?.category_name)}
-                  </td>
-                </tr>
-              ))}
+              {outstandingAssets.map((asset, idx) => {
+                const assetId = asset?.id ?? asset?.asset_id;
+                return (
+                  <tr key={assetId || idx}>
+                    <td className="border p-1">{idx + 1}</td>
+                    <td className="border p-1">
+                      {renderAssetLink(assetId, assetId)}
+                    </td>
+                    <td className="border p-1">
+                      {renderAssetLink(assetId, asset.asset_tag)}
+                    </td>
+                    <td className="border p-1">
+                      {renderAssetLink(assetId, asset.serial_number)}
+                    </td>
+                    <td className="border p-1">{safe(asset.status)}</td>
+                    <td className="border p-1">
+                      {safe(asset?.ItemCategory?.category_name)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
