@@ -4,6 +4,12 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useNavigate, useParams } from "react-router-dom";
 import { toStoreApiUrl } from "@/lib/api-config";
+import Modal from "@/components/Modal";
+import AssetReturnForm from "@/components/Forms/AssetReturnForm";
+import AssetTransferForm from "@/components/Forms/AssetTransferForm";
+import AssetRepairForm from "@/components/Forms/AssetRepairForm";
+import AssetFinalizeForm from "@/components/Forms/AssetFinalizeForm";
+import AssetRetainForm from "@/components/Forms/AssetRetainForm";
 
 function getEventStyle(eventType) {
   const value = String(eventType || "")
@@ -150,10 +156,7 @@ function normalizeEvent(event) {
     fromPerson?.emp_id ??
     null;
   const toId =
-    event.to_employee_id ??
-    event.toEmployeeId ??
-    toPerson?.emp_id ??
-    null;
+    event.to_employee_id ?? event.toEmployeeId ?? toPerson?.emp_id ?? null;
 
   const assetId = event.asset_id ?? event.assetId ?? event.Asset?.id ?? null;
   const asset = normalizeAsset(event.asset || event.Asset, assetId);
@@ -181,10 +184,14 @@ export default function AssetTimeline() {
   const params = useParams();
   const navigate = useNavigate();
   const assetId = params.assetId ?? params.id;
+  const assetIdNumber = Number(assetId);
+  const assetIds = Number.isFinite(assetIdNumber) ? [assetIdNumber] : [];
 
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [dialog, setDialog] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const assetSummary = useMemo(
     () => events.find((event) => event.asset)?.asset || null,
@@ -223,11 +230,31 @@ export default function AssetTimeline() {
         );
       })
       .finally(() => setLoading(false));
-  }, [assetId]);
+  }, [assetId, refreshKey]);
+
+  const openActionDialog = (nextDialog) => {
+    if (!assetIds.length) return;
+    setDialog(nextDialog);
+  };
+
+  const handleActionDone = (success) => {
+    if (!success) return;
+    setDialog(null);
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  const actions = [
+    { key: "return", label: "Return" },
+    { key: "transfer", label: "Transfer" },
+    { key: "repairOut", label: "Repair Out" },
+    { key: "repairIn", label: "Repair In" },
+    { key: "finalize", label: "Dispose / Lost / E-Waste" },
+    { key: "retain", label: "Retain" },
+  ];
 
   return (
     <div className="p-4 space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4">
+      <div className="sticky top-4 z-20 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs tracking-wide uppercase text-slate-500">
@@ -250,6 +277,20 @@ export default function AssetTimeline() {
             Back
           </button>
         </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {actions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              onClick={() => openActionDialog(action.key)}
+              disabled={!assetIds.length}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -269,7 +310,9 @@ export default function AssetTimeline() {
 
             return (
               <div
-                key={event.id ?? `${event.event_type}-${event.event_date}-${idx}`}
+                key={
+                  event.id ?? `${event.event_type}-${event.event_date}-${idx}`
+                }
                 className="relative mb-4"
               >
                 <span
@@ -345,7 +388,9 @@ export default function AssetTimeline() {
                       <div className="mt-1 text-slate-800">
                         {buildApprovalViewUrl(event.approval_document_url) ? (
                           <a
-                            href={buildApprovalViewUrl(event.approval_document_url)}
+                            href={buildApprovalViewUrl(
+                              event.approval_document_url,
+                            )}
                             target="_blank"
                             rel="noreferrer"
                             className="text-blue-600 underline"
@@ -382,6 +427,62 @@ export default function AssetTimeline() {
           })}
         </div>
       )}
+
+      <Modal
+        isOpen={dialog === "return"}
+        onClose={() => setDialog(null)}
+        title="Return"
+      >
+        <AssetReturnForm assetIds={assetIds} onDone={handleActionDone} />
+      </Modal>
+
+      <Modal
+        isOpen={dialog === "transfer"}
+        onClose={() => setDialog(null)}
+        title="Transfer"
+      >
+        <AssetTransferForm assetIds={assetIds} onDone={handleActionDone} />
+      </Modal>
+
+      <Modal
+        isOpen={dialog === "repairOut"}
+        onClose={() => setDialog(null)}
+        title="Repair Out"
+      >
+        <AssetRepairForm
+          mode="out"
+          assetIds={assetIds}
+          onDone={handleActionDone}
+        />
+      </Modal>
+
+      <Modal
+        isOpen={dialog === "repairIn"}
+        onClose={() => setDialog(null)}
+        title="Repair In"
+      >
+        <AssetRepairForm
+          mode="in"
+          assetIds={assetIds}
+          onDone={handleActionDone}
+        />
+      </Modal>
+
+      <Modal
+        isOpen={dialog === "finalize"}
+        onClose={() => setDialog(null)}
+        title="Dispose / Lost / E-Waste"
+      >
+        <AssetFinalizeForm assetIds={assetIds} onDone={handleActionDone} />
+      </Modal>
+
+      <Modal
+        isOpen={dialog === "retain"}
+        onClose={() => setDialog(null)}
+        title="Retain"
+      >
+        <AssetRetainForm assetIds={assetIds} onDone={handleActionDone} />
+      </Modal>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import logo from "/logo.svg";
 import loaderVideo from "../assets/Paperplane.webm";
@@ -10,6 +10,22 @@ const ISSUED_PAGE_SIZE = 500;
 const MAX_STATEMENT_ROWS = 50000;
 
 const safe = (value) => (value == null || value === "" ? "-" : value);
+const isValidAssetId = (value) => {
+  if (value == null) return false;
+  const normalized = String(value).trim();
+  return normalized !== "" && normalized !== "-";
+};
+const renderAssetLink = (assetId, label) => {
+  if (!isValidAssetId(assetId)) return safe(label);
+  return (
+    <Link
+      to={`/asset/${assetId}/timeline`}
+      className="text-blue-600 underline hover:text-blue-800 print:text-black print:no-underline"
+    >
+      {safe(label)}
+    </Link>
+  );
+};
 
 function parseCursorMeta(meta) {
   const nextCursor =
@@ -129,6 +145,7 @@ export default function EmployeeIssuedStatement() {
             category_name: item.category_name,
             type: "Asset",
             quantity: 1,
+            asset_id: asset.asset_id ?? asset.id ?? null,
             asset_tag: asset.asset_tag || "-",
             serial_number: asset.serial_number || "-",
             issue_date: item.date,
@@ -140,6 +157,7 @@ export default function EmployeeIssuedStatement() {
           category_name: item.category_name,
           type: "Consumable",
           quantity: item.quantity || 0,
+          asset_id: null,
           asset_tag: "-",
           serial_number: "-",
           issue_date: item.date,
@@ -361,8 +379,12 @@ export default function EmployeeIssuedStatement() {
                 <td className="border p-1">{safe(row.category_name)}</td>
                 <td className="border p-1">{row.type}</td>
                 <td className="border p-1">{row.quantity}</td>
-                <td className="border p-1">{safe(row.asset_tag)}</td>
-                <td className="border p-1">{safe(row.serial_number)}</td>
+                <td className="border p-1">
+                  {renderAssetLink(row.asset_id, row.asset_tag)}
+                </td>
+                <td className="border p-1">
+                  {renderAssetLink(row.asset_id, row.serial_number)}
+                </td>
                 <td className="border p-1">
                   {row.issue_date
                     ? new Date(row.issue_date).toLocaleDateString()
