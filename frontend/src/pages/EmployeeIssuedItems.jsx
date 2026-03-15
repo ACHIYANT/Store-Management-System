@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
@@ -14,6 +14,15 @@ const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
 const PRINT_PAGE_SIZE = 500;
 const PRINT_MAX_ROWS = 20000;
+const CUSTODIAN_TYPES = new Set(["EMPLOYEE", "DIVISION", "VEHICLE"]);
+const inferCustodianTypeFromId = (value) => {
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (text.startsWith("DIV-")) return "DIVISION";
+  if (text.startsWith("VEH-")) return "VEHICLE";
+  return "";
+};
 const isValidAssetId = (value) => {
   if (value == null) return false;
   const normalized = String(value).trim();
@@ -64,6 +73,10 @@ function normalizeIssuedRow(row) {
     id: row.id ?? row.issued_item_id ?? null,
     item_name: row.item_name ?? row.itemName ?? row.name ?? "-",
     category_name: row.category_name ?? row.category ?? null,
+    custodian_id: row.custodian_id ?? null,
+    custodian_type: row.custodian_type ?? null,
+    custodian_name:
+      row.custodian_name ?? row.employee_name ?? row.employee?.name ?? null,
     quantity: row.quantity ?? row.qty ?? row.issue_qty ?? 0,
     sku_unit: row.sku_unit ?? row.skuUnit ?? DEFAULT_SKU_UNIT,
     issue_date: row.issue_date ?? row.issued_at ?? row.date ?? null,
@@ -90,7 +103,20 @@ function parseCursorMeta(meta) {
 
 export default function EmployeeIssuedItems() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const queryParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const custodianType = useMemo(() => {
+    const raw = String(queryParams.get("custodianType") || "")
+      .trim()
+      .toUpperCase();
+    if (CUSTODIAN_TYPES.has(raw)) return raw;
+    return inferCustodianTypeFromId(id);
+  }, [id, queryParams]);
+  const custodianId = id ? decodeURIComponent(String(id)) : "";
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
@@ -147,7 +173,6 @@ export default function EmployeeIssuedItems() {
       }
 
       const params = {
-        employeeId: id,
         limit,
         cursorMode: true,
         cursor: cursor || undefined,
@@ -157,6 +182,12 @@ export default function EmployeeIssuedItems() {
         fromDate: filters.fromDate || undefined,
         toDate: filters.toDate || undefined,
       };
+      if (custodianType) {
+        params.custodianId = custodianId;
+        params.custodianType = custodianType;
+      } else {
+        params.employeeId = custodianId;
+      }
 
       const resp = await axios.get(`${API}/issued-items`, { params });
       const rows = (resp.data?.data || []).map(normalizeIssuedRow);
@@ -170,7 +201,8 @@ export default function EmployeeIssuedItems() {
       filters.fromDate,
       filters.stockId,
       filters.toDate,
-      id,
+      custodianId,
+      custodianType,
     ],
   );
 
@@ -190,6 +222,7 @@ export default function EmployeeIssuedItems() {
       filters.stockId,
       filters.fromDate,
       filters.toDate,
+      custodianType,
     ],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
@@ -206,7 +239,6 @@ export default function EmployeeIssuedItems() {
 
     while (hasMore && all.length < PRINT_MAX_ROWS) {
       const params = {
-        employeeId: id,
         limit: PRINT_PAGE_SIZE,
         cursorMode: true,
         cursor: cursor || undefined,
@@ -216,6 +248,12 @@ export default function EmployeeIssuedItems() {
         fromDate: filters.fromDate || undefined,
         toDate: filters.toDate || undefined,
       };
+      if (custodianType) {
+        params.custodianId = custodianId;
+        params.custodianType = custodianType;
+      } else {
+        params.employeeId = custodianId;
+      }
 
       const resp = await axios.get(`${API}/issued-items`, { params });
       const pageRows = resp.data?.data || [];
@@ -236,7 +274,8 @@ export default function EmployeeIssuedItems() {
     filters.fromDate,
     filters.stockId,
     filters.toDate,
-    id,
+    custodianId,
+    custodianType,
   ]);
 
   const openPrintPreview = useCallback(async () => {
@@ -266,9 +305,20 @@ export default function EmployeeIssuedItems() {
       { key: "item_name", label: "Item Name" },
       { key: "category_name", label: "Category Name" },
       {
+        key: "custodian_name",
+        label: "Custodian",
+        render: (val, row) => val || row?.employee_name || "-",
+      },
+      {
+        key: "custodian_type",
+        label: "Custodian Type",
+        render: (val, row) => val || (row?.employee_id ? "EMPLOYEE" : "-"),
+      },
+      {
         key: "quantity",
         label: "Quantity",
-        render: (val, row) => `${val ?? 0} ${row?.sku_unit || DEFAULT_SKU_UNIT}`,
+        render: (val, row) =>
+          `${val ?? 0} ${row?.sku_unit || DEFAULT_SKU_UNIT}`,
       },
       { key: "sku_unit", label: "SKU Unit" },
       {
@@ -330,7 +380,7 @@ export default function EmployeeIssuedItems() {
 
       <div className="listpage-root">
         <ListPage
-          title={`Issued Items - Employee/Division: ${id}`}
+          title={`Issued Items - ${custodianType || "EMPLOYEE"}: ${custodianId}`}
           data={rows}
           columns={columns}
           loading={loading}
@@ -440,7 +490,9 @@ export default function EmployeeIssuedItems() {
                     key={stock.id ?? stock._id}
                     value={stock.id ?? stock._id}
                   >
-                    {stock.item_name ?? stock.name ?? `Stock #${stock.id ?? stock._id}`}
+                    {stock.item_name ??
+                      stock.name ??
+                      `Stock #${stock.id ?? stock._id}`}
                   </option>
                 ))}
               </select>
@@ -487,7 +539,10 @@ export default function EmployeeIssuedItems() {
               Reset
             </button>
 
-            <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-white">
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-3 py-1 text-white"
+            >
               Apply
             </button>
           </div>
@@ -503,9 +558,12 @@ export default function EmployeeIssuedItems() {
           <div className="relative z-10 w-full max-w-6xl overflow-auto rounded bg-white p-4 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Issued Items - Print Preview</h3>
+                <h3 className="text-lg font-semibold">
+                  Issued Items - Print Preview
+                </h3>
                 <p className="text-xs text-gray-600">
-                  Preview of filtered data. Use Print to print only this preview.
+                  Preview of filtered data. Use Print to print only this
+                  preview.
                 </p>
                 {previewTruncated && (
                   <p className="mt-1 text-xs text-amber-700">
@@ -543,51 +601,104 @@ export default function EmployeeIssuedItems() {
                 <strong>Filters:</strong> {JSON.stringify(filters)}
               </div>
 
-              <table className="min-w-full border-collapse" style={{ borderCollapse: "collapse" }}>
+              <table
+                className="min-w-full border-collapse"
+                style={{ borderCollapse: "collapse" }}
+              >
                 <thead>
                   <tr>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>ID</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Item Name</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Category</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Quantity</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>SKU Unit</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Issue Date</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>DayBook Ref</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Asset Id</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Asset Tag</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Serial Number</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Remarks</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Item Name
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Category
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Quantity
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      SKU Unit
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Issue Date
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      DayBook Ref
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Asset Id
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Asset Tag
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Serial Number
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Remarks
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewLoading ? (
                     <tr>
-                      <td colSpan={11} style={{ padding: 12, textAlign: "center" }}>
+                      <td
+                        colSpan={11}
+                        style={{ padding: 12, textAlign: "center" }}
+                      >
                         Loading...
                       </td>
                     </tr>
                   ) : previewRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ padding: 12, textAlign: "center" }}>
+                      <td
+                        colSpan={11}
+                        style={{ padding: 12, textAlign: "center" }}
+                      >
                         No records
                       </td>
                     </tr>
                   ) : (
                     previewRows.map((row) => (
-                      <tr key={`${row.id}-${row.asset_id}-${row.serial_number}`}>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.id}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.item_name}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.category_name}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.quantity}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.sku_unit || DEFAULT_SKU_UNIT}</td>
+                      <tr
+                        key={`${row.id}-${row.asset_id}-${row.serial_number}`}
+                      >
                         <td style={{ padding: 6, border: "1px solid #ddd" }}>
-                          {row.issue_date ? new Date(row.issue_date).toLocaleString() : ""}
+                          {row.id}
                         </td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.daybook_no}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.asset_id}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.asset_tag}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.serial_number}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.remarks}</td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.item_name}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.category_name}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.quantity}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.sku_unit || DEFAULT_SKU_UNIT}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.issue_date
+                            ? new Date(row.issue_date).toLocaleString()
+                            : ""}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.daybook_no}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.asset_id}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.asset_tag}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.serial_number}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.remarks}
+                        </td>
                       </tr>
                     ))
                   )}

@@ -2,6 +2,7 @@ const express = require("express");
 const VendorController = require("../../controllers/vendor-controller");
 const ItemCategoryController = require("../../controllers/itemCategory-controller");
 const EmployeeController = require("../../controllers/employee-controller");
+const CustodianController = require("../../controllers/custodian-controller");
 
 const DayBookController = require("../../controllers/daybook-controller");
 const router = express.Router();
@@ -125,6 +126,16 @@ router.patch(
   EmployeeController.update,
 );
 router.get("/employee", EmployeeController.getAll);
+
+// Custodians (Division / Vehicle / Employee master)
+router.post(
+  "/custodians",
+  ensureAuth,
+  requireAdminOperations,
+  CustodianController.create,
+);
+router.get("/custodians", CustodianController.list);
+router.get("/custodians/:id", CustodianController.get);
 
 router.post("/daybook", DayBookController.create);
 router.post("/daybook/full", DayBookController.createFullDayBook);

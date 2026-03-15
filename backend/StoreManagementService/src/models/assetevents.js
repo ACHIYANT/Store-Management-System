@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
       });
+      this.belongsTo(models.Custodian, {
+        foreignKey: "custodian_id",
+        targetKey: "id",
+      });
       AssetEvent.belongsTo(models.Asset, { foreignKey: "asset_id" });
       AssetEvent.belongsTo(models.IssuedItem, { foreignKey: "issued_item_id" });
     }
@@ -73,6 +77,14 @@ module.exports = (sequelize, DataTypes) => {
       event_date: {
         type: DataTypes.DATE,
         allowNull: false,
+      },
+      custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
       },
       notes: { type: DataTypes.TEXT, allowNull: true },
       approval_document_url: { type: DataTypes.TEXT, allowNull: true },

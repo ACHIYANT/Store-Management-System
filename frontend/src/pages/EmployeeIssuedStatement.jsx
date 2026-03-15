@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import logo from "/logo.svg";
 import loaderVideo from "../assets/Paperplane.webm";
@@ -8,6 +8,13 @@ import { STORE_API_BASE_URL } from "@/lib/api-config";
 const API_BASE = STORE_API_BASE_URL;
 const ISSUED_PAGE_SIZE = 500;
 const MAX_STATEMENT_ROWS = 50000;
+const CUSTODIAN_TYPES = new Set(["EMPLOYEE", "DIVISION", "VEHICLE"]);
+const inferCustodianTypeFromId = (value) => {
+  const text = String(value || "").trim().toUpperCase();
+  if (text.startsWith("DIV-")) return "DIVISION";
+  if (text.startsWith("VEH-")) return "VEHICLE";
+  return "";
+};
 
 const safe = (value) => (value == null || value === "" ? "-" : value);
 const isValidAssetId = (value) => {
@@ -41,7 +48,20 @@ function parseCursorMeta(meta) {
 
 export default function EmployeeIssuedStatement() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const queryParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const custodianType = useMemo(() => {
+    const raw = String(queryParams.get("custodianType") || "")
+      .trim()
+      .toUpperCase();
+    if (CUSTODIAN_TYPES.has(raw)) return raw;
+    return inferCustodianTypeFromId(id);
+  }, [id, queryParams]);
+  const subjectId = id ? decodeURIComponent(String(id)) : "";
 
   const [employee, setEmployee] = useState(null);
   const [issuedItems, setIssuedItems] = useState([]);
@@ -57,22 +77,27 @@ export default function EmployeeIssuedStatement() {
     if (storedUser) setPreparedBy(storedUser);
   }, []);
 
-  const fetchIssuedItemsByCursor = useCallback(async (employeeId, currentOnly = false) => {
+  const fetchIssuedItemsByCursor = useCallback(async (currentOnly = false) => {
     const all = [];
     let cursor = null;
     let hasMore = true;
     const seenCursors = new Set();
 
     while (hasMore && all.length < MAX_STATEMENT_ROWS) {
-      const issuedRes = await axios.get(`${API_BASE}/issued-items`, {
-        params: {
-          employeeId,
-          limit: ISSUED_PAGE_SIZE,
-          cursorMode: true,
-          cursor: cursor || undefined,
-          currentOnly: currentOnly || undefined,
-        },
-      });
+      const params = {
+        limit: ISSUED_PAGE_SIZE,
+        cursorMode: true,
+        cursor: cursor || undefined,
+        currentOnly: currentOnly || undefined,
+      };
+      if (custodianType) {
+        params.custodianId = subjectId;
+        params.custodianType = custodianType;
+      } else {
+        params.employeeId = subjectId;
+      }
+
+      const issuedRes = await axios.get(`${API_BASE}/issued-items`, { params });
 
       const rows = issuedRes.data?.data || [];
       all.push(...rows);
@@ -96,21 +121,43 @@ export default function EmployeeIssuedStatement() {
       rows: all.slice(0, MAX_STATEMENT_ROWS),
       truncated: hasMore,
     };
-  }, []);
+  }, [custodianType, subjectId]);
 
   useEffect(() => {
     async function fetchAll() {
-      if (!id) return;
+      if (!subjectId) return;
 
       try {
         setLoading(true);
 
-        const [empRes, issuedResult] = await Promise.all([
-          axios.get(`${API_BASE}/employee/${id}`),
-          fetchIssuedItemsByCursor(id, statementMode === "CURRENT"),
+        const subjectRequest =
+          custodianType && custodianType !== "EMPLOYEE"
+            ? axios.get(`${API_BASE}/custodians/${encodeURIComponent(subjectId)}`)
+            : axios
+                .get(`${API_BASE}/employee/${encodeURIComponent(subjectId)}`)
+                .catch(async () =>
+                  axios.get(`${API_BASE}/custodians/${encodeURIComponent(subjectId)}`),
+                );
+
+        const [subjectRes, issuedResult] = await Promise.all([
+          subjectRequest,
+          fetchIssuedItemsByCursor(statementMode === "CURRENT"),
         ]);
 
-        setEmployee(empRes.data?.data || null);
+        const raw = subjectRes?.data?.data || null;
+        if (raw && (raw.emp_id || raw.email_id || raw.mobile_no)) {
+          setEmployee(raw);
+        } else {
+          setEmployee({
+            emp_id: raw?.id || subjectId,
+            name: raw?.display_name || "-",
+            designation: raw?.custodian_type || custodianType || "-",
+            division: raw?.custodian_type || custodianType || "-",
+            email_id: "-",
+            mobile_no: "-",
+            office_location: "-",
+          });
+        }
         setIssuedItems(issuedResult.rows);
         setTruncated(issuedResult.truncated);
       } catch (error) {
@@ -124,7 +171,7 @@ export default function EmployeeIssuedStatement() {
     }
 
     fetchAll();
-  }, [fetchIssuedItemsByCursor, id, statementMode]);
+  }, [custodianType, fetchIssuedItemsByCursor, statementMode, subjectId]);
 
   const handlePrint = () => {
     const now = new Date();
@@ -185,6 +232,12 @@ export default function EmployeeIssuedStatement() {
       totalConsumables: reportType === "ASSET" ? 0 : filteredConsumables,
     };
   }, [issuedItems, reportType]);
+  const subjectLabel =
+    custodianType === "DIVISION"
+      ? "Division"
+      : custodianType === "VEHICLE"
+        ? "Vehicle"
+        : "Employee";
 
   if (loading) {
     return (
@@ -294,10 +347,10 @@ export default function EmployeeIssuedStatement() {
           <div className="col-span-2 rounded border p-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <strong>Employee Name:</strong> {safe(employee?.name)}
+                <strong>{subjectLabel} Name:</strong> {safe(employee?.name)}
               </div>
               <div>
-                <strong>Employee ID:</strong> {safe(employee?.emp_id)}
+                <strong>{subjectLabel} ID:</strong> {safe(employee?.emp_id)}
               </div>
               <div>
                 <strong>Designation:</strong> {safe(employee?.designation)}
@@ -323,7 +376,7 @@ export default function EmployeeIssuedStatement() {
               <div>
                 <strong>Statement Scope:</strong>{" "}
                 {statementMode === "CURRENT"
-                  ? "Currently Held by Employee"
+                  ? `Currently Held by ${subjectLabel}`
                   : "Issue History"}
               </div>
               <div>
@@ -367,8 +420,8 @@ export default function EmployeeIssuedStatement() {
               <tr>
                 <td className="border p-2 text-center" colSpan={8}>
                   {statementMode === "CURRENT"
-                    ? "No items are currently held by this employee."
-                    : "No items issued to this employee."}
+                    ? `No items are currently held by this ${subjectLabel.toLowerCase()}.`
+                    : `No items issued to this ${subjectLabel.toLowerCase()}.`}
                 </td>
               </tr>
             )}

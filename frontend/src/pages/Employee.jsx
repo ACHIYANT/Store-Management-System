@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import axios from "axios";
 import useDebounce from "@/hooks/useDebounce";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { toStoreApiUrl } from "@/lib/api-config";
+import { hasRole } from "@/lib/roles";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -15,6 +16,7 @@ export default function Employee() {
   const [selectedRows, setSelectedRows] = useState(null);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 400);
+  const canManageMaster = useMemo(() => hasRole("SUPER_ADMIN"), []);
 
   const fetchEmployeesPage = useCallback(
     async ({ cursor, limit }) => {
@@ -97,6 +99,8 @@ export default function Employee() {
       onAdd={handleAdd}
       idCol="emp_id"
       onUpdate={handleUpdate} // Pass handleUpdate to the ListPage
+      showAdd={canManageMaster}
+      showUpdate={canManageMaster}
       onFilter={() => console.log("Filter")}
       onSearch={setSearch}
       searchValue={search}

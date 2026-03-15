@@ -17,6 +17,7 @@ import Layout from "./components/Layout";
 import Vendor from "./pages/Vendor";
 import ItemCategory from "./pages/ItemCategory";
 import Employee from "./pages/Employee";
+import Custodians from "./pages/Custodians";
 import EmployeeUpdateForm from "./components/Forms/EmployeeUpdateForm";
 import VendorUpdateForm from "./components/Forms/VendorUpdateForm";
 import DayBookItemsForm from "./components/Forms/DayBookItemsForm";
@@ -91,16 +92,56 @@ function App() {
           <Route path="vendors" element={<Vendor />} />
           <Route path="itemCategory" element={<ItemCategory />} />
           <Route path="employees" element={<Employee />} />
+          <Route path="custodians" element={<Custodians />} />
           {/* Entry Forms */}
-          <Route path="employees-entry" element={<EmployeesForm />} />
-          <Route path="vendors-entry" element={<VendorsForm />} />
-          <Route path="itemCategory-entry" element={<ItemCategoryAddForm />} />
+          <Route
+            path="employees-entry"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <EmployeesForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="vendors-entry"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <VendorsForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="itemCategory-entry"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <ItemCategoryAddForm />
+              </ProtectedRoute>
+            }
+          />
           {/* Updated Form */}
-          <Route path="/employee-update" element={<EmployeeUpdateForm />} />
-          <Route path="/vendor-update" element={<VendorUpdateForm />} />
+          <Route
+            path="/employee-update"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <EmployeeUpdateForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vendor-update"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <VendorUpdateForm />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/itemCategory-update"
-            element={<ItemCategoryUpdateForm />}
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <ItemCategoryUpdateForm />
+              </ProtectedRoute>
+            }
           />
           {/* <Route path="/daybook-update" element={<DayBookUpdateFrom />} /> */}
           <Route
@@ -134,11 +175,20 @@ function App() {
           <Route path="/gate-pass/verify" element={<GatePassVerify />} />
           <Route path="/gate-pass/:gatePassId" element={<GatePassPage />} />
           <Route path="/issued-items" element={<IssuedItems />} />
+          <Route path="/reports/custodian-issues" element={<EmployeeIssues />} />
           <Route path="/reports/employee-issues" element={<EmployeeIssues />} />
 
           <Route
+            path="/reports/custodian-issues/:id"
+            element={<EmployeeIssuedItems />}
+          />
+          <Route
             path="/reports/employee-issues/:id"
             element={<EmployeeIssuedItems />}
+          />
+          <Route
+            path="/reports/custodian-issues/:id/statement"
+            element={<EmployeeIssuedStatement />}
           />
           <Route
             path="/reports/employee-issues/:id/statement"

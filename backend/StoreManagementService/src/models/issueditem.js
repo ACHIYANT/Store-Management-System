@@ -21,6 +21,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "item_master_id",
         as: "itemMaster",
       });
+      this.belongsTo(models.Custodian, {
+        foreignKey: "custodian_id",
+        targetKey: "id",
+      });
       IssuedItem.belongsTo(models.Requisition, {
         foreignKey: "requisition_id",
       });
@@ -34,6 +38,14 @@ module.exports = (sequelize, DataTypes) => {
   IssuedItem.init(
     {
       employee_id: DataTypes.INTEGER,
+      custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
+      },
       item_id: DataTypes.INTEGER,
       item_master_id: DataTypes.BIGINT.UNSIGNED,
       quantity: DataTypes.INTEGER,

@@ -39,6 +39,8 @@ class IssuedItemService {
   // NEW: orchestrates a single bulk transaction via repository
   async issueMany({
     employeeId,
+    custodianId,
+    custodianType,
     items = [],
     serializedItems = [],
     notes = null,
@@ -49,6 +51,8 @@ class IssuedItemService {
     const repo = new IssuedItemRepository();
     return await repo.issueMany({
       employeeId,
+      custodianId,
+      custodianType,
       items,
       serializedItems,
       notes,

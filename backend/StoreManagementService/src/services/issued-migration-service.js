@@ -669,6 +669,8 @@ class IssuedMigrationService {
           item_master_id: asset.item_master_id || resolved.item_master_id || null,
           status: "Issued",
           current_employee_id: resolved.employee.emp_id,
+          custodian_id: String(resolved.employee.emp_id),
+          custodian_type: "EMPLOYEE",
           notes: noteParts,
         },
         { transaction },
@@ -695,6 +697,8 @@ class IssuedMigrationService {
     const issued = await IssuedItem.create(
       {
         employee_id: resolved.employee.emp_id,
+        custodian_id: String(resolved.employee.emp_id),
+        custodian_type: "EMPLOYEE",
         item_id: resolved.stock.id,
         item_master_id: resolved.item_master_id || null,
         quantity: 1,
@@ -738,6 +742,8 @@ class IssuedMigrationService {
         event_type: "Issued",
         event_date: issueDate,
         to_employee_id: resolved.employee.emp_id,
+        custodian_id: String(resolved.employee.emp_id),
+        custodian_type: "EMPLOYEE",
         issued_item_id: issued.id,
         daybook_id: null,
         daybook_item_id: null,
@@ -812,6 +818,8 @@ class IssuedMigrationService {
     const issued = await IssuedItem.create(
       {
         employee_id: resolved.employee.emp_id,
+        custodian_id: String(resolved.employee.emp_id),
+        custodian_type: "EMPLOYEE",
         item_id: resolved.stock.id,
         item_master_id: resolved.item_master_id || null,
         quantity,

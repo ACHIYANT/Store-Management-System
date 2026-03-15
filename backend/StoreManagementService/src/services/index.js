@@ -4,6 +4,7 @@ const CategoryGroupService = require("./categorygroup-service");
 const CategoryHeadService = require("./categoryhead-service");
 const DayBookEntrySequenceService = require("./daybook-entry-sequence-service");
 const DayBookItemSerialService = require("./daybookitemserials-service");
+const CustodianService = require("./custodian-service");
 const GatePassService = require("./gatepass-service");
 const IssuedItemService = require("./issueditem-services");
 const RequisitionService = require("./requisition-service");
@@ -22,6 +23,7 @@ module.exports = {
   CategoryGroupService: require("./categorygroup-service"),
   CategoryHeadService: require("./categoryhead-service"),
   DayBookEntrySequenceService: require("./daybook-entry-sequence-service"),
+  CustodianService: require("./custodian-service"),
   GatePassService: require("./gatepass-service"),
   RequisitionService,
 };

@@ -5,6 +5,7 @@ const {
   ItemCategory,
   Stock,
   Employee,
+  Custodian,
   Requisition,
   RequisitionItem,
   DayBookItem,
@@ -23,6 +24,11 @@ const {
 const { normalizeSkuUnit, sameSkuUnit } = require("../utils/sku-units");
 const { ensureItemMaster } = require("../services/item-master-service");
 const { logStockMovement } = require("../services/stock-movement-service");
+const {
+  normalizeCustodianInput,
+  ensureCustodian,
+  toCustodianFields,
+} = require("../utils/custodian-utils");
 
 class IssuedItemRepository {
   _toPositiveIntOrNull(value) {
@@ -33,6 +39,8 @@ class IssuedItemRepository {
   async issueItem({
     stockId,
     employeeId,
+    custodianId,
+    custodianType,
     quantity,
     requisitionUrl = null,
     skuUnit = null,
@@ -52,8 +60,8 @@ class IssuedItemRepository {
         );
       }
       // basic validations
-      if (!stockId || !employeeId) {
-        throw new Error("stockId and employeeId are required");
+      if (!stockId) {
+        throw new Error("stockId is required");
       }
       const qty = Number(quantity);
       if (!Number.isFinite(qty) || qty <= 0) {
@@ -99,9 +107,18 @@ class IssuedItemRepository {
         }
       }
 
-      // 2) (Optional) ensure employee exists (PK is emp_id)
-      const employee = await Employee.findByPk(employeeId, { transaction: t });
-      if (!employee) throw new Error("Employee not found");
+      const custodianInput = normalizeCustodianInput({
+        employeeId,
+        custodianId,
+        custodianType,
+      });
+      if (!custodianInput) {
+        throw new Error("employeeId or custodianId/custodianType is required");
+      }
+      const resolvedCustodian = await ensureCustodian(custodianInput, {
+        transaction: t,
+      });
+      const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
 
       // 3) Decrement stock
       await stock.update(
@@ -112,7 +129,8 @@ class IssuedItemRepository {
       // 4) Create IssuedItem row (uses employee_id & item_id columns)
       const issued = await IssuedItem.create(
         {
-          employee_id: employeeId,
+          employee_id: resolvedEmployeeId,
+          ...toCustodianFields(resolvedCustodian),
           item_id: stockId,
           item_master_id: itemMasterId > 0 ? itemMasterId : null,
           quantity: qty,
@@ -134,7 +152,7 @@ class IssuedItemRepository {
           movementAt: issued.date || new Date(),
           referenceType: "IssuedItem",
           referenceId: issued.id,
-          toEmployeeId: employeeId,
+          toEmployeeId: resolvedEmployeeId,
           performedBy: "Store Issue",
           remarks: requisitionUrl ? "Issued against requisition" : "Issued",
         },
@@ -153,6 +171,8 @@ class IssuedItemRepository {
   async issueSerialized({
     stockId,
     employeeId,
+    custodianId,
+    custodianType,
     assetIds = [],
     requisitionUrl = null,
     skuUnit = null,
@@ -160,13 +180,8 @@ class IssuedItemRepository {
     const { Asset, AssetEvent } = require("../models");
     const t = await sequelize.transaction();
     try {
-      if (
-        !stockId ||
-        !employeeId ||
-        !Array.isArray(assetIds) ||
-        assetIds.length === 0
-      ) {
-        throw new Error("stockId, employeeId and assetIds[] are required");
+      if (!stockId || !Array.isArray(assetIds) || assetIds.length === 0) {
+        throw new Error("stockId and assetIds[] are required");
       }
 
       // Approval gate
@@ -216,8 +231,18 @@ class IssuedItemRepository {
           );
         }
       }
-      const emp = await Employee.findByPk(employeeId, { transaction: t });
-      if (!emp) throw new Error("Employee not found");
+      const custodianInput = normalizeCustodianInput({
+        employeeId,
+        custodianId,
+        custodianType,
+      });
+      if (!custodianInput) {
+        throw new Error("employeeId or custodianId/custodianType is required");
+      }
+      const resolvedCustodian = await ensureCustodian(custodianInput, {
+        transaction: t,
+      });
+      const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
 
       // Fetch assets to issue
       const assets = await Asset.findAll({
@@ -244,7 +269,8 @@ class IssuedItemRepository {
       // Create IssuedItem record once
       const issued = await IssuedItem.create(
         {
-          employee_id: employeeId,
+          employee_id: resolvedEmployeeId,
+          ...toCustodianFields(resolvedCustodian),
           item_id: stockId,
           item_master_id: itemMasterId > 0 ? itemMasterId : null,
           quantity: assets.length,
@@ -266,7 +292,7 @@ class IssuedItemRepository {
           movementAt: issued.date || new Date(),
           referenceType: "IssuedItem",
           referenceId: issued.id,
-          toEmployeeId: employeeId,
+          toEmployeeId: resolvedEmployeeId,
           performedBy: "Store Issue",
           remarks: "Serialized asset issue",
           metadata: {
@@ -279,7 +305,11 @@ class IssuedItemRepository {
       // Update each asset and log event
       for (const a of assets) {
         await a.update(
-          { status: "Issued", current_employee_id: employeeId },
+          {
+            status: "Issued",
+            current_employee_id: resolvedEmployeeId,
+            ...toCustodianFields(resolvedCustodian),
+          },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -287,7 +317,8 @@ class IssuedItemRepository {
             asset_id: a.id,
             event_type: "Issued",
             event_date: new Date(),
-            to_employee_id: employeeId,
+            to_employee_id: resolvedEmployeeId,
+            ...toCustodianFields(resolvedCustodian),
             issued_item_id: issued.id,
           },
           { transaction: t },
@@ -310,6 +341,8 @@ class IssuedItemRepository {
     currentOnly = false,
     search,
     employeeId,
+    custodianId,
+    custodianType,
     categoryId,
     itemType, // Asset | Consumable
     fromDate,
@@ -332,6 +365,12 @@ class IssuedItemRepository {
     if (employeeId) {
       issuedWhere.employee_id = employeeId;
     }
+    if (custodianId) {
+      issuedWhere.custodian_id = String(custodianId).trim();
+    }
+    if (custodianType) {
+      issuedWhere.custodian_type = String(custodianType).trim().toUpperCase();
+    }
 
     if (fromDate || toDate) {
       issuedWhere.date = {};
@@ -346,6 +385,7 @@ class IssuedItemRepository {
         { sku_unit: { [Op.like]: like } },
         { "$Employee.name$": { [Op.like]: like } },
         { "$Employee.division$": { [Op.like]: like } },
+        { "$Custodian.display_name$": { [Op.like]: like } },
         { "$Stock.item_name$": { [Op.like]: like } },
         { "$Stock.ItemCategory.category_name$": { [Op.like]: like } },
         { "$Requisition.req_no$": { [Op.like]: like } },
@@ -368,6 +408,11 @@ class IssuedItemRepository {
     const employeeInclude = {
       model: Employee,
       attributes: ["emp_id", "name", "division"],
+      required: false,
+    };
+    const custodianInclude = {
+      model: Custodian,
+      attributes: ["id", "custodian_type", "display_name"],
       required: false,
     };
 
@@ -413,6 +458,8 @@ class IssuedItemRepository {
             "serial_number",
             "status",
             "current_employee_id",
+            "custodian_id",
+            "custodian_type",
           ],
           required: false,
         },
@@ -431,6 +478,12 @@ class IssuedItemRepository {
       const serialized = !!cat?.serialized_required;
 
       const rowEmployeeId = Number(r.employee_id);
+      const custodianId =
+        r.custodian_id ??
+        (Number.isFinite(rowEmployeeId) ? String(rowEmployeeId) : null);
+      const custodianType =
+        r.custodian_type ?? (Number.isFinite(rowEmployeeId) ? "EMPLOYEE" : null);
+      const custodianName = r.Custodian?.display_name || r.Employee?.name || null;
       const rawAssets =
         r.AssetEvents?.map((ev) => ({
           asset_id: ev.Asset?.id,
@@ -438,15 +491,24 @@ class IssuedItemRepository {
           serial_number: ev.Asset?.serial_number,
           status: ev.Asset?.status || null,
           current_employee_id: ev.Asset?.current_employee_id ?? null,
+          custodian_id: ev.Asset?.custodian_id ?? null,
+          custodian_type: ev.Asset?.custodian_type ?? null,
         })).filter((a) => Boolean(a.asset_id)) || [];
 
       const filteredAssets =
         useCurrentOnly && serialized
-          ? rawAssets.filter(
-              (a) =>
-                Number(a.current_employee_id) === rowEmployeeId &&
-                currentHoldingStatuses.has(String(a.status || "")),
-            )
+          ? rawAssets.filter((a) => {
+              const matchesEmployee =
+                Number.isFinite(rowEmployeeId) &&
+                Number(a.current_employee_id) === rowEmployeeId;
+              const matchesCustodian =
+                custodianId != null &&
+                String(a.custodian_id || "") === String(custodianId);
+              return (
+                (matchesEmployee || matchesCustodian) &&
+                currentHoldingStatuses.has(String(a.status || ""))
+              );
+            })
           : rawAssets;
 
       if (useCurrentOnly && serialized && filteredAssets.length === 0) {
@@ -459,6 +521,9 @@ class IssuedItemRepository {
         employee_id: r.employee_id,
         employee_name: r.Employee?.name || null,
         division: r.Employee?.division || null,
+        custodian_id: custodianId,
+        custodian_type: custodianType,
+        custodian_name: custodianName,
         item_name: r.Stock?.item_name || null,
         sku_unit: r.sku_unit || r.Stock?.sku_unit || "Unit",
         category_name: cat?.category_name || null,
@@ -487,6 +552,7 @@ class IssuedItemRepository {
       ],
       include: [
         employeeInclude,
+        custodianInclude,
         stockInclude,
         assetInclude,
         requisitionInclude,
@@ -551,6 +617,8 @@ class IssuedItemRepository {
   // NEW: bulk issuance in a single DB transaction
   async issueMany({
     employeeId,
+    custodianId,
+    custodianType,
     items = [],
     serializedItems = [],
     notes = null,
@@ -559,9 +627,18 @@ class IssuedItemRepository {
     actor = null,
   }) {
     return sequelize.transaction(async (t) => {
-      // 1) validate employee
-      const emp = await Employee.findByPk(employeeId, { transaction: t });
-      if (!emp) throw new Error(`Employee not found: ${employeeId}`);
+      const custodianInput = normalizeCustodianInput({
+        employeeId,
+        custodianId,
+        custodianType,
+      });
+      if (!custodianInput) {
+        throw new Error("employeeId or custodianId/custodianType is required");
+      }
+      const resolvedCustodian = await ensureCustodian(custodianInput, {
+        transaction: t,
+      });
+      const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
 
       const results = [];
       const requisitionIdNum = this._toPositiveIntOrNull(requisitionId);
@@ -580,6 +657,9 @@ class IssuedItemRepository {
       const issuedSource = requisitionIdNum
         ? "ONLINE_REQUISITION"
         : "OFFLINE_REQUISITION";
+      if (requisitionIdProvided && resolvedCustodian.type !== "EMPLOYEE") {
+        throw new Error("Requisition issuance requires EMPLOYEE custodian");
+      }
       if (requisitionIdNum) {
         requisitionRow = await Requisition.findByPk(requisitionIdNum, {
           transaction: t,
@@ -592,11 +672,11 @@ class IssuedItemRepository {
         const requesterEmpId = Number(requisitionRow.requester_emp_id);
         if (
           Number.isFinite(requesterEmpId) &&
-          Number.isFinite(Number(employeeId)) &&
-          requesterEmpId !== Number(employeeId)
+          Number.isFinite(Number(resolvedEmployeeId)) &&
+          requesterEmpId !== Number(resolvedEmployeeId)
         ) {
           throw new Error(
-            `Selected requisition ${requisitionIdNum} does not belong to employee ${employeeId}.`,
+            `Selected requisition ${requisitionIdNum} does not belong to employee ${resolvedEmployeeId}.`,
           );
         }
 
@@ -758,7 +838,8 @@ class IssuedItemRepository {
           );
           const issued = await IssuedItem.create(
             {
-              employee_id: employeeId,
+              employee_id: resolvedEmployeeId,
+              ...toCustodianFields(resolvedCustodian),
               item_id: lot.id,
               item_master_id: lotItemMasterId > 0 ? lotItemMasterId : null,
               quantity: takeQty,
@@ -782,7 +863,7 @@ class IssuedItemRepository {
               movementAt: issued.date || new Date(),
               referenceType: "IssuedItem",
               referenceId: issued.id,
-              toEmployeeId: employeeId,
+              toEmployeeId: resolvedEmployeeId,
               performedBy: actor?.fullname || actor?.name || "Store Issue",
               remarks: "Bulk issue (non-serialized)",
               metadata: {
@@ -939,7 +1020,8 @@ class IssuedItemRepository {
 
         const issued = await IssuedItem.create(
           {
-            employee_id: employeeId,
+            employee_id: resolvedEmployeeId,
+            ...toCustodianFields(resolvedCustodian),
             item_id: stockId,
             item_master_id: itemMasterId > 0 ? itemMasterId : null,
             quantity: assetIds.length,
@@ -963,7 +1045,7 @@ class IssuedItemRepository {
             movementAt: issued.date || new Date(),
             referenceType: "IssuedItem",
             referenceId: issued.id,
-            toEmployeeId: employeeId,
+            toEmployeeId: resolvedEmployeeId,
             performedBy: actor?.fullname || actor?.name || "Store Issue",
             remarks: "Bulk issue (serialized)",
             metadata: {
@@ -984,7 +1066,11 @@ class IssuedItemRepository {
 
         for (const a of assets) {
           await a.update(
-            { status: "Issued", current_employee_id: employeeId },
+            {
+              status: "Issued",
+              current_employee_id: resolvedEmployeeId,
+              ...toCustodianFields(resolvedCustodian),
+            },
             { transaction: t },
           );
           await AssetEvent.create(
@@ -992,7 +1078,8 @@ class IssuedItemRepository {
               asset_id: a.id,
               event_type: "Issued",
               event_date: new Date(),
-              to_employee_id: employeeId,
+              to_employee_id: resolvedEmployeeId,
+              ...toCustodianFields(resolvedCustodian),
               issued_item_id: issued.id,
               notes: notes || null,
             },
@@ -1024,7 +1111,7 @@ class IssuedItemRepository {
         });
       }
 
-      return { employee_id: employeeId, results };
+      return { employee_id: resolvedEmployeeId, results };
     });
   }
 }

@@ -24,6 +24,30 @@ const {
   applyIdDescCursor,
 } = require("../utils/cursor-pagination");
 const { logStockMovement } = require("../services/stock-movement-service");
+const {
+  normalizeCustodianInput,
+  ensureCustodian,
+  toCustodianFields,
+} = require("../utils/custodian-utils");
+
+const resolveCustodian = async (
+  { employeeId, custodianId, custodianType },
+  transaction,
+  { required = false } = {},
+) => {
+  const normalized = normalizeCustodianInput({
+    employeeId,
+    custodianId,
+    custodianType,
+  });
+  if (!normalized) {
+    if (required) {
+      throw new Error("custodian is required");
+    }
+    return null;
+  }
+  return ensureCustodian(normalized, { transaction });
+};
 
 /**
  * Fields referenced exist per your migrations for Assets and AssetEvents.
@@ -122,6 +146,7 @@ class AssetRepository {
             daybook_item_id: it.id,
             vendor_id: db.vendor_id || null,
             current_employee_id: null,
+            ...toCustodianFields(null),
           },
           { transaction: t },
         );
@@ -230,6 +255,8 @@ class AssetRepository {
   async returnAssets({
     assetIds = [],
     fromEmployeeId,
+    fromCustodianId,
+    fromCustodianType,
     notes,
     approvalDocumentUrl,
   }) {
@@ -237,6 +264,15 @@ class AssetRepository {
       throw new Error("assetIds[] is required");
     const t = await sequelize.transaction();
     try {
+      const fromCustodian = await resolveCustodian(
+        {
+          employeeId: fromEmployeeId,
+          custodianId: fromCustodianId,
+          custodianType: fromCustodianType,
+        },
+        t,
+      );
+
       const assets = await Asset.findAll({
         where: { id: assetIds },
         transaction: t,
@@ -248,7 +284,7 @@ class AssetRepository {
       const incr = {};
       for (const a of assets) {
         await a.update(
-          { status: "InStore", current_employee_id: null },
+          { status: "InStore", current_employee_id: null, ...toCustodianFields(null) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -256,7 +292,8 @@ class AssetRepository {
             asset_id: a.id,
             event_type: "Returned",
             event_date: new Date(),
-            from_employee_id: fromEmployeeId || null,
+            from_employee_id: fromCustodian?.employeeId ?? null,
+            ...toCustodianFields(fromCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -286,15 +323,36 @@ class AssetRepository {
     assetIds = [],
     fromEmployeeId,
     toEmployeeId,
+    fromCustodianId,
+    fromCustodianType,
+    toCustodianId,
+    toCustodianType,
     notes,
     approvalDocumentUrl,
   }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
-    if (!toEmployeeId) throw new Error("toEmployeeId is required");
-
     const t = await sequelize.transaction();
     try {
+      const fromCustodian = await resolveCustodian(
+        {
+          employeeId: fromEmployeeId,
+          custodianId: fromCustodianId,
+          custodianType: fromCustodianType,
+        },
+        t,
+      );
+      const toCustodian = await resolveCustodian(
+        {
+          employeeId: toEmployeeId,
+          custodianId: toCustodianId,
+          custodianType: toCustodianType,
+        },
+        t,
+        { required: true },
+      );
+      const resolvedToEmployeeId = toCustodian?.employeeId ?? null;
+
       const assets = await Asset.findAll({
         where: { id: assetIds, status: "Issued" },
         transaction: t,
@@ -305,7 +363,10 @@ class AssetRepository {
 
       for (const a of assets) {
         await a.update(
-          { current_employee_id: toEmployeeId },
+          {
+            current_employee_id: resolvedToEmployeeId,
+            ...toCustodianFields(toCustodian),
+          },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -313,8 +374,9 @@ class AssetRepository {
             asset_id: a.id,
             event_type: "Transferred",
             event_date: new Date(),
-            from_employee_id: fromEmployeeId || null,
-            to_employee_id: toEmployeeId,
+            from_employee_id: fromCustodian?.employeeId ?? null,
+            to_employee_id: resolvedToEmployeeId,
+            ...toCustodianFields(toCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -530,7 +592,7 @@ class AssetRepository {
         const wasInStore = a.status === "InStore"; // capture BEFORE update
         const eventType = type === "EWaste" ? "MarkedEWaste" : type;
         await a.update(
-          { status: type, current_employee_id: null },
+          { status: type, current_employee_id: null, ...toCustodianFields(null) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -613,15 +675,20 @@ class AssetRepository {
       for (const a of assets) {
         const retainedEmployeeId = a.current_employee_id;
         await a.update(
-          { status: "Retained", current_employee_id: null },
+          { status: "Retained", current_employee_id: null, ...toCustodianFields(null) },
           { transaction: t },
         );
+        const retainedCustodian =
+          retainedEmployeeId != null
+            ? { id: String(retainedEmployeeId), type: "EMPLOYEE" }
+            : null;
         await AssetEvent.create(
           {
             asset_id: a.id,
             event_type: "Retained",
             event_date: new Date(),
             from_employee_id: retainedEmployeeId,
+            ...toCustodianFields(retainedCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },

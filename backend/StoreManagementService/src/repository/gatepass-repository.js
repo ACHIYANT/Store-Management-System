@@ -15,6 +15,7 @@ const {
   normalizeLimit,
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
+const { toCustodianFields } = require("../utils/custodian-utils");
 
 class GatePassRepository {
   _sanitizeAssetIds(assetIds = []) {
@@ -693,6 +694,7 @@ class GatePassRepository {
               {
                 status: "EWasteOut",
                 current_employee_id: null,
+                ...toCustodianFields(null),
               },
               { transaction: t },
             );

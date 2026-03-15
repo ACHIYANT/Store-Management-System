@@ -179,6 +179,7 @@ export default function Sidebar() {
     noc: ["SUPER_ADMIN", "STORE_ENTRY"],
     vendor: ["SUPER_ADMIN", "STORE_ENTRY"],
     employee: ["SUPER_ADMIN", "STORE_ENTRY"],
+    custodians: ["SUPER_ADMIN", "STORE_ENTRY"],
     itemCategory: ["SUPER_ADMIN", "STORE_ENTRY"],
     disposeOff: ["SUPER_ADMIN", "STORE_ENTRY"],
     eWaste: ["SUPER_ADMIN", "STORE_ENTRY"],
@@ -279,12 +280,13 @@ export default function Sidebar() {
 
   const canSeeVendor = hasSubItemAccessStrict(subItemRoleRules.vendor);
   const canSeeEmployee = hasSubItemAccessStrict(subItemRoleRules.employee);
+  const canSeeCustodians = hasSubItemAccessStrict(subItemRoleRules.custodians);
   const canSeeItemCategory = hasSubItemAccessStrict(
     subItemRoleRules.itemCategory,
   );
   const showMasterEntryNav =
     canAccessMasterEntry &&
-    (canSeeVendor || canSeeEmployee || canSeeItemCategory);
+    (canSeeVendor || canSeeEmployee || canSeeCustodians || canSeeItemCategory);
 
   const canSeeDisposeOff = hasSubItemAccessStrict(subItemRoleRules.disposeOff);
   const canSeeEWaste = hasSubItemAccessStrict(subItemRoleRules.eWaste);
@@ -341,7 +343,8 @@ export default function Sidebar() {
     if (
       path.startsWith("/issue") ||
       path.startsWith("/issued-items") ||
-      path.startsWith("/reports/employee-issues")
+      path.startsWith("/reports/employee-issues") ||
+      path.startsWith("/reports/custodian-issues")
     ) {
       return "Issue";
     }
@@ -362,6 +365,7 @@ export default function Sidebar() {
     if (
       path.startsWith("/vendors") ||
       path.startsWith("/employees") ||
+      path.startsWith("/custodians") ||
       path.startsWith("/itemcategory")
     ) {
       return "Master Entry";
@@ -600,7 +604,7 @@ export default function Sidebar() {
                 <SubItem
                   icon={FileText}
                   label="Issued Statement"
-                  onClick={() => handleNavigate("/reports/employee-issues")}
+                  onClick={() => handleNavigate("/reports/custodian-issues")}
                 />
               )}
             </NavItem>
@@ -659,7 +663,7 @@ export default function Sidebar() {
                 <SubItem
                   icon={FileCheck2}
                   label="Issues Reports"
-                  onClick={() => handleNavigate("/reports/employee-issues")}
+                  onClick={() => handleNavigate("/reports/custodian-issues")}
                 />
               )}
               {canSeeOutOfStock && (
@@ -697,6 +701,13 @@ export default function Sidebar() {
                   icon={PersonStanding}
                   label="Employee"
                   onClick={() => handleNavigate("/employees")}
+                />
+              )}
+              {canSeeCustodians && (
+                <SubItem
+                  icon={Users}
+                  label="Custodians"
+                  onClick={() => handleNavigate("/custodians")}
                 />
               )}
               {canSeeItemCategory && (
