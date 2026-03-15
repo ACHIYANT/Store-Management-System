@@ -88,7 +88,7 @@ export default function EmployeeIssues() {
     }
     const type = String(selected.custodian_type || "EMPLOYEE").toUpperCase();
     navigate(
-      `/reports/employee-issues/${encodeURIComponent(selected.id)}?custodianType=${encodeURIComponent(type)}`,
+      `/reports/custodian-issues/${encodeURIComponent(selected.id)}?custodianType=${encodeURIComponent(type)}`,
     );
   }
 
@@ -140,7 +140,7 @@ export default function EmployeeIssues() {
             }
             const type = String(selected.custodian_type || "EMPLOYEE").toUpperCase();
             navigate(
-              `/reports/employee-issues/${encodeURIComponent(selected.id)}/statement?custodianType=${encodeURIComponent(type)}`,
+              `/reports/custodian-issues/${encodeURIComponent(selected.id)}/statement?custodianType=${encodeURIComponent(type)}`,
             );
           },
         },
