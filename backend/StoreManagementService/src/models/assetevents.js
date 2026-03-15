@@ -74,6 +74,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
       },
+      custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
+      },
       notes: { type: DataTypes.TEXT, allowNull: true },
       approval_document_url: { type: DataTypes.TEXT, allowNull: true },
       performed_by: { type: DataTypes.STRING, allowNull: true },

@@ -34,6 +34,14 @@ module.exports = (sequelize, DataTypes) => {
   IssuedItem.init(
     {
       employee_id: DataTypes.INTEGER,
+      custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
+      },
       item_id: DataTypes.INTEGER,
       item_master_id: DataTypes.BIGINT.UNSIGNED,
       quantity: DataTypes.INTEGER,
