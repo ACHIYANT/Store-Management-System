@@ -18,6 +18,11 @@ import { DEFAULT_SKU_UNIT } from "@/constants/skuUnits";
 import { STORE_API_BASE_URL } from "@/lib/api-config";
 
 const API = STORE_API_BASE_URL;
+const CUSTODIAN_TYPES = [
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "DIVISION", label: "Division" },
+  { value: "VEHICLE", label: "Vehicle" },
+];
 
 export default function IssueUnifiedForm({
   stockId,
@@ -61,6 +66,15 @@ export default function IssueUnifiedForm({
 
   // employees
   const [employees, setEmployees] = useState([]);
+  const [custodianType, setCustodianType] = useState("EMPLOYEE");
+  const [custodianId, setCustodianId] = useState("");
+  const [custodianOptions, setCustodianOptions] = useState([]);
+  const [custodianLoading, setCustodianLoading] = useState(false);
+
+  const isEmployeeCustodian = custodianType === "EMPLOYEE";
+  const resolvedCustodianId = isEmployeeCustodian ? employeeId : custodianId;
+  const resolvedCustodianType = custodianType;
+  const activeEmployeeId = isEmployeeCustodian ? employeeId : "";
 
   useEffect(() => {
     axios
@@ -71,6 +85,46 @@ export default function IssueUnifiedForm({
       .then((r) => setCategoryHeads(r.data?.data || []));
     axios.get(`${API}/employee`).then((r) => setEmployees(r.data?.data || []));
   }, []);
+
+  useEffect(() => {
+    if (isEmployeeCustodian) {
+      setCustodianOptions([]);
+      setCustodianLoading(false);
+      return;
+    }
+    let active = true;
+    setCustodianLoading(true);
+    axios
+      .get(`${API}/custodians`, {
+        params: { custodian_type: custodianType },
+      })
+      .then((r) => {
+        if (!active) return;
+        setCustodianOptions(r.data?.data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustodianOptions([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setCustodianLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [custodianType, isEmployeeCustodian]);
+
+  useEffect(() => {
+    if (isEmployeeCustodian) return;
+    if (requisitionMode !== "online") return;
+    setRequisitionMode("offline");
+    setSelectedRequisitionId("");
+    setOnlineRequisitions([]);
+    setOnlineReqCursor(null);
+    setOnlineReqHasMore(false);
+    autoMappedReqIdRef.current = "";
+  }, [isEmployeeCustodian, requisitionMode]);
 
   const selectedOnlineRequisition = useMemo(() => {
     return onlineRequisitions.find(
@@ -198,7 +252,6 @@ export default function IssueUnifiedForm({
 
   const fetchOnlineRequisitions = useCallback(
     async ({ cursor = null, append = false } = {}) => {
-      const activeEmployeeId = employeeId;
       const requestSeq = ++onlineReqRequestSeqRef.current;
 
       if (!activeEmployeeId) {
@@ -250,13 +303,13 @@ export default function IssueUnifiedForm({
         }
       }
     },
-    [employeeId],
+    [activeEmployeeId],
   );
 
   useEffect(() => {
     if (requisitionMode !== "online") return;
     fetchOnlineRequisitions({ cursor: null, append: false });
-  }, [requisitionMode, employeeId, fetchOnlineRequisitions]);
+  }, [requisitionMode, activeEmployeeId, fetchOnlineRequisitions]);
 
   useEffect(() => {
     if (requisitionMode !== "online") return;
@@ -589,7 +642,7 @@ export default function IssueUnifiedForm({
     return Boolean(cat?.serialized_required);
   }, [itemCategories, itemCategoryId]);
 
-  const employeeLocked = cartItems.length > 0 || cartSerialized.length > 0;
+  const issueTargetLocked = cartItems.length > 0 || cartSerialized.length > 0;
 
   const usedAssetIds = useMemo(
     () => new Set(cartSerialized.flatMap((c) => c.assetIds || [])),
@@ -641,40 +694,62 @@ export default function IssueUnifiedForm({
     setSelectedAssets((prev) => prev.filter((id) => !usedAssetIds.has(id)));
   }, [usedAssetIds]);
 
+  const resetIssueContext = useCallback(() => {
+    // Invalidate in-flight requisition fetches and clear dependent state.
+    onlineReqRequestSeqRef.current += 1;
+    setOnlineReqLoading(false);
+    setSelectedRequisitionId("");
+    setOnlineRequisitions([]);
+    setOnlineReqCursor(null);
+    setOnlineReqHasMore(false);
+    autoMappedReqIdRef.current = "";
+
+    onStockChange?.("");
+    setCategoryHeadId("");
+    setCategoryGroupId("");
+    setItemCategoryId("");
+    setStocks([]);
+    setAssets([]);
+    setSelectedAssets([]);
+    setQty("");
+    setStockQty(null);
+    setRequisitionFile(null);
+  }, [onStockChange]);
+
   const handleEmployeeChange = useCallback(
     (nextEmployeeId) => {
       if (String(nextEmployeeId || "") === String(employeeId || "")) return;
-
-      // Invalidate in-flight requisition fetches and clear dependent state.
-      onlineReqRequestSeqRef.current += 1;
-      setOnlineReqLoading(false);
-      setSelectedRequisitionId("");
-      setOnlineRequisitions([]);
-      setOnlineReqCursor(null);
-      setOnlineReqHasMore(false);
-      autoMappedReqIdRef.current = "";
-
-      onStockChange?.("");
-      setCategoryHeadId("");
-      setCategoryGroupId("");
-      setItemCategoryId("");
-      setStocks([]);
-      setAssets([]);
-      setSelectedAssets([]);
-      setQty("");
-      setStockQty(null);
-      setRequisitionFile(null);
-
+      resetIssueContext();
       onEmployeeChange?.(nextEmployeeId);
     },
-    [employeeId, onEmployeeChange, onStockChange],
+    [employeeId, onEmployeeChange, resetIssueContext],
+  );
+
+  const handleCustodianTypeChange = useCallback(
+    (nextType) => {
+      if (String(nextType || "") === String(custodianType || "")) return;
+      resetIssueContext();
+      setCustodianType(nextType);
+      setCustodianId("");
+      onEmployeeChange?.("");
+    },
+    [custodianType, onEmployeeChange, resetIssueContext],
+  );
+
+  const handleCustodianIdChange = useCallback(
+    (nextId) => {
+      if (String(nextId || "") === String(custodianId || "")) return;
+      resetIssueContext();
+      setCustodianId(nextId);
+    },
+    [custodianId, resetIssueContext],
   );
   const addItemToCart = () => {
-    if (!itemCategoryId || !stockId || !employeeId) {
+    if (!itemCategoryId || !stockId || !resolvedCustodianId) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Select Item Category, Stock, and Employee",
+        message: "Select Item Category, Stock, and Issue To",
       });
     }
 
@@ -868,10 +943,21 @@ export default function IssueUnifiedForm({
     }
 
     // Strip UI labels for payload
+    const resolvedEmployeeId =
+      isEmployeeCustodian && employeeId ? Number(employeeId) : undefined;
+    const custodianIdValue =
+      resolvedCustodianId != null && String(resolvedCustodianId).trim() !== ""
+        ? String(resolvedCustodianId)
+        : undefined;
+
     const payload = {
-      employeeId: Number(employeeId),
+      employeeId: resolvedEmployeeId,
+      custodianId: custodianIdValue,
+      custodianType: custodianIdValue ? resolvedCustodianType : undefined,
       requisitionId:
-        requisitionMode === "online" && selectedRequisitionId
+        isEmployeeCustodian &&
+        requisitionMode === "online" &&
+        selectedRequisitionId
           ? Number(selectedRequisitionId)
           : undefined,
       items: items.map(
@@ -895,11 +981,11 @@ export default function IssueUnifiedForm({
   };
 
   const submit = async () => {
-    if (!employeeId) {
+    if (!resolvedCustodianId) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Select employee",
+        message: "Select Issue To",
       });
     }
     const { payload, items, serializedItems } = buildBulkPayload();
@@ -920,11 +1006,16 @@ export default function IssueUnifiedForm({
         message: "Please upload the requisition Copy.",
       });
     }
-    if (requisitionMode === "online" && !selectedRequisitionId) {
+    if (
+      requisitionMode === "online" &&
+      (!isEmployeeCustodian || !selectedRequisitionId)
+    ) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Select a digital requisition before issuing.",
+        message: isEmployeeCustodian
+          ? "Select a digital requisition before issuing."
+          : "Online requisition requires Employee Issue To",
       });
     }
     if (requisitionMode === "online" && hasOnlineUnmappedPending) {
@@ -940,7 +1031,15 @@ export default function IssueUnifiedForm({
         // multipart with file
         const fd = new FormData();
         fd.append("file", requisitionFile);
-        fd.append("employeeId", String(payload.employeeId));
+        if (payload.employeeId != null) {
+          fd.append("employeeId", String(payload.employeeId));
+        }
+        if (payload.custodianId) {
+          fd.append("custodianId", String(payload.custodianId));
+          if (payload.custodianType) {
+            fd.append("custodianType", String(payload.custodianType));
+          }
+        }
         fd.append("items", JSON.stringify(payload.items));
         fd.append("serializedItems", JSON.stringify(payload.serializedItems));
         await axios.post(`${API}/issue/bulk-with-requisition`, fd, {
@@ -1086,7 +1185,7 @@ export default function IssueUnifiedForm({
     w.document.close();
   };
 
-  const enableItemSelection = Boolean(employeeId);
+  const enableItemSelection = Boolean(resolvedCustodianId);
 
   return (
     <div className="grid gap-5">
@@ -1094,39 +1193,106 @@ export default function IssueUnifiedForm({
         <div className="text-sm font-semibold text-slate-700 mb-3">
           Issue Details
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-          {/* Employee */}
-          <div className="flex flex-col gap-1.5 md:col-span-2 lg:col-span-1">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+          {/* Issue To Type */}
+          <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700">
-              Employee
+              Issue To Type
             </label>
             <Select
-              value={String(employeeId || "")}
-              onValueChange={handleEmployeeChange}
-              disabled={employeeLocked}
+              value={custodianType}
+              onValueChange={handleCustodianTypeChange}
+              disabled={issueTargetLocked}
             >
               <SelectTrigger className="h-10 border-slate-300 bg-white">
-                <SelectValue placeholder="Select employee first" />
+                <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                {employees.map((e) => (
-                  <SelectItem
-                    key={e.emp_id || e.id}
-                    value={String(e.emp_id || e.id)}
-                  >
-                    {e.fullname || e.name || `Emp #${e.emp_id || e.id}`}
+                {CUSTODIAN_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {employeeLocked ? (
+          </div>
+
+          {/* Issue To */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              {isEmployeeCustodian
+                ? "Employee"
+                : custodianType === "DIVISION"
+                  ? "Division"
+                  : "Vehicle"}
+            </label>
+            {isEmployeeCustodian ? (
+              <Select
+                value={String(employeeId || "")}
+                onValueChange={handleEmployeeChange}
+                disabled={issueTargetLocked}
+              >
+                <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((e) => (
+                    <SelectItem
+                      key={e.emp_id || e.id}
+                      value={String(e.emp_id || e.id)}
+                    >
+                      {e.fullname || e.name || `Emp #${e.emp_id || e.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={String(custodianId || "")}
+                onValueChange={handleCustodianIdChange}
+                disabled={issueTargetLocked}
+              >
+                <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectValue
+                    placeholder={
+                      custodianLoading
+                        ? "Loading..."
+                        : `Select ${custodianType.toLowerCase()}`
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {custodianLoading ? (
+                    <SelectItem value="loading" disabled>
+                      Loading...
+                    </SelectItem>
+                  ) : custodianOptions.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No custodians found
+                    </SelectItem>
+                  ) : (
+                    custodianOptions.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.display_name || c.id}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+            {issueTargetLocked ? (
               <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700">
-                Employee selection is locked while issue items are present.
-                Remove items from the issue list to change the employee.
+                Issue-to selection is locked while issue items are present.
+                Remove items from the issue list to change.
               </div>
             ) : !enableItemSelection ? (
               <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-                Begin by selecting an employee account to continue.
+                Begin by selecting an issue target to continue.
+              </div>
+            ) : null}
+            {!isEmployeeCustodian && requisitionMode === "online" ? (
+              <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700">
+                Online requisition is available only for Employee issue.
               </div>
             ) : null}
           </div>
@@ -1148,7 +1314,7 @@ export default function IssueUnifiedForm({
                       placeholder={
                         enableItemSelection
                           ? "Select head"
-                          : "Select employee first"
+                          : "Select issue target first"
                       }
                     />
                   </SelectTrigger>
@@ -1176,7 +1342,7 @@ export default function IssueUnifiedForm({
                     <SelectValue
                       placeholder={
                         !enableItemSelection
-                          ? "Select employee first"
+                          ? "Select issue target first"
                           : categoryHeadId
                             ? "Select group"
                             : "Select head first"
@@ -1207,7 +1373,7 @@ export default function IssueUnifiedForm({
                     <SelectValue
                       placeholder={
                         !enableItemSelection
-                          ? "Select employee first"
+                          ? "Select issue target first"
                           : categoryGroupId
                             ? "Select category"
                             : "Select group first"
@@ -1244,7 +1410,7 @@ export default function IssueUnifiedForm({
                     <SelectValue
                       placeholder={
                         !enableItemSelection
-                          ? "Select employee first"
+                          ? "Select issue target first"
                           : !itemCategoryId
                             ? "Select category first"
                             : "Select stock"
@@ -1270,7 +1436,7 @@ export default function IssueUnifiedForm({
               <p className="mt-1 text-sm leading-5 text-sky-900">
                 {enableItemSelection
                   ? "Online Requisition mode is active. Category and stock selectors are unavailable because items are sourced from mapped requisition entries."
-                  : "Please select an employee to load mapped online requisition entries."}
+                  : "Please select an employee issue target to load mapped online requisition entries."}
               </p>
             </div>
           )}
@@ -1403,6 +1569,7 @@ export default function IssueUnifiedForm({
               setQty("");
               setStockQty(null);
             }}
+            disabled={!isEmployeeCustodian}
           >
             Online Requisition
           </button>
@@ -1492,14 +1659,14 @@ export default function IssueUnifiedForm({
               <Select
                 value={String(selectedRequisitionId || "")}
                 onValueChange={setSelectedRequisitionId}
-                disabled={!employeeId || onlineReqLoading}
+                disabled={!activeEmployeeId || onlineReqLoading}
               >
                 <SelectTrigger className="h-10">
                   <SelectValue
                     placeholder={
-                      employeeId
+                      activeEmployeeId
                         ? "Select requisition"
-                        : "Select an employee first"
+                        : "Select an employee issue target first"
                     }
                   />
                 </SelectTrigger>
@@ -1519,7 +1686,7 @@ export default function IssueUnifiedForm({
                   onClick={() =>
                     fetchOnlineRequisitions({ cursor: null, append: false })
                   }
-                  disabled={!employeeId || onlineReqLoading}
+                  disabled={!activeEmployeeId || onlineReqLoading}
                 >
                   Refresh
                 </Button>
@@ -1554,7 +1721,7 @@ export default function IssueUnifiedForm({
                 </div>
               )}
               {!onlineReqLoading &&
-                employeeId &&
+                activeEmployeeId &&
                 onlineRequisitions.length === 0 && (
                   <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
                     No approved digital requisitions are available for the

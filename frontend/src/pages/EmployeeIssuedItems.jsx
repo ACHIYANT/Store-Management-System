@@ -64,6 +64,10 @@ function normalizeIssuedRow(row) {
     id: row.id ?? row.issued_item_id ?? null,
     item_name: row.item_name ?? row.itemName ?? row.name ?? "-",
     category_name: row.category_name ?? row.category ?? null,
+    custodian_id: row.custodian_id ?? null,
+    custodian_type: row.custodian_type ?? null,
+    custodian_name:
+      row.custodian_name ?? row.employee_name ?? row.employee?.name ?? null,
     quantity: row.quantity ?? row.qty ?? row.issue_qty ?? 0,
     sku_unit: row.sku_unit ?? row.skuUnit ?? DEFAULT_SKU_UNIT,
     issue_date: row.issue_date ?? row.issued_at ?? row.date ?? null,
@@ -265,6 +269,17 @@ export default function EmployeeIssuedItems() {
       { key: "id", label: "ID" },
       { key: "item_name", label: "Item Name" },
       { key: "category_name", label: "Category Name" },
+      {
+        key: "custodian_name",
+        label: "Custodian",
+        render: (val, row) => val || row?.employee_name || "-",
+      },
+      {
+        key: "custodian_type",
+        label: "Custodian Type",
+        render: (val, row) =>
+          val || (row?.employee_id ? "EMPLOYEE" : "-"),
+      },
       {
         key: "quantity",
         label: "Quantity",

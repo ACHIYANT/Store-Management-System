@@ -19,6 +19,7 @@ export default function IssuedItems() {
 
   const [filters, setFilters] = useState({
     employeeId: "",
+    custodianType: "",
     categoryId: "",
     itemType: "", // Asset | Consumable
     fromDate: "",
@@ -105,6 +106,18 @@ export default function IssuedItems() {
     { key: "employee_id", label: "Employee ID" },
     { key: "employee_name", label: "Employee" },
     { key: "division", label: "Division" },
+    {
+      key: "custodian_name",
+      label: "Custodian",
+      render: (_v, row) =>
+        row?.custodian_name || row?.employee_name || "—",
+    },
+    {
+      key: "custodian_type",
+      label: "Custodian Type",
+      render: (v, row) =>
+        v || (row?.employee_id ? "EMPLOYEE" : "—"),
+    },
     { key: "category_name", label: "Category" },
     { key: "item_name", label: "Item" },
     {
@@ -199,6 +212,16 @@ export default function IssuedItems() {
                   })),
                 },
                 {
+                  key: "custodianType",
+                  label: "Custodian Type",
+                  type: "select",
+                  options: [
+                    { value: "EMPLOYEE", label: "Employee" },
+                    { value: "DIVISION", label: "Division" },
+                    { value: "VEHICLE", label: "Vehicle" },
+                  ],
+                },
+                {
                   key: "categoryId",
                   label: "Category",
                   type: "select",
@@ -224,6 +247,7 @@ export default function IssuedItems() {
               onReset={() => {
                 setFilters({
                   employeeId: "",
+                  custodianType: "",
                   categoryId: "",
                   itemType: "",
                   fromDate: "",

@@ -12,6 +12,12 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
+const CUSTODIAN_TYPES = [
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "DIVISION", label: "Division" },
+  { value: "VEHICLE", label: "Vehicle" },
+];
+
 export default function IssueSerializedForm({
   stockId,
   onStockChange,
@@ -23,6 +29,13 @@ export default function IssueSerializedForm({
   const [msg, setMsg] = useState(null);
   const [stocks, setStocks] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [issueToType, setIssueToType] = useState("EMPLOYEE");
+  const [custodianId, setCustodianId] = useState("");
+  const [custodianOptions, setCustodianOptions] = useState([]);
+  const [custodianLoading, setCustodianLoading] = useState(false);
+
+  const isEmployeeIssue = issueToType === "EMPLOYEE";
+  const resolvedCustodianId = isEmployeeIssue ? employeeId : custodianId;
 
   useEffect(() => {
     // Adjust to your actual endpoints
@@ -35,6 +48,35 @@ export default function IssueSerializedForm({
   }, []);
 
   useEffect(() => {
+    if (isEmployeeIssue) {
+      setCustodianOptions([]);
+      setCustodianLoading(false);
+      return;
+    }
+    let active = true;
+    setCustodianLoading(true);
+    axios
+      .get(toStoreApiUrl("/custodians"), {
+        params: { custodian_type: issueToType },
+      })
+      .then((r) => {
+        if (!active) return;
+        setCustodianOptions(r.data?.data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustodianOptions([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setCustodianLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [issueToType, isEmployeeIssue]);
+
+  useEffect(() => {
     if (!stockId) return setAssets([]);
     axios
       .get(toStoreApiUrl(`/assets/instore/${stockId}`))
@@ -42,16 +84,21 @@ export default function IssueSerializedForm({
   }, [stockId]);
 
   const submit = async () => {
-    if (!stockId || !employeeId || selected.length === 0)
+    if (!stockId || !resolvedCustodianId || selected.length === 0)
       return setMsg({
         type: "error",
-        text: "Select stock, employee, and assets",
+        text: "Select stock, Issue To, and assets",
       });
-    await axios.post(toStoreApiUrl("/issue"), {
+    const payload = {
       stockId,
-      employeeId,
       assetIds: selected,
-    });
+      custodianId: String(resolvedCustodianId),
+      custodianType: issueToType,
+    };
+    if (isEmployeeIssue && employeeId) {
+      payload.employeeId = Number(employeeId);
+    }
+    await axios.post(toStoreApiUrl("/issue"), payload);
     setMsg({ type: "success", text: "Issued serialized assets" });
   };
 
@@ -80,25 +127,90 @@ export default function IssueSerializedForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-600">Employee</label>
+        <label className="text-xs text-gray-600">Issue To Type</label>
         <Select
-          value={String(employeeId || "")}
-          onValueChange={onEmployeeChange}
+          value={issueToType}
+          onValueChange={(value) => {
+            setIssueToType(value);
+            setCustodianId("");
+            if (value !== "EMPLOYEE") {
+              onEmployeeChange?.("");
+            }
+          }}
         >
           <SelectTrigger className="h-11">
-            <SelectValue placeholder="Select employee" />
+            <SelectValue placeholder="Select type" />
           </SelectTrigger>
           <SelectContent>
-            {employees.map((e) => (
-              <SelectItem
-                key={e.emp_id || e.id}
-                value={String(e.emp_id || e.id)}
-              >
-                {e.fullname || e.name || `Emp #${e.emp_id || e.id}`}
+            {CUSTODIAN_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-gray-600">
+          {isEmployeeIssue
+            ? "Employee"
+            : issueToType === "DIVISION"
+              ? "Division"
+              : "Vehicle"}
+        </label>
+        {isEmployeeIssue ? (
+          <Select
+            value={String(employeeId || "")}
+            onValueChange={onEmployeeChange}
+          >
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Select employee" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees.map((e) => (
+                <SelectItem
+                  key={e.emp_id || e.id}
+                  value={String(e.emp_id || e.id)}
+                >
+                  {e.fullname || e.name || `Emp #${e.emp_id || e.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select
+            value={String(custodianId || "")}
+            onValueChange={setCustodianId}
+          >
+            <SelectTrigger className="h-11">
+              <SelectValue
+                placeholder={
+                  custodianLoading
+                    ? "Loading..."
+                    : `Select ${issueToType.toLowerCase()}`
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {custodianLoading ? (
+                <SelectItem value="loading" disabled>
+                  Loading...
+                </SelectItem>
+              ) : custodianOptions.length === 0 ? (
+                <SelectItem value="empty" disabled>
+                  No custodians found
+                </SelectItem>
+              ) : (
+                custodianOptions.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.display_name || c.id}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <ListTable
