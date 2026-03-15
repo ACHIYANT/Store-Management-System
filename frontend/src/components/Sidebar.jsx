@@ -179,6 +179,7 @@ export default function Sidebar() {
     noc: ["SUPER_ADMIN", "STORE_ENTRY"],
     vendor: ["SUPER_ADMIN", "STORE_ENTRY"],
     employee: ["SUPER_ADMIN", "STORE_ENTRY"],
+    custodians: ["SUPER_ADMIN", "STORE_ENTRY"],
     itemCategory: ["SUPER_ADMIN", "STORE_ENTRY"],
     disposeOff: ["SUPER_ADMIN", "STORE_ENTRY"],
     eWaste: ["SUPER_ADMIN", "STORE_ENTRY"],
@@ -279,12 +280,13 @@ export default function Sidebar() {
 
   const canSeeVendor = hasSubItemAccessStrict(subItemRoleRules.vendor);
   const canSeeEmployee = hasSubItemAccessStrict(subItemRoleRules.employee);
+  const canSeeCustodians = hasSubItemAccessStrict(subItemRoleRules.custodians);
   const canSeeItemCategory = hasSubItemAccessStrict(
     subItemRoleRules.itemCategory,
   );
   const showMasterEntryNav =
     canAccessMasterEntry &&
-    (canSeeVendor || canSeeEmployee || canSeeItemCategory);
+    (canSeeVendor || canSeeEmployee || canSeeCustodians || canSeeItemCategory);
 
   const canSeeDisposeOff = hasSubItemAccessStrict(subItemRoleRules.disposeOff);
   const canSeeEWaste = hasSubItemAccessStrict(subItemRoleRules.eWaste);
@@ -362,6 +364,7 @@ export default function Sidebar() {
     if (
       path.startsWith("/vendors") ||
       path.startsWith("/employees") ||
+      path.startsWith("/custodians") ||
       path.startsWith("/itemcategory")
     ) {
       return "Master Entry";
@@ -697,6 +700,13 @@ export default function Sidebar() {
                   icon={PersonStanding}
                   label="Employee"
                   onClick={() => handleNavigate("/employees")}
+                />
+              )}
+              {canSeeCustodians && (
+                <SubItem
+                  icon={Users}
+                  label="Custodians"
+                  onClick={() => handleNavigate("/custodians")}
                 />
               )}
               {canSeeItemCategory && (

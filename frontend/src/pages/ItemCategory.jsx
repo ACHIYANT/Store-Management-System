@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import useDebounce from "@/hooks/useDebounce";
 import FilterPanel from "@/components/FilterPanel";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { toStoreApiUrl } from "@/lib/api-config";
+import { hasRole } from "@/lib/roles";
 
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
@@ -25,6 +26,7 @@ export default function ItemCategory() {
   const [categoryGroups, setCategoryGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const canManageMaster = useMemo(() => hasRole("SUPER_ADMIN"), []);
 
   const [showFilters, setShowFilters] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -186,6 +188,8 @@ export default function ItemCategory() {
       idCol="id"
       onFilter={() => setShowFilters((prev) => !prev)}
       onUpdate={handleUpdate} // Pass handleUpdate to the ListPage
+      showAdd={canManageMaster}
+      showUpdate={canManageMaster}
       selectedRows={selectedRows} // Pass selectedRows to ListPage
       setSelectedRows={setSelectedRows}
       onSearch={(term) => setSearchTerm(term)}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
@@ -14,6 +14,13 @@ const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
 const PRINT_PAGE_SIZE = 500;
 const PRINT_MAX_ROWS = 20000;
+const CUSTODIAN_TYPES = new Set(["EMPLOYEE", "DIVISION", "VEHICLE"]);
+const inferCustodianTypeFromId = (value) => {
+  const text = String(value || "").trim().toUpperCase();
+  if (text.startsWith("DIV-")) return "DIVISION";
+  if (text.startsWith("VEH-")) return "VEHICLE";
+  return "";
+};
 const isValidAssetId = (value) => {
   if (value == null) return false;
   const normalized = String(value).trim();
@@ -94,7 +101,20 @@ function parseCursorMeta(meta) {
 
 export default function EmployeeIssuedItems() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const queryParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const custodianType = useMemo(() => {
+    const raw = String(queryParams.get("custodianType") || "")
+      .trim()
+      .toUpperCase();
+    if (CUSTODIAN_TYPES.has(raw)) return raw;
+    return inferCustodianTypeFromId(id);
+  }, [id, queryParams]);
+  const custodianId = id ? decodeURIComponent(String(id)) : "";
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
@@ -151,7 +171,6 @@ export default function EmployeeIssuedItems() {
       }
 
       const params = {
-        employeeId: id,
         limit,
         cursorMode: true,
         cursor: cursor || undefined,
@@ -161,6 +180,12 @@ export default function EmployeeIssuedItems() {
         fromDate: filters.fromDate || undefined,
         toDate: filters.toDate || undefined,
       };
+      if (custodianType) {
+        params.custodianId = custodianId;
+        params.custodianType = custodianType;
+      } else {
+        params.employeeId = custodianId;
+      }
 
       const resp = await axios.get(`${API}/issued-items`, { params });
       const rows = (resp.data?.data || []).map(normalizeIssuedRow);
@@ -174,7 +199,8 @@ export default function EmployeeIssuedItems() {
       filters.fromDate,
       filters.stockId,
       filters.toDate,
-      id,
+      custodianId,
+      custodianType,
     ],
   );
 
@@ -188,13 +214,14 @@ export default function EmployeeIssuedItems() {
   } = useCursorWindowedList({
     fetchPage: fetchRows,
     deps: [
-      id,
-      debouncedSearch,
-      filters.categoryId,
-      filters.stockId,
-      filters.fromDate,
-      filters.toDate,
-    ],
+        id,
+        debouncedSearch,
+        filters.categoryId,
+        filters.stockId,
+        filters.fromDate,
+        filters.toDate,
+        custodianType,
+      ],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
@@ -210,7 +237,6 @@ export default function EmployeeIssuedItems() {
 
     while (hasMore && all.length < PRINT_MAX_ROWS) {
       const params = {
-        employeeId: id,
         limit: PRINT_PAGE_SIZE,
         cursorMode: true,
         cursor: cursor || undefined,
@@ -220,6 +246,12 @@ export default function EmployeeIssuedItems() {
         fromDate: filters.fromDate || undefined,
         toDate: filters.toDate || undefined,
       };
+      if (custodianType) {
+        params.custodianId = custodianId;
+        params.custodianType = custodianType;
+      } else {
+        params.employeeId = custodianId;
+      }
 
       const resp = await axios.get(`${API}/issued-items`, { params });
       const pageRows = resp.data?.data || [];
@@ -240,7 +272,8 @@ export default function EmployeeIssuedItems() {
     filters.fromDate,
     filters.stockId,
     filters.toDate,
-    id,
+    custodianId,
+    custodianType,
   ]);
 
   const openPrintPreview = useCallback(async () => {
@@ -345,7 +378,7 @@ export default function EmployeeIssuedItems() {
 
       <div className="listpage-root">
         <ListPage
-          title={`Issued Items - Employee/Division: ${id}`}
+          title={`Issued Items - ${custodianType || "EMPLOYEE"}: ${custodianId}`}
           data={rows}
           columns={columns}
           loading={loading}
