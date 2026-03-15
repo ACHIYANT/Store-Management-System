@@ -24,6 +24,13 @@ const { normalizeSkuUnit, sameSkuUnit } = require("../utils/sku-units");
 const { ensureItemMaster } = require("../services/item-master-service");
 const { logStockMovement } = require("../services/stock-movement-service");
 
+const toEmployeeCustodian = (employeeId) => {
+  if (!employeeId) {
+    return { custodian_id: null, custodian_type: null };
+  }
+  return { custodian_id: String(employeeId), custodian_type: "EMPLOYEE" };
+};
+
 class IssuedItemRepository {
   _toPositiveIntOrNull(value) {
     const n = Number(value);
@@ -113,6 +120,7 @@ class IssuedItemRepository {
       const issued = await IssuedItem.create(
         {
           employee_id: employeeId,
+          ...toEmployeeCustodian(employeeId),
           item_id: stockId,
           item_master_id: itemMasterId > 0 ? itemMasterId : null,
           quantity: qty,
@@ -245,6 +253,7 @@ class IssuedItemRepository {
       const issued = await IssuedItem.create(
         {
           employee_id: employeeId,
+          ...toEmployeeCustodian(employeeId),
           item_id: stockId,
           item_master_id: itemMasterId > 0 ? itemMasterId : null,
           quantity: assets.length,
@@ -279,7 +288,11 @@ class IssuedItemRepository {
       // Update each asset and log event
       for (const a of assets) {
         await a.update(
-          { status: "Issued", current_employee_id: employeeId },
+          {
+            status: "Issued",
+            current_employee_id: employeeId,
+            ...toEmployeeCustodian(employeeId),
+          },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -288,6 +301,8 @@ class IssuedItemRepository {
             event_type: "Issued",
             event_date: new Date(),
             to_employee_id: employeeId,
+            custodian_id: String(employeeId),
+            custodian_type: "EMPLOYEE",
             issued_item_id: issued.id,
           },
           { transaction: t },
@@ -759,6 +774,7 @@ class IssuedItemRepository {
           const issued = await IssuedItem.create(
             {
               employee_id: employeeId,
+              ...toEmployeeCustodian(employeeId),
               item_id: lot.id,
               item_master_id: lotItemMasterId > 0 ? lotItemMasterId : null,
               quantity: takeQty,
@@ -940,6 +956,7 @@ class IssuedItemRepository {
         const issued = await IssuedItem.create(
           {
             employee_id: employeeId,
+            ...toEmployeeCustodian(employeeId),
             item_id: stockId,
             item_master_id: itemMasterId > 0 ? itemMasterId : null,
             quantity: assetIds.length,
@@ -984,7 +1001,11 @@ class IssuedItemRepository {
 
         for (const a of assets) {
           await a.update(
-            { status: "Issued", current_employee_id: employeeId },
+            {
+              status: "Issued",
+              current_employee_id: employeeId,
+              ...toEmployeeCustodian(employeeId),
+            },
             { transaction: t },
           );
           await AssetEvent.create(
@@ -993,6 +1014,8 @@ class IssuedItemRepository {
               event_type: "Issued",
               event_date: new Date(),
               to_employee_id: employeeId,
+              custodian_id: String(employeeId),
+              custodian_type: "EMPLOYEE",
               issued_item_id: issued.id,
               notes: notes || null,
             },
