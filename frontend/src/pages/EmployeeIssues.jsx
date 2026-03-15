@@ -11,41 +11,51 @@ import { toStoreApiUrl } from "@/lib/api-config";
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
+const CUSTODIAN_TYPES = ["EMPLOYEE", "DIVISION", "VEHICLE"];
 
 export default function EmployeeIssues() {
   const [selectedRows, setSelectedRows] = useState(null);
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 400);
-  const [filters, setFilters] = useState({ division: "" });
+  const [filters, setFilters] = useState({ custodianType: "" });
   const [showFilters, setShowFilters] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
   const fetchEmployeesPage = useCallback(
-    async ({ cursor, limit }) => {
-      const response = await axios.get(toStoreApiUrl("/employee"), {
+    async ({ cursor, limit, append }) => {
+      const page = Number.parseInt(String(cursor || "1"), 10) || 1;
+      if (append && page <= 1) {
+        return { rows: [], meta: { hasMore: false, nextCursor: null } };
+      }
+
+      const response = await axios.get(toStoreApiUrl("/custodians"), {
         params: {
           search: debouncedSearch || undefined,
-          division: filters.division || undefined,
+          custodian_type: filters.custodianType || undefined,
           limit,
-          cursorMode: true,
-          cursor: cursor || undefined,
+          page,
         },
       });
       const raw = response?.data?.data || [];
       const normalized = raw.map((r) => ({
-        employee_id: r.emp_id,
-        name: r.name ?? `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim(),
-        division: r.division ?? r.department ?? r.unit ?? "-",
-        designation: r.designation ?? r.title ?? "-",
+        id: String(r.id || ""),
+        custodian_type: String(r.custodian_type || "").toUpperCase(),
+        name: r.display_name ?? "-",
+        employee_id: r.employee_id ?? "-",
         ...r,
       }));
+      const totalPages = Number(response?.data?.meta?.totalPages || 1);
+      const hasMore = page < totalPages;
       return {
         rows: normalized,
-        meta: response?.data?.meta || {},
+        meta: {
+          hasMore,
+          nextCursor: hasMore ? String(page + 1) : null,
+        },
       };
     },
-    [debouncedSearch, filters.division],
+    [debouncedSearch, filters.custodianType],
   );
 
   const {
@@ -57,35 +67,37 @@ export default function EmployeeIssues() {
     virtualStartIndex,
   } = useCursorWindowedList({
     fetchPage: fetchEmployeesPage,
-    deps: [debouncedSearch, filters.division],
+    deps: [debouncedSearch, filters.custodianType],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
   });
 
   const columns = [
-    { key: "employee_id", label: "Employee ID" },
+    { key: "id", label: "Custodian ID" },
     { key: "name", label: "Name" },
-    { key: "division", label: "Division" },
-    { key: "designation", label: "Designation" },
+    { key: "custodian_type", label: "Type" },
+    { key: "employee_id", label: "Employee ID" },
   ];
 
-  function handleRowClick(employeeId) {
-    console.log("emp_id: ", employeeId);
-    // navigate to the issued-items page for the given employeeId (client-side navigation)
-    if (!employeeId) {
-      console.error("Missing employee id for row click");
+  function navigateToIssuedReports(custodianId) {
+    const selected = data.find((row) => String(row.id) === String(custodianId));
+    if (!selected?.id) {
+      console.error("Missing custodian id for row click");
       return;
     }
-    navigate(`/reports/employee-issues/${employeeId}`);
+    const type = String(selected.custodian_type || "EMPLOYEE").toUpperCase();
+    navigate(
+      `/reports/employee-issues/${encodeURIComponent(selected.id)}?custodianType=${encodeURIComponent(type)}`,
+    );
   }
 
-  const divisions = useMemo(() => {
+  const custodianTypes = useMemo(() => {
     const set = new Set();
     data.forEach((r) => {
-      if (r.division) set.add(r.division);
+      if (r.custodian_type) set.add(r.custodian_type);
     });
-    return Array.from(set).sort();
+    return Array.from(set).filter((t) => CUSTODIAN_TYPES.includes(t)).sort();
   }, [data]);
 
   const closeFilterPanel = () => {
@@ -98,14 +110,14 @@ export default function EmployeeIssues() {
 
   return (
     <ListPage
-      title="Issued to Employees"
+      title="Issued to Custodians"
       columns={columns}
       data={data}
       loading={loading}
       showAdd={false}
       showUpdate={false}
       showFilter={true}
-      searchPlaceholder="Search name or division..."
+      searchPlaceholder="Search custodian name or id..."
       searchValue={search}
       onSearch={setSearch}
       onFilter={() =>
@@ -116,27 +128,37 @@ export default function EmployeeIssues() {
           label: "Print Statement",
           onClick: () => {
             if (!selectedRows) {
-              alert("Select an employee first.");
+              alert("Select a custodian first.");
               return;
             }
-            navigate(`/reports/employee-issues/${selectedRows}/statement`);
+            const selected = data.find(
+              (row) => String(row.id) === String(selectedRows),
+            );
+            if (!selected?.id) {
+              alert("Invalid selection.");
+              return;
+            }
+            const type = String(selected.custodian_type || "EMPLOYEE").toUpperCase();
+            navigate(
+              `/reports/employee-issues/${encodeURIComponent(selected.id)}/statement?custodianType=${encodeURIComponent(type)}`,
+            );
           },
         },
       ]}
-      idCol="employee_id"
+      idCol="id"
       selectedRows={selectedRows}
       setSelectedRows={setSelectedRows}
-      onRowClick={handleRowClick}
+      onRowClick={navigateToIssuedReports}
       table={
         <ListTable
           columns={columns}
           data={data}
-          idCol="employee_id"
+          idCol="id"
           selectedRows={selectedRows}
           onRowSelect={(id) =>
             setSelectedRows((prev) => (prev === id ? null : id))
           }
-          onRowClick={handleRowClick}
+          onRowClick={navigateToIssuedReports}
           onLoadMore={loadMore}
           hasMore={hasMore}
           loading={isFetchingMore}
@@ -146,19 +168,22 @@ export default function EmployeeIssues() {
       aboveContent={
         showFilters && (
           <FilterPanel
-            title="Employee Filters"
+            title="Custodian Filters"
             fields={[
               {
-                key: "division",
-                label: "Division",
+                key: "custodianType",
+                label: "Type",
                 type: "select",
-                options: divisions.map((d) => ({ value: d, label: d })),
+                options: custodianTypes.map((type) => ({
+                  value: type,
+                  label: type,
+                })),
               },
             ]}
             filters={filters}
             onChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
             onReset={() => {
-              setFilters({ division: "" });
+              setFilters({ custodianType: "" });
               closeFilterPanel();
             }}
             onClose={closeFilterPanel}

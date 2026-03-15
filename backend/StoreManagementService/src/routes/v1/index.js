@@ -128,7 +128,12 @@ router.patch(
 router.get("/employee", EmployeeController.getAll);
 
 // Custodians (Division / Vehicle / Employee master)
-router.post("/custodians", CustodianController.create);
+router.post(
+  "/custodians",
+  ensureAuth,
+  requireAdminOperations,
+  CustodianController.create,
+);
 router.get("/custodians", CustodianController.list);
 router.get("/custodians/:id", CustodianController.get);
 
