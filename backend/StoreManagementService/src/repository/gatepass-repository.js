@@ -16,6 +16,13 @@ const {
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
 
+const toEmployeeCustodian = (employeeId) => {
+  if (!employeeId) {
+    return { custodian_id: null, custodian_type: null };
+  }
+  return { custodian_id: String(employeeId), custodian_type: "EMPLOYEE" };
+};
+
 class GatePassRepository {
   _sanitizeAssetIds(assetIds = []) {
     return [...new Set((assetIds || []).map(Number).filter(Number.isFinite))];
@@ -693,6 +700,7 @@ class GatePassRepository {
               {
                 status: "EWasteOut",
                 current_employee_id: null,
+                ...toEmployeeCustodian(null),
               },
               { transaction: t },
             );

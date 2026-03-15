@@ -1,6 +1,6 @@
 // ! Repository folder is to have the interactions with the model and database.
 
-const { Employee } = require("../models/index");
+const { Employee, Custodian } = require("../models/index");
 const { Op } = require("sequelize");
 const {
   decodeCursor,
@@ -16,6 +16,13 @@ class EmployeeRepository {
         "Trying to create Employee in the try block of repository layer."
       );
       const employee = await Employee.create(data);
+      await Custodian.upsert({
+        id: String(employee.emp_id),
+        custodian_type: "EMPLOYEE",
+        display_name: employee.name,
+        employee_id: employee.emp_id,
+        is_active: true,
+      });
       return employee;
     } catch (error) {
       console.log("Something went wrong in the repository layer.");
@@ -28,6 +35,11 @@ class EmployeeRepository {
       await Employee.destroy({
         where: {
           emp_id: empId,
+        },
+      });
+      await Custodian.destroy({
+        where: {
+          employee_id: empId,
         },
       });
       return true;
@@ -51,6 +63,15 @@ class EmployeeRepository {
       }
 
       const updatedEmployee = await Employee.findByPk(empId);
+      if (updatedEmployee) {
+        await Custodian.upsert({
+          id: String(updatedEmployee.emp_id),
+          custodian_type: "EMPLOYEE",
+          display_name: updatedEmployee.name,
+          employee_id: updatedEmployee.emp_id,
+          is_active: true,
+        });
+      }
       return updatedEmployee;
     } catch (error) {
       console.log("Something went wrong in the repository layer.");

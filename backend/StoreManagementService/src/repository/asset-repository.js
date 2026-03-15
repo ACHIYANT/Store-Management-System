@@ -25,6 +25,24 @@ const {
 } = require("../utils/cursor-pagination");
 const { logStockMovement } = require("../services/stock-movement-service");
 
+const toEmployeeCustodian = (employeeId) => {
+  if (!employeeId) {
+    return { custodian_id: null, custodian_type: null };
+  }
+  return { custodian_id: String(employeeId), custodian_type: "EMPLOYEE" };
+};
+
+const toEventCustodian = (toEmployeeId, fromEmployeeId) => {
+  const custodianId =
+    toEmployeeId != null
+      ? toEmployeeId
+      : fromEmployeeId != null
+        ? fromEmployeeId
+        : null;
+  if (!custodianId) return {};
+  return { custodian_id: String(custodianId), custodian_type: "EMPLOYEE" };
+};
+
 /**
  * Fields referenced exist per your migrations for Assets and AssetEvents.
  * - Assets: serial_number, status, purchased_at, warranty_expiry, asset_tag,
@@ -122,6 +140,7 @@ class AssetRepository {
             daybook_item_id: it.id,
             vendor_id: db.vendor_id || null,
             current_employee_id: null,
+            ...toEmployeeCustodian(null),
           },
           { transaction: t },
         );
@@ -248,7 +267,7 @@ class AssetRepository {
       const incr = {};
       for (const a of assets) {
         await a.update(
-          { status: "InStore", current_employee_id: null },
+          { status: "InStore", current_employee_id: null, ...toEmployeeCustodian(null) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -257,6 +276,7 @@ class AssetRepository {
             event_type: "Returned",
             event_date: new Date(),
             from_employee_id: fromEmployeeId || null,
+            ...toEventCustodian(null, fromEmployeeId),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -305,7 +325,7 @@ class AssetRepository {
 
       for (const a of assets) {
         await a.update(
-          { current_employee_id: toEmployeeId },
+          { current_employee_id: toEmployeeId, ...toEmployeeCustodian(toEmployeeId) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -315,6 +335,7 @@ class AssetRepository {
             event_date: new Date(),
             from_employee_id: fromEmployeeId || null,
             to_employee_id: toEmployeeId,
+            ...toEventCustodian(toEmployeeId, fromEmployeeId),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -530,7 +551,7 @@ class AssetRepository {
         const wasInStore = a.status === "InStore"; // capture BEFORE update
         const eventType = type === "EWaste" ? "MarkedEWaste" : type;
         await a.update(
-          { status: type, current_employee_id: null },
+          { status: type, current_employee_id: null, ...toEmployeeCustodian(null) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -613,7 +634,7 @@ class AssetRepository {
       for (const a of assets) {
         const retainedEmployeeId = a.current_employee_id;
         await a.update(
-          { status: "Retained", current_employee_id: null },
+          { status: "Retained", current_employee_id: null, ...toEmployeeCustodian(null) },
           { transaction: t },
         );
         await AssetEvent.create(
@@ -622,6 +643,7 @@ class AssetRepository {
             event_type: "Retained",
             event_date: new Date(),
             from_employee_id: retainedEmployeeId,
+            ...toEventCustodian(null, retainedEmployeeId),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
