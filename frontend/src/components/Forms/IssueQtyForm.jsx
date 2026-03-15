@@ -13,6 +13,12 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
+const CUSTODIAN_TYPES = [
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "DIVISION", label: "Division" },
+  { value: "VEHICLE", label: "Vehicle" },
+];
+
 export default function IssueQtyForm({
   stockId,
   onStockChange,
@@ -26,6 +32,13 @@ export default function IssueQtyForm({
   const [itemCategories, setItemCategories] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [itemCategoryId, setItemCategoryId] = useState("");
+  const [issueToType, setIssueToType] = useState("EMPLOYEE");
+  const [custodianId, setCustodianId] = useState("");
+  const [custodianOptions, setCustodianOptions] = useState([]);
+  const [custodianLoading, setCustodianLoading] = useState(false);
+
+  const isEmployeeIssue = issueToType === "EMPLOYEE";
+  const resolvedCustodianId = isEmployeeIssue ? employeeId : custodianId;
 
   useEffect(() => {
     // Adjust endpoints if yours differ
@@ -39,6 +52,35 @@ export default function IssueQtyForm({
       .get(toStoreApiUrl("/itemCategories"))
       .then((r) => setItemCategories(r.data?.data || []));
   }, []);
+
+  useEffect(() => {
+    if (isEmployeeIssue) {
+      setCustodianOptions([]);
+      setCustodianLoading(false);
+      return;
+    }
+    let active = true;
+    setCustodianLoading(true);
+    axios
+      .get(toStoreApiUrl("/custodians"), {
+        params: { custodian_type: issueToType },
+      })
+      .then((r) => {
+        if (!active) return;
+        setCustodianOptions(r.data?.data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustodianOptions([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setCustodianLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [issueToType, isEmployeeIssue]);
 
   useEffect(() => {
     if (!itemCategoryId) {
@@ -71,15 +113,20 @@ export default function IssueQtyForm({
   }, [stockId, stocks]);
 
   const submit = async () => {
-    if (!stockId || !employeeId || !qty)
+    if (!stockId || !resolvedCustodianId || !qty)
       return setMsg({ type: "error", text: "Fill all fields" });
     if (stockQty != null && Number(qty) > Number(stockQty))
       return setMsg({ type: "error", text: "Insufficient stock" });
-    await axios.post(toStoreApiUrl("/issue"), {
+    const payload = {
       stockId,
-      employeeId,
       quantity: Number(qty),
-    });
+      custodianId: String(resolvedCustodianId),
+      custodianType: issueToType,
+    };
+    if (isEmployeeIssue && employeeId) {
+      payload.employeeId = Number(employeeId);
+    }
+    await axios.post(toStoreApiUrl("/issue"), payload);
     setMsg({ type: "success", text: "Issued" });
   };
 
@@ -95,6 +142,91 @@ export default function IssueQtyForm({
         value={employeeId}
         onChange={onEmployeeChange}
       /> */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-gray-600">Issue To Type</label>
+        <Select
+          value={issueToType}
+          onValueChange={(value) => {
+            setIssueToType(value);
+            setCustodianId("");
+            if (value !== "EMPLOYEE") {
+              onEmployeeChange?.("");
+            }
+          }}
+        >
+          <SelectTrigger className="h-11">
+            <SelectValue placeholder="Select type" />
+          </SelectTrigger>
+          <SelectContent>
+            {CUSTODIAN_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-gray-600">
+          {isEmployeeIssue
+            ? "Employee"
+            : issueToType === "DIVISION"
+              ? "Division"
+              : "Vehicle"}
+        </label>
+        {isEmployeeIssue ? (
+          <Select
+            value={String(employeeId || "")}
+            onValueChange={onEmployeeChange}
+          >
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Select employee" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees.map((e) => (
+                <SelectItem
+                  key={e.emp_id || e.id}
+                  value={String(e.emp_id || e.id)}
+                >
+                  {`${e.emp_id}, ${e.name}, ${e.division}, ${e.designation}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select
+            value={String(custodianId || "")}
+            onValueChange={setCustodianId}
+          >
+            <SelectTrigger className="h-11">
+              <SelectValue
+                placeholder={
+                  custodianLoading
+                    ? "Loading..."
+                    : `Select ${issueToType.toLowerCase()}`
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {custodianLoading ? (
+                <SelectItem value="loading" disabled>
+                  Loading...
+                </SelectItem>
+              ) : custodianOptions.length === 0 ? (
+                <SelectItem value="empty" disabled>
+                  No custodians found
+                </SelectItem>
+              ) : (
+                custodianOptions.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.display_name || c.id}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs text-gray-600">Item Category</label>
 
@@ -130,29 +262,6 @@ export default function IssueQtyForm({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-600">Employee</label>
-        <Select
-          value={String(employeeId || "")}
-          onValueChange={onEmployeeChange}
-        >
-          <SelectTrigger className="h-11">
-            <SelectValue placeholder="Select employee" />
-          </SelectTrigger>
-          <SelectContent>
-            {employees.map((e) => (
-              <SelectItem
-                key={e.emp_id || e.id}
-                value={String(e.emp_id || e.id)}
-              >
-                {console.log(employees)}
-                {/* {e.fullname || e.name || `Emp #${e.emp_id || e.id}`} */}
-                {`${e.emp_id}, ${e.name}, ${e.division}, ${e.designation}`}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
       <div>
         <label className="text-xs text-gray-600">Quantity</label>
         <Input
