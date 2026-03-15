@@ -175,11 +175,20 @@ function App() {
           <Route path="/gate-pass/verify" element={<GatePassVerify />} />
           <Route path="/gate-pass/:gatePassId" element={<GatePassPage />} />
           <Route path="/issued-items" element={<IssuedItems />} />
+          <Route path="/reports/custodian-issues" element={<EmployeeIssues />} />
           <Route path="/reports/employee-issues" element={<EmployeeIssues />} />
 
           <Route
+            path="/reports/custodian-issues/:id"
+            element={<EmployeeIssuedItems />}
+          />
+          <Route
             path="/reports/employee-issues/:id"
             element={<EmployeeIssuedItems />}
+          />
+          <Route
+            path="/reports/custodian-issues/:id/statement"
+            element={<EmployeeIssuedStatement />}
           />
           <Route
             path="/reports/employee-issues/:id/statement"

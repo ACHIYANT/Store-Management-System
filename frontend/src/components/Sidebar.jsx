@@ -343,7 +343,8 @@ export default function Sidebar() {
     if (
       path.startsWith("/issue") ||
       path.startsWith("/issued-items") ||
-      path.startsWith("/reports/employee-issues")
+      path.startsWith("/reports/employee-issues") ||
+      path.startsWith("/reports/custodian-issues")
     ) {
       return "Issue";
     }
@@ -603,7 +604,7 @@ export default function Sidebar() {
                 <SubItem
                   icon={FileText}
                   label="Issued Statement"
-                  onClick={() => handleNavigate("/reports/employee-issues")}
+                  onClick={() => handleNavigate("/reports/custodian-issues")}
                 />
               )}
             </NavItem>
@@ -662,7 +663,7 @@ export default function Sidebar() {
                 <SubItem
                   icon={FileCheck2}
                   label="Issues Reports"
-                  onClick={() => handleNavigate("/reports/employee-issues")}
+                  onClick={() => handleNavigate("/reports/custodian-issues")}
                 />
               )}
               {canSeeOutOfStock && (
