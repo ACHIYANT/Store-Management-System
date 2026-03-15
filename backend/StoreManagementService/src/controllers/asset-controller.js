@@ -59,6 +59,25 @@ const buildAssetActionPayload = (req, { includeType = false } = {}) => {
   if (fromEmployeeId !== undefined) payload.fromEmployeeId = fromEmployeeId;
   if (toEmployeeId !== undefined) payload.toEmployeeId = toEmployeeId;
 
+  const fromCustodianId = parseOptionalText(
+    req?.body?.fromCustodianId ?? req?.body?.from_custodian_id,
+  );
+  const fromCustodianType = parseOptionalText(
+    req?.body?.fromCustodianType ?? req?.body?.from_custodian_type,
+  );
+  const toCustodianId = parseOptionalText(
+    req?.body?.toCustodianId ?? req?.body?.to_custodian_id,
+  );
+  const toCustodianType = parseOptionalText(
+    req?.body?.toCustodianType ?? req?.body?.to_custodian_type,
+  );
+
+  if (fromCustodianId !== undefined) payload.fromCustodianId = fromCustodianId;
+  if (fromCustodianType !== undefined)
+    payload.fromCustodianType = fromCustodianType;
+  if (toCustodianId !== undefined) payload.toCustodianId = toCustodianId;
+  if (toCustodianType !== undefined) payload.toCustodianType = toCustodianType;
+
   const createdBy = parseOptionalText(req?.body?.createdBy);
   if (createdBy !== undefined) payload.createdBy = createdBy;
 
@@ -203,6 +222,18 @@ const transferAssets = async (req, res) => {
         data: {},
         success: false,
         message: "Approval document is required",
+        err: {},
+      });
+    }
+
+    if (
+      !payload.toEmployeeId &&
+      !(payload.toCustodianId && payload.toCustodianType)
+    ) {
+      return res.status(400).json({
+        data: {},
+        success: false,
+        message: "toEmployeeId or toCustodianId/toCustodianType is required",
         err: {},
       });
     }

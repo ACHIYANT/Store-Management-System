@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
       });
+      this.belongsTo(models.Custodian, {
+        foreignKey: "custodian_id",
+        targetKey: "id",
+      });
       AssetEvent.belongsTo(models.Asset, { foreignKey: "asset_id" });
       AssetEvent.belongsTo(models.IssuedItem, { foreignKey: "issued_item_id" });
     }

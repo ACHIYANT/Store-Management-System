@@ -21,6 +21,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "item_master_id",
         as: "itemMaster",
       });
+      this.belongsTo(models.Custodian, {
+        foreignKey: "custodian_id",
+        targetKey: "id",
+      });
       IssuedItem.belongsTo(models.Requisition, {
         foreignKey: "requisition_id",
       });
