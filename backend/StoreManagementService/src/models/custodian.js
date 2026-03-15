@@ -8,6 +8,18 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "employee_id",
         targetKey: "emp_id",
       });
+      this.hasMany(models.Asset, {
+        foreignKey: "custodian_id",
+        sourceKey: "id",
+      });
+      this.hasMany(models.IssuedItem, {
+        foreignKey: "custodian_id",
+        sourceKey: "id",
+      });
+      this.hasMany(models.AssetEvent, {
+        foreignKey: "custodian_id",
+        sourceKey: "id",
+      });
     }
   }
 

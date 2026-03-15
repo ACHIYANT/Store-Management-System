@@ -15,13 +15,7 @@ const {
   normalizeLimit,
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
-
-const toEmployeeCustodian = (employeeId) => {
-  if (!employeeId) {
-    return { custodian_id: null, custodian_type: null };
-  }
-  return { custodian_id: String(employeeId), custodian_type: "EMPLOYEE" };
-};
+const { toCustodianFields } = require("../utils/custodian-utils");
 
 class GatePassRepository {
   _sanitizeAssetIds(assetIds = []) {
@@ -700,7 +694,7 @@ class GatePassRepository {
               {
                 status: "EWasteOut",
                 current_employee_id: null,
-                ...toEmployeeCustodian(null),
+                ...toCustodianFields(null),
               },
               { transaction: t },
             );

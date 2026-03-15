@@ -6,7 +6,7 @@ const {
   normalizeLimit,
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
-const { AssetEvent, Employee, Asset, Stock } = require("../models");
+const { AssetEvent, Employee, Asset, Stock, Custodian } = require("../models");
 
 class AssetEventRepository {
   eventIncludes() {
@@ -35,6 +35,11 @@ class AssetEventRepository {
         attributes: ["emp_id", "name", "division"],
         required: false,
       },
+      {
+        model: Custodian,
+        attributes: ["id", "custodian_type", "display_name"],
+        required: false,
+      },
     ];
   }
 
@@ -43,6 +48,10 @@ class AssetEventRepository {
     const from = r?.fromEmployee;
     const to = r?.toEmployee;
     const asset = r?.Asset;
+    const custodian = r?.Custodian || null;
+    const custodianId = r?.custodian_id ?? null;
+    const custodianType = r?.custodian_type ?? null;
+    const custodianName = custodian?.display_name ?? null;
 
     return {
       id: r.id,
@@ -55,6 +64,16 @@ class AssetEventRepository {
       daybook_id: r.daybook_id ?? null,
       daybook_item_id: r.daybook_item_id ?? null,
       issued_item_id: r.issued_item_id ?? null,
+      custodian_id: custodianId,
+      custodian_type: custodianType,
+      custodian:
+        custodianId || custodianName || custodianType
+          ? {
+              id: custodianId,
+              type: custodianType,
+              name: custodianName,
+            }
+          : null,
       from_employee_id: r.from_employee_id ?? null,
       to_employee_id: r.to_employee_id ?? null,
       from_employee: from

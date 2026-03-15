@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.DayBookItem, { foreignKey: "daybook_item_id" }); // :contentReference[oaicite:3]{index=3}
       this.belongsTo(models.Vendors, { foreignKey: "vendor_id" }); // :contentReference[oaicite:4]{index=4}
       this.belongsTo(models.Employee, { foreignKey: "current_employee_id" }); // :contentReference[oaicite:5]{index=5}
+      this.belongsTo(models.Custodian, {
+        foreignKey: "custodian_id",
+        targetKey: "id",
+      });
 
       // Later: AssetEvent will be linked here
       this.hasMany(models.AssetEvent, { foreignKey: "asset_id" });

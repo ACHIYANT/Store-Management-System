@@ -32,14 +32,32 @@ const parseSkuUnit = (value) =>
     : normalizeSkuUnit(value);
 const issue = async (req, res) => {
   try {
-    const { stockId, employeeId, quantity, assetIds, skuUnit, sku_unit } = req.body;
+    const {
+      stockId,
+      employeeId,
+      quantity,
+      assetIds,
+      skuUnit,
+      sku_unit,
+      custodianId,
+      custodianType,
+      custodian_id,
+      custodian_type,
+    } = req.body;
+    console.log("Issued Item Controller", req.body);
     const normalizedSkuUnit = parseSkuUnit(skuUnit ?? sku_unit);
+    const resolvedCustodianId = custodianId ?? custodian_id;
+    const resolvedCustodianType = custodianType ?? custodian_type;
 
-    if (!stockId || !employeeId) {
+    if (
+      !stockId ||
+      (!employeeId && !(resolvedCustodianId && resolvedCustodianType))
+    ) {
       return res.status(400).json({
         data: {},
         success: false,
-        message: "stockId and employeeId are required",
+        message:
+          "stockId and either employeeId or custodianId/custodianType are required",
         err: {},
       });
     }
@@ -50,6 +68,8 @@ const issue = async (req, res) => {
       data = await service.issueSerialized({
         stockId,
         employeeId,
+        custodianId: resolvedCustodianId,
+        custodianType: resolvedCustodianType,
         assetIds,
         skuUnit: normalizedSkuUnit,
       });
@@ -66,6 +86,8 @@ const issue = async (req, res) => {
       data = await service.issueItem({
         stockId,
         employeeId,
+        custodianId: resolvedCustodianId,
+        custodianType: resolvedCustodianType,
         quantity,
         skuUnit: normalizedSkuUnit,
       });
@@ -130,6 +152,10 @@ async function search(req, res) {
       currentOnly = "false",
       search,
       employeeId,
+      custodianId,
+      custodianType,
+      custodian_id,
+      custodian_type,
       categoryId,
       itemType, // Asset | Consumable
       fromDate,
@@ -148,6 +174,8 @@ async function search(req, res) {
       currentOnly: useCurrentOnly,
       search,
       employeeId,
+      custodianId: custodianId ?? custodian_id,
+      custodianType: custodianType ?? custodian_type,
       categoryId,
       itemType,
       fromDate,
@@ -179,6 +207,8 @@ const issueBulk = async (req, res) => {
   try {
     // Works for both JSON and multipart
     const employeeId = num(req.body.employeeId);
+    const custodianId = req.body.custodianId ?? req.body.custodian_id;
+    const custodianType = req.body.custodianType ?? req.body.custodian_type;
     const requisitionId = num(req.body.requisitionId);
 
     // When multipart, these are strings -> parse
@@ -200,11 +230,11 @@ const issueBulk = async (req, res) => {
       requisition_item_id: num(s?.requisition_item_id),
     }));
 
-    if (!employeeId) {
+    if (!employeeId && !(custodianId && custodianType)) {
       return res.status(400).json({
         data: {},
         success: false,
-        message: "employeeId is required",
+        message: "employeeId or custodianId/custodianType is required",
         err: {},
       });
     }
@@ -225,6 +255,8 @@ const issueBulk = async (req, res) => {
 
     const data = await service.issueMany({
       employeeId,
+      custodianId,
+      custodianType,
       items,
       serializedItems,
       notes,
