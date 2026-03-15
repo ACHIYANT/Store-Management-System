@@ -16,7 +16,9 @@ const PRINT_PAGE_SIZE = 500;
 const PRINT_MAX_ROWS = 20000;
 const CUSTODIAN_TYPES = new Set(["EMPLOYEE", "DIVISION", "VEHICLE"]);
 const inferCustodianTypeFromId = (value) => {
-  const text = String(value || "").trim().toUpperCase();
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
   if (text.startsWith("DIV-")) return "DIVISION";
   if (text.startsWith("VEH-")) return "VEHICLE";
   return "";
@@ -214,14 +216,14 @@ export default function EmployeeIssuedItems() {
   } = useCursorWindowedList({
     fetchPage: fetchRows,
     deps: [
-        id,
-        debouncedSearch,
-        filters.categoryId,
-        filters.stockId,
-        filters.fromDate,
-        filters.toDate,
-        custodianType,
-      ],
+      id,
+      debouncedSearch,
+      filters.categoryId,
+      filters.stockId,
+      filters.fromDate,
+      filters.toDate,
+      custodianType,
+    ],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
@@ -310,13 +312,13 @@ export default function EmployeeIssuedItems() {
       {
         key: "custodian_type",
         label: "Custodian Type",
-        render: (val, row) =>
-          val || (row?.employee_id ? "EMPLOYEE" : "-"),
+        render: (val, row) => val || (row?.employee_id ? "EMPLOYEE" : "-"),
       },
       {
         key: "quantity",
         label: "Quantity",
-        render: (val, row) => `${val ?? 0} ${row?.sku_unit || DEFAULT_SKU_UNIT}`,
+        render: (val, row) =>
+          `${val ?? 0} ${row?.sku_unit || DEFAULT_SKU_UNIT}`,
       },
       { key: "sku_unit", label: "SKU Unit" },
       {
@@ -488,7 +490,9 @@ export default function EmployeeIssuedItems() {
                     key={stock.id ?? stock._id}
                     value={stock.id ?? stock._id}
                   >
-                    {stock.item_name ?? stock.name ?? `Stock #${stock.id ?? stock._id}`}
+                    {stock.item_name ??
+                      stock.name ??
+                      `Stock #${stock.id ?? stock._id}`}
                   </option>
                 ))}
               </select>
@@ -535,7 +539,10 @@ export default function EmployeeIssuedItems() {
               Reset
             </button>
 
-            <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-white">
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-3 py-1 text-white"
+            >
               Apply
             </button>
           </div>
@@ -551,9 +558,12 @@ export default function EmployeeIssuedItems() {
           <div className="relative z-10 w-full max-w-6xl overflow-auto rounded bg-white p-4 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Issued Items - Print Preview</h3>
+                <h3 className="text-lg font-semibold">
+                  Issued Items - Print Preview
+                </h3>
                 <p className="text-xs text-gray-600">
-                  Preview of filtered data. Use Print to print only this preview.
+                  Preview of filtered data. Use Print to print only this
+                  preview.
                 </p>
                 {previewTruncated && (
                   <p className="mt-1 text-xs text-amber-700">
@@ -591,51 +601,104 @@ export default function EmployeeIssuedItems() {
                 <strong>Filters:</strong> {JSON.stringify(filters)}
               </div>
 
-              <table className="min-w-full border-collapse" style={{ borderCollapse: "collapse" }}>
+              <table
+                className="min-w-full border-collapse"
+                style={{ borderCollapse: "collapse" }}
+              >
                 <thead>
                   <tr>
                     <th style={{ padding: 8, border: "1px solid #ddd" }}>ID</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Item Name</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Category</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Quantity</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>SKU Unit</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Issue Date</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>DayBook Ref</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Asset Id</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Asset Tag</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Serial Number</th>
-                    <th style={{ padding: 8, border: "1px solid #ddd" }}>Remarks</th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Item Name
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Category
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Quantity
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      SKU Unit
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Issue Date
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      DayBook Ref
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Asset Id
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Asset Tag
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Serial Number
+                    </th>
+                    <th style={{ padding: 8, border: "1px solid #ddd" }}>
+                      Remarks
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewLoading ? (
                     <tr>
-                      <td colSpan={11} style={{ padding: 12, textAlign: "center" }}>
+                      <td
+                        colSpan={11}
+                        style={{ padding: 12, textAlign: "center" }}
+                      >
                         Loading...
                       </td>
                     </tr>
                   ) : previewRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ padding: 12, textAlign: "center" }}>
+                      <td
+                        colSpan={11}
+                        style={{ padding: 12, textAlign: "center" }}
+                      >
                         No records
                       </td>
                     </tr>
                   ) : (
                     previewRows.map((row) => (
-                      <tr key={`${row.id}-${row.asset_id}-${row.serial_number}`}>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.id}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.item_name}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.category_name}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.quantity}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.sku_unit || DEFAULT_SKU_UNIT}</td>
+                      <tr
+                        key={`${row.id}-${row.asset_id}-${row.serial_number}`}
+                      >
                         <td style={{ padding: 6, border: "1px solid #ddd" }}>
-                          {row.issue_date ? new Date(row.issue_date).toLocaleString() : ""}
+                          {row.id}
                         </td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.daybook_no}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.asset_id}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.asset_tag}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.serial_number}</td>
-                        <td style={{ padding: 6, border: "1px solid #ddd" }}>{row.remarks}</td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.item_name}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.category_name}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.quantity}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.sku_unit || DEFAULT_SKU_UNIT}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.issue_date
+                            ? new Date(row.issue_date).toLocaleString()
+                            : ""}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.daybook_no}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.asset_id}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.asset_tag}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.serial_number}
+                        </td>
+                        <td style={{ padding: 6, border: "1px solid #ddd" }}>
+                          {row.remarks}
+                        </td>
                       </tr>
                     ))
                   )}
