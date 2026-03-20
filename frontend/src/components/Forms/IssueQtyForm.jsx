@@ -63,7 +63,7 @@ export default function IssueQtyForm({
     setCustodianLoading(true);
     axios
       .get(toStoreApiUrl("/custodians"), {
-        params: { custodian_type: issueToType },
+        params: { custodian_type: issueToType, is_active: true },
       })
       .then((r) => {
         if (!active) return;
@@ -219,7 +219,7 @@ export default function IssueQtyForm({
               ) : (
                 custodianOptions.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
-                    {c.display_name || c.id}
+                    {`${c.id} - ${c.display_name}${c.location ? ` (${c.location})` : ""}`}
                   </SelectItem>
                 ))
               )}

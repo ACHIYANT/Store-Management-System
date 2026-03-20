@@ -196,6 +196,7 @@ export default function EmployeeIssuedItems() {
       return { rows, meta };
     },
     [
+      id,
       debouncedSearch,
       filters.categoryId,
       filters.fromDate,
@@ -269,6 +270,7 @@ export default function EmployeeIssuedItems() {
       truncated: hasMore,
     };
   }, [
+    id,
     debouncedSearch,
     filters.categoryId,
     filters.fromDate,

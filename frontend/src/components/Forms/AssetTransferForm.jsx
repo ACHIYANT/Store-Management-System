@@ -6,11 +6,47 @@ import PopupMessage from "@/components/PopupMessage";
 import { STORE_API_BASE_URL } from "@/lib/api-config";
 
 const API = STORE_API_BASE_URL;
+const CUSTODIAN_TYPES = [
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "DIVISION", label: "Division" },
+  { value: "VEHICLE", label: "Vehicle" },
+];
+
+function inferCustodianTypeFromId(value) {
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (text.startsWith("DIV-")) return "DIVISION";
+  if (text.startsWith("VEH-")) return "VEHICLE";
+  return "EMPLOYEE";
+}
+
+function normalizeAssetCustodian(asset) {
+  const rawId =
+    asset?.custodian_id ??
+    (asset?.current_employee_id != null ? asset.current_employee_id : null);
+  if (rawId == null || rawId === "") return null;
+  const id = String(rawId).trim();
+  if (!id) return null;
+  const type =
+    String(asset?.custodian_type || "").trim().toUpperCase() ||
+    inferCustodianTypeFromId(id);
+  return {
+    id,
+    type,
+    employeeId:
+      type === "EMPLOYEE" && Number.isFinite(Number(id)) ? Number(id) : null,
+  };
+}
 
 export default function AssetTransferForm({ assetIds = [], onDone }) {
   const [employees, setEmployees] = useState([]);
-  const [fromId, setFromId] = useState(""); // auto-filled, non-editable
+  const [toType, setToType] = useState("EMPLOYEE");
   const [toEmployeeId, setToEmployeeId] = useState("");
+  const [toCustodianId, setToCustodianId] = useState("");
+  const [custodianOptions, setCustodianOptions] = useState([]);
+  const [custodianLoading, setCustodianLoading] = useState(false);
+  const [fromCustodian, setFromCustodian] = useState(null);
   const [notes, setNotes] = useState("");
   const [approvalFile, setApprovalFile] = useState(null);
   const [popup, setPopup] = useState({ open: false, type: "", message: "" });
@@ -45,16 +81,22 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
               "Transfer allowed only for assets that are currently Issued."
             );
           } else {
-            const holderIds = picked
-              .map((a) => a.current_employee_id)
-              .filter(Boolean);
-            const uniqueHolders = Array.from(new Set(holderIds));
-            if (uniqueHolders.length !== 1 || !uniqueHolders[0]) {
+            const holders = picked.map(normalizeAssetCustodian).filter(Boolean);
+            if (holders.length !== picked.length) {
               setValidationError(
-                "All selected assets must belong to the same employee to transfer."
+                "Some selected assets do not have custody information."
+              );
+              return;
+            }
+            const uniqueKeys = Array.from(
+              new Set(holders.map((h) => `${h.type}::${h.id}`))
+            );
+            if (uniqueKeys.length !== 1) {
+              setValidationError(
+                "All selected assets must belong to the same custodian to transfer."
               );
             } else {
-              setFromId(String(uniqueHolders[0])); // preselect and lock
+              setFromCustodian(holders[0]);
               setValidationError("");
             }
           }
@@ -70,7 +112,58 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
     };
   }, [assetIds]);
 
+  useEffect(() => {
+    if (toType === "EMPLOYEE") {
+      setCustodianOptions([]);
+      setCustodianLoading(false);
+      return;
+    }
+    let active = true;
+    setCustodianLoading(true);
+    axios
+      .get(`${API}/custodians`, {
+        params: { custodian_type: toType },
+      })
+      .then((r) => {
+        if (!active) return;
+        setCustodianOptions(r.data?.data || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustodianOptions([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setCustodianLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [toType]);
+
   const selectedCount = useMemo(() => assetIds?.length || 0, [assetIds]);
+  const fromLabel = useMemo(() => {
+    if (!fromCustodian) return "Not detected";
+    return `${fromCustodian.type} | ${fromCustodian.id}`;
+  }, [fromCustodian]);
+  const resolvedToCustodian = useMemo(() => {
+    if (toType === "EMPLOYEE") {
+      const id = String(toEmployeeId || "").trim();
+      if (!id) return null;
+      return {
+        id,
+        type: "EMPLOYEE",
+        employeeId: Number.isFinite(Number(id)) ? Number(id) : null,
+      };
+    }
+    const id = String(toCustodianId || "").trim();
+    if (!id) return null;
+    return {
+      id,
+      type: toType,
+      employeeId: null,
+    };
+  }, [toEmployeeId, toCustodianId, toType]);
 
   const submit = async () => {
     if (submitting) return;
@@ -84,25 +177,28 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
         message: "No assets selected",
       });
     }
-    if (!fromId) {
+    if (!fromCustodian) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Source employee not detected",
+        message: "Source custodian not detected",
       });
     }
-    if (!toEmployeeId) {
+    if (!resolvedToCustodian) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Please select target employee",
+        message: "Please select target custodian",
       });
     }
-    if (String(toEmployeeId) === String(fromId)) {
+    if (
+      resolvedToCustodian.type === fromCustodian.type &&
+      String(resolvedToCustodian.id) === String(fromCustodian.id)
+    ) {
       return setPopup({
         open: true,
         type: "error",
-        message: "Target employee must be different from source",
+        message: "Target custodian must be different from source",
       });
     }
     if (!approvalFile) {
@@ -117,8 +213,23 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
       setSubmitting(true);
       const formData = new FormData();
       formData.append("assetIds", JSON.stringify(assetIds));
-      formData.append("fromEmployeeId", String(Number(fromId)));
-      formData.append("toEmployeeId", String(Number(toEmployeeId)));
+      formData.append("fromCustodianId", String(fromCustodian.id));
+      formData.append("fromCustodianType", String(fromCustodian.type));
+      if (
+        fromCustodian.type === "EMPLOYEE" &&
+        Number.isFinite(Number(fromCustodian.id))
+      ) {
+        formData.append("fromEmployeeId", String(Number(fromCustodian.id)));
+      }
+
+      formData.append("toCustodianId", String(resolvedToCustodian.id));
+      formData.append("toCustodianType", String(resolvedToCustodian.type));
+      if (
+        resolvedToCustodian.type === "EMPLOYEE" &&
+        Number.isFinite(Number(resolvedToCustodian.id))
+      ) {
+        formData.append("toEmployeeId", String(Number(resolvedToCustodian.id)));
+      }
       if (notes) formData.append("notes", notes);
       formData.append("entry_no", "ASSET-TRANSFER");
       formData.append("bill_no", `${Date.now()}-${selectedCount}`);
@@ -136,6 +247,7 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
         message: `Transferred ${selectedCount} asset(s)`,
       });
       setToEmployeeId("");
+      setToCustodianId("");
       setNotes("");
       setApprovalFile(null);
     } catch (e) {
@@ -167,47 +279,82 @@ export default function AssetTransferForm({ assetIds = [], onDone }) {
 
       {/* From (auto-selected, non-editable) */}
       <div>
-        <label className="text-sm font-medium">From Employee</label>
+        <label className="text-sm font-medium">From Custodian</label>
         <select
-          value={fromId || ""}
+          value={fromLabel}
           disabled
           className="border rounded p-2 w-full text-sm bg-gray-100 cursor-not-allowed"
         >
-          <option value="">{fromId ? "Detected" : "Not detected"}</option>
-          {employees.map((e) => {
-            const id = String(e.emp_id || e.id);
-            const name = e.name || `Employee ${id}`;
-            return (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            );
-          })}
+          <option value={fromLabel}>{fromLabel}</option>
         </select>
         {validationError && (
           <div className="text-xs text-red-600 mt-1">{validationError}</div>
         )}
       </div>
 
-      {/* To (required) */}
       <div>
-        <label className="text-sm font-medium">To Employee</label>
+        <label className="text-sm font-medium">To Type</label>
         <select
-          value={toEmployeeId}
-          onChange={(e) => setToEmployeeId(e.target.value)}
+          value={toType}
+          onChange={(e) => {
+            const nextType = e.target.value;
+            setToType(nextType);
+            setToEmployeeId("");
+            setToCustodianId("");
+          }}
           className="border rounded p-2 w-full text-sm"
         >
-          <option value="">Select employee</option>
-          {employees.map((e) => {
-            const id = String(e.emp_id || e.id);
-            const name = e.name || `Employee ${id}`;
-            return (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            );
-          })}
+          {CUSTODIAN_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
         </select>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">
+          {toType === "EMPLOYEE"
+            ? "To Employee"
+            : toType === "DIVISION"
+              ? "To Division"
+              : "To Vehicle"}
+        </label>
+        {toType === "EMPLOYEE" ? (
+          <select
+            value={toEmployeeId}
+            onChange={(e) => setToEmployeeId(e.target.value)}
+            className="border rounded p-2 w-full text-sm"
+          >
+            <option value="">Select employee</option>
+            {employees.map((e) => {
+              const id = String(e.emp_id || e.id);
+              const name = e.name || `Employee ${id}`;
+              return (
+                <option key={id} value={id}>
+                  {`${id} - ${name}`}
+                </option>
+              );
+            })}
+          </select>
+        ) : (
+          <select
+            value={toCustodianId}
+            onChange={(e) => setToCustodianId(e.target.value)}
+            className="border rounded p-2 w-full text-sm"
+          >
+            <option value="">
+              {custodianLoading
+                ? "Loading..."
+                : `Select ${toType.toLowerCase()}`}
+            </option>
+            {custodianOptions.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {`${c.id} - ${c.display_name}${c.location ? ` (${c.location})` : ""}`}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <Textarea

@@ -11,6 +11,7 @@ const {
   ItemCategoryGroup,
   ItemCategoryHead,
   Employee,
+  Custodian,
   Vendors,
   GatePassItem,
 } = require("../models");
@@ -283,6 +284,14 @@ class AssetRepository {
       // accumulate increments per stock
       const incr = {};
       for (const a of assets) {
+        const inferredFromCustodian =
+          fromCustodian ||
+          normalizeCustodianInput({
+            employeeId: a.current_employee_id,
+            custodianId: a.custodian_id,
+            custodianType: a.custodian_type,
+          });
+
         await a.update(
           { status: "InStore", current_employee_id: null, ...toCustodianFields(null) },
           { transaction: t },
@@ -292,8 +301,15 @@ class AssetRepository {
             asset_id: a.id,
             event_type: "Returned",
             event_date: new Date(),
-            from_employee_id: fromCustodian?.employeeId ?? null,
-            ...toCustodianFields(fromCustodian),
+            from_employee_id:
+              inferredFromCustodian?.employeeId ?? a.current_employee_id ?? null,
+            from_custodian_id:
+              inferredFromCustodian?.id ??
+              (a.current_employee_id != null ? String(a.current_employee_id) : null),
+            from_custodian_type:
+              inferredFromCustodian?.type ??
+              (a.current_employee_id != null ? "EMPLOYEE" : null),
+            ...toCustodianFields(inferredFromCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -376,6 +392,10 @@ class AssetRepository {
             event_date: new Date(),
             from_employee_id: fromCustodian?.employeeId ?? null,
             to_employee_id: resolvedToEmployeeId,
+            from_custodian_id: fromCustodian?.id ?? null,
+            from_custodian_type: fromCustodian?.type ?? null,
+            to_custodian_id: toCustodian?.id ?? null,
+            to_custodian_type: toCustodian?.type ?? null,
             ...toCustodianFields(toCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
@@ -421,7 +441,12 @@ class AssetRepository {
       const decr = {};
       for (const a of assets) {
         const wasInStore = a.status === "InStore"; // capture BEFORE update
-        await a.update({ status: "Repair" }, { transaction: t });
+        const updatePayload = { status: "Repair" };
+        if (wasInStore) {
+          updatePayload.current_employee_id = null;
+          Object.assign(updatePayload, toCustodianFields(null));
+        }
+        await a.update(updatePayload, { transaction: t });
         await AssetEvent.create(
           {
             asset_id: a.id,
@@ -518,7 +543,14 @@ class AssetRepository {
       const incr = {};
       for (const a of assets) {
         // return to store; custody reassignment can be handled by issue flow
-        await a.update({ status: "InStore" }, { transaction: t });
+        await a.update(
+          {
+            status: "InStore",
+            current_employee_id: null,
+            ...toCustodianFields(null),
+          },
+          { transaction: t },
+        );
         await AssetEvent.create(
           {
             asset_id: a.id,
@@ -688,6 +720,10 @@ class AssetRepository {
             event_type: "Retained",
             event_date: new Date(),
             from_employee_id: retainedEmployeeId,
+            from_custodian_id: retainedCustodian?.id ?? null,
+            from_custodian_type: retainedCustodian?.type ?? null,
+            to_custodian_id: retainedCustodian?.id ?? null,
+            to_custodian_type: retainedCustodian?.type ?? null,
             ...toCustodianFields(retainedCustodian),
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
@@ -861,6 +897,10 @@ class AssetRepository {
     if (filters.status) where.status = filters.status;
     if (filters.category_id) where.item_category_id = filters.category_id;
     if (filters.employee_id) where.current_employee_id = filters.employee_id;
+    if (filters.custodian_id) where.custodian_id = String(filters.custodian_id);
+    if (filters.custodian_type) {
+      where.custodian_type = String(filters.custodian_type).trim().toUpperCase();
+    }
     if (filters.stock_id) where.stock_id = filters.stock_id;
 
     // if (filters.search) {
@@ -877,6 +917,9 @@ class AssetRepository {
         { serial_number: { [Op.like]: q } },
         { "$Employee.name$": { [Op.like]: q } },
         { "$Employee.division$": { [Op.like]: q } },
+        { "$Custodian.id$": { [Op.like]: q } },
+        { "$Custodian.display_name$": { [Op.like]: q } },
+        { "$Custodian.location$": { [Op.like]: q } },
         { "$ItemCategory.category_name$": { [Op.like]: q } },
       ];
     }
@@ -939,6 +982,11 @@ class AssetRepository {
             "designation",
             "office_location",
           ],
+          required: false,
+        },
+        {
+          model: Custodian,
+          attributes: ["id", "custodian_type", "display_name", "location", "is_active"],
           required: false,
         },
         itemCategoryInclude,

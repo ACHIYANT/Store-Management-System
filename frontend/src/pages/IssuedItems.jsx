@@ -103,7 +103,17 @@ export default function IssuedItems() {
       label: "Date",
       render: (v) => new Date(v).toLocaleString(),
     },
-    { key: "employee_id", label: "Employee ID" },
+    {
+      key: "holder_id",
+      label: "Custodian / Employee ID",
+      render: (_v, row) => {
+        const type = String(row?.custodian_type || "").toUpperCase();
+        if (type === "EMPLOYEE") {
+          return row?.employee_id ?? row?.custodian_id ?? "—";
+        }
+        return row?.custodian_id ?? row?.employee_id ?? "—";
+      },
+    },
     { key: "employee_name", label: "Employee" },
     { key: "division", label: "Division" },
     {
