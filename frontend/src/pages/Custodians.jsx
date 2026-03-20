@@ -39,6 +39,7 @@ const TYPE_CHIPS = {
 const DEFAULT_FORM = {
   custodianType: "DIVISION",
   displayName: "",
+  location: "",
 };
 
 export default function Custodians() {
@@ -47,7 +48,7 @@ export default function Custodians() {
   const canManageMaster = useMemo(() => hasRole("SUPER_ADMIN"), []);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 350);
-  const [filters, setFilters] = useState({ custodianType: "" });
+  const [filters, setFilters] = useState({ custodianType: "", location: "" });
   const [showFilters, setShowFilters] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -75,6 +76,8 @@ export default function Custodians() {
         params: {
           search: debouncedSearch || undefined,
           custodian_type: filters.custodianType || undefined,
+          location: filters.location || undefined,
+          include_inactive: true,
           limit: 500,
         },
       });
@@ -93,7 +96,7 @@ export default function Custodians() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, filters.custodianType]);
+  }, [debouncedSearch, filters.custodianType, filters.location]);
 
   useEffect(() => {
     fetchCustodians();
@@ -103,6 +106,7 @@ export default function Custodians() {
     () => [
       { key: "id", label: "Custodian ID" },
       { key: "display_name", label: "Display Name" },
+      { key: "location", label: "Location" },
       {
         key: "custodian_type",
         label: "Type",
@@ -131,6 +135,7 @@ export default function Custodians() {
   const handleCreate = async () => {
     if (submitting) return;
     const displayName = String(form.displayName || "").trim();
+    const location = String(form.location || "").trim();
 
     if (!displayName) {
       setPopup({
@@ -141,12 +146,22 @@ export default function Custodians() {
       });
       return;
     }
+    if (!location) {
+      setPopup({
+        open: true,
+        type: "error",
+        message: "Location is required.",
+        moveTo: "",
+      });
+      return;
+    }
 
     try {
       setSubmitting(true);
       const response = await axios.post(toStoreApiUrl("/custodians"), {
         custodian_type: form.custodianType,
         display_name: displayName,
+        location,
       });
       const createdId = response?.data?.data?.id || null;
       setShowCreateDialog(false);
@@ -204,13 +219,18 @@ export default function Custodians() {
                   type: "select",
                   options: TYPE_FILTER_OPTIONS,
                 },
+                {
+                  key: "location",
+                  label: "Location",
+                  type: "text",
+                },
               ]}
               filters={filters}
               onChange={(k, v) =>
                 setFilters((prev) => ({ ...prev, [k]: v }))
               }
               onReset={() => {
-                setFilters({ custodianType: "" });
+                setFilters({ custodianType: "", location: "" });
                 setSearch("");
                 closeFilterPanel();
               }}
@@ -274,6 +294,24 @@ export default function Custodians() {
             </p>
           </div>
 
+          <div className="grid gap-2">
+            <Label>Location</Label>
+            <Input
+              value={form.location}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  location: e.target.value,
+                }))
+              }
+              placeholder="Mumbai / Delhi / Panchkula"
+              className="h-11"
+            />
+            <p className="text-xs text-slate-500">
+              Used in auto-generated IDs: DIV-MUM-001 / VEH-DEL-002.
+            </p>
+          </div>
+
           <p className="text-xs text-slate-500">
             Employee custodians are synced from Employee records.
           </p>
@@ -291,7 +329,8 @@ export default function Custodians() {
               onClick={handleCreate}
               disabled={
                 submitting ||
-                !String(form.displayName || "").trim()
+                !String(form.displayName || "").trim() ||
+                !String(form.location || "").trim()
               }
             >
               {submitting ? "Saving..." : "Create"}

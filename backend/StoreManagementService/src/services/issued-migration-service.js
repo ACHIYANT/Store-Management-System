@@ -2,7 +2,6 @@
 
 const {
   sequelize,
-  Employee,
   ItemCategory,
   ItemMaster,
   Stock,
@@ -17,6 +16,11 @@ const {
   resolveItemMaster,
 } = require("./item-master-service");
 const { logStockMovement } = require("./stock-movement-service");
+const {
+  normalizeCustodianInput,
+  ensureCustodian,
+  toCustodianFields,
+} = require("../utils/custodian-utils");
 
 const SOURCE_FLAG = "MIGRATION_ISSUED";
 
@@ -92,6 +96,10 @@ class IssuedMigrationService {
       ),
       employee_name: get("employee_name", "name"),
       division: get("division"),
+      custodian_id: get("custodian_id"),
+      custodian_type: get("custodian_type"),
+      custodian_name: get("custodian_name", "display_name"),
+      custodian_location: get("custodian_location", "location"),
       stock_id: IssuedMigrationService.toInteger(get("stock_id")),
       item_name: get("item_name", "stock_name"),
       item_master_id: IssuedMigrationService.toInteger(
@@ -313,14 +321,29 @@ class IssuedMigrationService {
     transaction = null,
     writeMode = false,
   }) {
-    if (!row.employee_emp_id) {
-      throw new Error("employee_emp_id is required");
+    const normalizedCustodianType = this._normalizeText(row.custodian_type)?.toUpperCase() || null;
+    const normalizedCustodianId = this._normalizeText(row.custodian_id);
+    const employeeEmpId = IssuedMigrationService.toInteger(row.employee_emp_id);
+    const custodianInput = normalizeCustodianInput({
+      employeeId: employeeEmpId,
+      custodianId: normalizedCustodianId,
+      custodianType: normalizedCustodianType,
+    });
+    if (!custodianInput) {
+      throw new Error(
+        "employee_emp_id or custodian_id/custodian_type is required",
+      );
     }
-
-    const employee = await Employee.findByPk(row.employee_emp_id, { transaction });
-    if (!employee) {
-      throw new Error(`Employee not found for emp_id: ${row.employee_emp_id}`);
-    }
+    const resolvedCustodian = await ensureCustodian(custodianInput, {
+      transaction,
+    });
+    const employee = resolvedCustodian.employeeId
+      ? {
+          emp_id: resolvedCustodian.employeeId,
+          name: resolvedCustodian.display_name || this._normalizeText(row.employee_name),
+          division: this._normalizeText(row.division),
+        }
+      : null;
 
     const hintedItemMaster = await this._findItemMaster(
       {
@@ -541,6 +564,7 @@ class IssuedMigrationService {
 
     return {
       employee,
+      custodian: resolvedCustodian,
       category: stock.ItemCategory || category || null,
       stock,
       sku_unit: requestedSkuUnit,
@@ -574,6 +598,9 @@ class IssuedMigrationService {
       transaction,
       writeMode: !dryRun,
     });
+    const resolvedCustodian = resolved.custodian;
+    const resolvedEmployeeId = resolvedCustodian?.employeeId ?? null;
+    const resolvedCustodianFields = toCustodianFields(resolvedCustodian);
 
     let asset = null;
     if (serial) {
@@ -597,19 +624,32 @@ class IssuedMigrationService {
     }
 
     if (asset && asset.status === "Issued") {
-      if (Number(asset.current_employee_id) === Number(resolved.employee.emp_id)) {
+      const sameCustodian =
+        String(asset.custodian_id || "") ===
+          String(resolvedCustodianFields.custodian_id || "") &&
+        String(asset.custodian_type || "") ===
+          String(resolvedCustodianFields.custodian_type || "");
+      const sameLegacyEmployee =
+        !asset.custodian_id &&
+        !asset.custodian_type &&
+        resolvedEmployeeId != null &&
+        Number(asset.current_employee_id) === Number(resolvedEmployeeId);
+
+      if (sameCustodian || sameLegacyEmployee) {
         return {
           status: "skipped",
-          message: "Asset already issued to same employee",
+          message: "Asset already issued to same custodian",
           stock_id: resolved.stock.id,
           item_master_id: resolved.item_master_id || null,
-          employee_emp_id: resolved.employee.emp_id,
+          employee_emp_id: resolvedEmployeeId,
+          custodian_id: resolvedCustodianFields.custodian_id,
+          custodian_type: resolvedCustodianFields.custodian_type,
           asset_id: asset.id,
         };
       }
 
       throw new Error(
-        `Asset already issued to employee ${asset.current_employee_id || "UNKNOWN"}`,
+        `Asset already issued to custodian ${asset.custodian_id || asset.current_employee_id || "UNKNOWN"} (${asset.custodian_type || "EMPLOYEE"})`,
       );
     }
 
@@ -623,7 +663,9 @@ class IssuedMigrationService {
         message: asset ? "Will update existing asset and issue" : "Will create asset and issue",
         stock_id: resolved.stock?.id || null,
         item_master_id: resolved.item_master_id || null,
-        employee_emp_id: resolved.employee.emp_id,
+        employee_emp_id: resolvedEmployeeId,
+        custodian_id: resolvedCustodianFields.custodian_id,
+        custodian_type: resolvedCustodianFields.custodian_type,
         will_create_stock: !!resolved.willCreateStock,
         will_create_asset: !asset,
         will_generate_asset_tag: !asset && !assetTag,
@@ -646,7 +688,8 @@ class IssuedMigrationService {
           item_category_id: resolved.stock.item_category_id,
           item_master_id: resolved.item_master_id || null,
           status: "Issued",
-          current_employee_id: resolved.employee.emp_id,
+          current_employee_id: resolvedEmployeeId,
+          ...resolvedCustodianFields,
           notes: eventNotes,
           daybook_id: null,
           daybook_item_id: null,
@@ -668,9 +711,8 @@ class IssuedMigrationService {
         {
           item_master_id: asset.item_master_id || resolved.item_master_id || null,
           status: "Issued",
-          current_employee_id: resolved.employee.emp_id,
-          custodian_id: String(resolved.employee.emp_id),
-          custodian_type: "EMPLOYEE",
+          current_employee_id: resolvedEmployeeId,
+          ...resolvedCustodianFields,
           notes: noteParts,
         },
         { transaction },
@@ -696,9 +738,8 @@ class IssuedMigrationService {
 
     const issued = await IssuedItem.create(
       {
-        employee_id: resolved.employee.emp_id,
-        custodian_id: String(resolved.employee.emp_id),
-        custodian_type: "EMPLOYEE",
+        employee_id: resolvedEmployeeId,
+        ...resolvedCustodianFields,
         item_id: resolved.stock.id,
         item_master_id: resolved.item_master_id || null,
         quantity: 1,
@@ -723,7 +764,7 @@ class IssuedMigrationService {
           movementAt: issueDate,
           referenceType: "IssuedItem",
           referenceId: issued.id,
-          toEmployeeId: resolved.employee.emp_id,
+          toEmployeeId: resolvedEmployeeId,
           performedBy: "System Migration",
           remarks: "Issued migration (asset)",
           metadata: {
@@ -741,9 +782,10 @@ class IssuedMigrationService {
         asset_id: asset.id,
         event_type: "Issued",
         event_date: issueDate,
-        to_employee_id: resolved.employee.emp_id,
-        custodian_id: String(resolved.employee.emp_id),
-        custodian_type: "EMPLOYEE",
+        to_employee_id: resolvedEmployeeId,
+        to_custodian_id: resolvedCustodianFields.custodian_id,
+        to_custodian_type: resolvedCustodianFields.custodian_type,
+        ...resolvedCustodianFields,
         issued_item_id: issued.id,
         daybook_id: null,
         daybook_item_id: null,
@@ -758,7 +800,9 @@ class IssuedMigrationService {
       message: "Serialized issued row migrated",
       stock_id: resolved.stock.id,
       item_master_id: resolved.item_master_id || null,
-      employee_emp_id: resolved.employee.emp_id,
+      employee_emp_id: resolvedEmployeeId,
+      custodian_id: resolvedCustodianFields.custodian_id,
+      custodian_type: resolvedCustodianFields.custodian_type,
       asset_id: asset.id,
       issued_item_id: issued.id,
     };
@@ -785,6 +829,9 @@ class IssuedMigrationService {
       transaction,
       writeMode: !dryRun,
     });
+    const resolvedCustodian = resolved.custodian;
+    const resolvedEmployeeId = resolvedCustodian?.employeeId ?? null;
+    const resolvedCustodianFields = toCustodianFields(resolvedCustodian);
 
     if (dryRun) {
       return {
@@ -792,7 +839,9 @@ class IssuedMigrationService {
         message: "Will create consumable issue",
         stock_id: resolved.stock?.id || null,
         item_master_id: resolved.item_master_id || null,
-        employee_emp_id: resolved.employee.emp_id,
+        employee_emp_id: resolvedEmployeeId,
+        custodian_id: resolvedCustodianFields.custodian_id,
+        custodian_type: resolvedCustodianFields.custodian_type,
         quantity,
         will_create_stock: !!resolved.willCreateStock,
       };
@@ -817,9 +866,8 @@ class IssuedMigrationService {
 
     const issued = await IssuedItem.create(
       {
-        employee_id: resolved.employee.emp_id,
-        custodian_id: String(resolved.employee.emp_id),
-        custodian_type: "EMPLOYEE",
+        employee_id: resolvedEmployeeId,
+        ...resolvedCustodianFields,
         item_id: resolved.stock.id,
         item_master_id: resolved.item_master_id || null,
         quantity,
@@ -844,7 +892,7 @@ class IssuedMigrationService {
           movementAt: resolved.issueDate || new Date(),
           referenceType: "IssuedItem",
           referenceId: issued.id,
-          toEmployeeId: resolved.employee.emp_id,
+          toEmployeeId: resolvedEmployeeId,
           performedBy: "System Migration",
           remarks: "Issued migration (consumable)",
           metadata: {
@@ -862,7 +910,9 @@ class IssuedMigrationService {
       message: "Consumable issued row migrated",
       stock_id: resolved.stock.id,
       item_master_id: resolved.item_master_id || null,
-      employee_emp_id: resolved.employee.emp_id,
+      employee_emp_id: resolvedEmployeeId,
+      custodian_id: resolvedCustodianFields.custodian_id,
+      custodian_type: resolvedCustodianFields.custodian_type,
       quantity,
       issued_item_id: issued.id,
     };

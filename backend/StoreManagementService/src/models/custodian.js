@@ -20,6 +20,16 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "custodian_id",
         sourceKey: "id",
       });
+      this.hasMany(models.AssetEvent, {
+        as: "fromAssetEvents",
+        foreignKey: "from_custodian_id",
+        sourceKey: "id",
+      });
+      this.hasMany(models.AssetEvent, {
+        as: "toAssetEvents",
+        foreignKey: "to_custodian_id",
+        sourceKey: "id",
+      });
     }
   }
 
@@ -37,6 +47,10 @@ module.exports = (sequelize, DataTypes) => {
       display_name: {
         type: DataTypes.STRING,
         allowNull: false,
+      },
+      location: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       employee_id: {
         type: DataTypes.INTEGER,

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/select";
 
 export  function SelectScrollable({ division, setDivision }) {
-  console.log("Current division in SelectScrollable:", division); // Debug line
   return (
     <div className="w-full flex flex-col">
       <Select value={division} onValueChange={setDivision} className="w-full">

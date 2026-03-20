@@ -36,6 +36,13 @@ const normalizeCustodianInput = ({ employeeId, custodianId, custodianType }) => 
       if (maybeEmpId != null) {
         return { type: "EMPLOYEE", id: String(maybeEmpId), employeeId: maybeEmpId };
       }
+      const upper = idText.toUpperCase();
+      if (upper.startsWith("DIV-")) {
+        return { type: "DIVISION", id: idText, employeeId: null };
+      }
+      if (upper.startsWith("VEH-")) {
+        return { type: "VEHICLE", id: idText, employeeId: null };
+      }
     }
     return null;
   }
@@ -82,6 +89,7 @@ const ensureCustodian = async (resolved, { transaction } = {}) => {
         id: String(employee.emp_id),
         custodian_type: "EMPLOYEE",
         display_name: employee.name,
+        location: employee.office_location || null,
         employee_id: employee.emp_id,
         is_active: true,
       },
@@ -90,6 +98,7 @@ const ensureCustodian = async (resolved, { transaction } = {}) => {
     return {
       ...resolved,
       display_name: employee.name,
+      location: employee.office_location || null,
     };
   }
 
@@ -105,6 +114,7 @@ const ensureCustodian = async (resolved, { transaction } = {}) => {
   return {
     ...resolved,
     display_name: custodian.display_name,
+    location: custodian.location || null,
   };
 };
 
