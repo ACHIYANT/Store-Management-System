@@ -44,7 +44,18 @@ module.exports = (sequelize, DataTypes) => {
         onUpdate: "CASCADE",
       });
       this.belongsTo(models.Custodian, {
+        as: "custodian",
         foreignKey: "custodian_id",
+        targetKey: "id",
+      });
+      this.belongsTo(models.Custodian, {
+        as: "fromCustodian",
+        foreignKey: "from_custodian_id",
+        targetKey: "id",
+      });
+      this.belongsTo(models.Custodian, {
+        as: "toCustodian",
+        foreignKey: "to_custodian_id",
         targetKey: "id",
       });
       AssetEvent.belongsTo(models.Asset, { foreignKey: "asset_id" });
@@ -83,6 +94,22 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
+      },
+      from_custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      from_custodian_type: {
+        type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
+        allowNull: true,
+      },
+      to_custodian_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      to_custodian_type: {
         type: DataTypes.ENUM("EMPLOYEE", "DIVISION", "VEHICLE"),
         allowNull: true,
       },

@@ -38,7 +38,8 @@ export default function Assets() {
     status: "",
     categoryHeadId: "",
     categoryGroupId: "",
-    employee_id: "",
+    custodian_id: "",
+    custodian_type: "",
     stock_id: "",
     from_date: "",
     to_date: "",
@@ -46,7 +47,7 @@ export default function Assets() {
 
   const [categoryHeads, setCategoryHeads] = useState([]);
   const [categoryGroups, setCategoryGroups] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [custodians, setCustodians] = useState([]);
 
   const [showFilters, setShowFilters] = useState(false);
   const filterRef = useRef(null);
@@ -100,18 +101,24 @@ export default function Assets() {
     {
       key: "custodian_name",
       label: "Custodian",
-      render: (_, row) => row.Employee?.name || "-",
+      render: (_, row) => row.Custodian?.display_name || row.Employee?.name || "-",
     },
     {
       key: "custodian_id",
       label: "Custodian ID",
-      render: (_, row) => row.Employee?.emp_id || row.current_employee_id || "-",
+      render: (_, row) =>
+        row.custodian_id || row.Employee?.emp_id || row.current_employee_id || "-",
+    },
+    {
+      key: "custodian_type",
+      label: "Custodian Type",
+      render: (_, row) => row.custodian_type || (row.current_employee_id ? "EMPLOYEE" : "-"),
     },
 
     {
       key: "division",
-      label: "Division",
-      render: (_, r) => r.Employee?.division || "-",
+      label: "Division / Location",
+      render: (_, r) => r.Employee?.division || r.Custodian?.location || "-",
     },
     { key: "notes", label: "Notes" },
   ];
@@ -177,8 +184,13 @@ export default function Assets() {
 
   useEffect(() => {
     axios
-      .get(toStoreApiUrl("/employee"))
-      .then((res) => setEmployees(res.data.data || []));
+      .get(toStoreApiUrl("/custodians"), {
+        params: {
+          include_inactive: true,
+          limit: 1000,
+        },
+      })
+      .then((res) => setCustodians(res.data.data || []));
   }, []);
 
   /* ------------------ Actions ------------------ */
@@ -283,7 +295,7 @@ export default function Assets() {
         data={rows}
         columns={columns}
         loading={loading}
-        searchPlaceholder="Search asset tag / serial / employee / division..."
+        searchPlaceholder="Search asset tag / serial / custodian / division / location..."
         searchValue={search}
         onSearch={setSearch}
         onFilter={() => setShowFilters((v) => !v)}
@@ -355,12 +367,22 @@ export default function Assets() {
                     })),
                   },
                   {
-                    key: "employee_id",
+                    key: "custodian_type",
+                    label: "Custodian Type",
+                    type: "select",
+                    options: [
+                      { value: "EMPLOYEE", label: "Employee" },
+                      { value: "DIVISION", label: "Division" },
+                      { value: "VEHICLE", label: "Vehicle" },
+                    ],
+                  },
+                  {
+                    key: "custodian_id",
                     label: "Custodian",
                     type: "select",
-                    options: employees.map((e) => ({
-                      value: e.emp_id,
-                      label: `${e.emp_id} - ${e.name}`,
+                    options: custodians.map((c) => ({
+                      value: c.id,
+                      label: `${c.id} - ${c.display_name}${c.location ? ` (${c.location})` : ""}`,
                     })),
                   },
                   { key: "stock_id", label: "Stock ID", type: "text" },
@@ -378,7 +400,8 @@ export default function Assets() {
                     status: "",
                     categoryHeadId: "",
                     categoryGroupId: "",
-                    employee_id: "",
+                    custodian_id: "",
+                    custodian_type: "",
                     stock_id: "",
                     from_date: "",
                     to_date: "",

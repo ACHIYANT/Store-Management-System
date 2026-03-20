@@ -20,6 +20,7 @@ class EmployeeRepository {
         id: String(employee.emp_id),
         custodian_type: "EMPLOYEE",
         display_name: employee.name,
+        location: employee.office_location || null,
         employee_id: employee.emp_id,
         is_active: true,
       });
@@ -68,6 +69,7 @@ class EmployeeRepository {
           id: String(updatedEmployee.emp_id),
           custodian_type: "EMPLOYEE",
           display_name: updatedEmployee.name,
+          location: updatedEmployee.office_location || null,
           employee_id: updatedEmployee.emp_id,
           is_active: true,
         });

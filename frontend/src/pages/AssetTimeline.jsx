@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toStoreApiUrl } from "@/lib/api-config";
 import Modal from "@/components/Modal";
 import AssetReturnForm from "@/components/Forms/AssetReturnForm";
@@ -85,24 +85,37 @@ function getEventStyle(eventType) {
 
 function personText(person, fallbackId) {
   if (!person && !fallbackId) return "System / N.A.";
-  if (!person) return `ID ${fallbackId}`;
-  return `${person.emp_id} | ${person.name} (${person.division || "-"})`;
+  const empId = person?.emp_id ?? fallbackId ?? "-";
+  const name = person?.name ?? "-";
+  const division = person?.division ?? "-";
+  const location = person?.office_location ?? person?.location ?? "-";
+  return `EMPLOYEE | ${empId} | ${name} | ${division} | ${location}`;
+}
+
+function custodianText(custodian, fallbackId, fallbackType) {
+  const id = custodian?.id ?? fallbackId ?? null;
+  const type = custodian?.type ?? fallbackType ?? null;
+  const name = custodian?.name ?? null;
+  const location = custodian?.location ?? null;
+  if (!id && !type && !name && !location) return "Not captured";
+  const normalizedType = String(type || "CUSTODIAN").toUpperCase();
+  return `${normalizedType} | ${id || "-"} | ${name || "-"} | ${location || "-"}`;
 }
 
 const EVENT_DEFAULT_PARTIES = {
   Created: { from: "Procurement Process", to: "Store" },
-  Issued: { from: "Store", to: "Employee" },
-  Returned: { from: "Employee", to: "Store" },
-  Transferred: { from: "From Employee", to: "To Employee" },
-  SubmittedToStore: { from: "Employee", to: "Store" },
-  RepairOut: { from: "Store / Employee", to: "Repair Vendor" },
+  Issued: { from: "Store", to: "Custodian" },
+  Returned: { from: "Custodian", to: "Store" },
+  Transferred: { from: "From Custodian", to: "To Custodian" },
+  SubmittedToStore: { from: "Custodian", to: "Store" },
+  RepairOut: { from: "Store / Custodian", to: "Repair Vendor" },
   RepairIn: { from: "Repair Vendor", to: "Store" },
   MarkedEWaste: { from: "Store", to: "E-Waste Yard" },
   EWasteOut: { from: "E-Waste Yard", to: "E-Waste Vendor" },
   Adjusted: { from: "System", to: "System" },
   Disposed: { from: "Store", to: "Disposed" },
-  Lost: { from: "Employee / Store", to: "Lost" },
-  Retained: { from: "Employee", to: "Retained by Employee" },
+  Lost: { from: "Custodian / Store", to: "Lost" },
+  Retained: { from: "Custodian", to: "Retained by Custodian" },
   "MRN Cancelled": { from: "System", to: "Store" },
 };
 
@@ -110,6 +123,36 @@ function partyText(event, side) {
   const person = side === "from" ? event.from_employee : event.to_employee;
   const id = side === "from" ? event.from_employee_id : event.to_employee_id;
   if (person || id) return personText(person, id);
+
+  const sideCustodian = side === "from" ? event.from_custodian : event.to_custodian;
+  const sideCustodianId =
+    side === "from" ? event.from_custodian_id : event.to_custodian_id;
+  const sideCustodianType =
+    side === "from" ? event.from_custodian_type : event.to_custodian_type;
+  if (sideCustodian || sideCustodianId || sideCustodianType) {
+    return custodianText(
+      sideCustodian,
+      sideCustodianId,
+      sideCustodianType,
+    );
+  }
+
+  const eventType = String(event.event_type || "");
+  const fallbackCustodian =
+    side === "to" && ["Issued", "Transferred", "Retained"].includes(eventType)
+      ? event.custodian
+      : side === "from" &&
+          ["Returned", "SubmittedToStore"].includes(eventType)
+        ? event.custodian
+        : null;
+  if (fallbackCustodian) {
+    return custodianText(
+      fallbackCustodian,
+      event.custodian_id,
+      event.custodian_type,
+    );
+  }
+
   return EVENT_DEFAULT_PARTIES[event.event_type]?.[side] || "Not captured";
 }
 
@@ -119,7 +162,22 @@ function normalizePerson(raw) {
     emp_id: raw.emp_id ?? raw.empId ?? null,
     name: raw.name ?? null,
     division: raw.division ?? null,
+    office_location: raw.office_location ?? raw.officeLocation ?? null,
   };
+}
+
+function normalizeCustodian(raw, fallbackId = null, fallbackType = null) {
+  const id = raw?.id ?? raw?.custodian_id ?? raw?.custodianId ?? fallbackId ?? null;
+  const type =
+    raw?.type ??
+    raw?.custodian_type ??
+    raw?.custodianType ??
+    fallbackType ??
+    null;
+  const name = raw?.name ?? raw?.display_name ?? raw?.displayName ?? null;
+  const location = raw?.location ?? null;
+  if (!id && !type && !name && !location) return null;
+  return { id, type, name, location };
 }
 
 function normalizeAsset(raw, fallbackId) {
@@ -146,6 +204,50 @@ function buildApprovalViewUrl(encryptedPath) {
   return toStoreApiUrl(`/view-image?path=${encodeURIComponent(relativePath)}`);
 }
 
+function resolveNotingLink(event) {
+  const approvalUrl = buildApprovalViewUrl(event?.approval_document_url);
+  if (approvalUrl) {
+    return {
+      href: approvalUrl,
+      label: "View Approval",
+      external: true,
+    };
+  }
+
+  if (String(event?.event_type || "") !== "Issued") return null;
+
+  const source = String(event?.issued_item_source || "").toUpperCase();
+  const requisitionId = event?.requisition_id ?? null;
+  const requisitionReqNo = event?.requisition_req_no ?? null;
+  const offlineReqUrl = buildApprovalViewUrl(event?.requisition_url);
+
+  if (source === "OFFLINE_REQUISITION" && offlineReqUrl) {
+    return {
+      href: offlineReqUrl,
+      label: "Offline Requisition",
+      external: true,
+    };
+  }
+
+  if (requisitionId) {
+    return {
+      href: `/requisitions/${requisitionId}`,
+      label: requisitionReqNo || `Online Req #${requisitionId}`,
+      external: false,
+    };
+  }
+
+  if (offlineReqUrl) {
+    return {
+      href: offlineReqUrl,
+      label: "Offline Requisition",
+      external: true,
+    };
+  }
+
+  return null;
+}
+
 function normalizeEvent(event) {
   const fromPerson = normalizePerson(event.from_employee || event.fromEmployee);
   const toPerson = normalizePerson(event.to_employee || event.toEmployee);
@@ -157,6 +259,48 @@ function normalizeEvent(event) {
     null;
   const toId =
     event.to_employee_id ?? event.toEmployeeId ?? toPerson?.emp_id ?? null;
+  const custodianId =
+    event.custodian_id ?? event.custodianId ?? event.custodian?.id ?? null;
+  const custodianType =
+    event.custodian_type ??
+    event.custodianType ??
+    event.custodian?.type ??
+    null;
+  const custodian = normalizeCustodian(event.custodian, custodianId, custodianType);
+  const fromCustodianId =
+    event.from_custodian_id ??
+    event.fromCustodianId ??
+    event.from_custodian?.id ??
+    event.fromCustodian?.id ??
+    null;
+  const fromCustodianType =
+    event.from_custodian_type ??
+    event.fromCustodianType ??
+    event.from_custodian?.type ??
+    event.fromCustodian?.type ??
+    null;
+  const toCustodianId =
+    event.to_custodian_id ??
+    event.toCustodianId ??
+    event.to_custodian?.id ??
+    event.toCustodian?.id ??
+    null;
+  const toCustodianType =
+    event.to_custodian_type ??
+    event.toCustodianType ??
+    event.to_custodian?.type ??
+    event.toCustodian?.type ??
+    null;
+  const fromCustodian = normalizeCustodian(
+    event.from_custodian || event.fromCustodian,
+    fromCustodianId,
+    fromCustodianType,
+  );
+  const toCustodian = normalizeCustodian(
+    event.to_custodian || event.toCustodian,
+    toCustodianId,
+    toCustodianType,
+  );
 
   const assetId = event.asset_id ?? event.assetId ?? event.Asset?.id ?? null;
   const asset = normalizeAsset(event.asset || event.Asset, assetId);
@@ -171,7 +315,22 @@ function normalizeEvent(event) {
     performed_by: event.performed_by ?? event.performedBy ?? null,
     daybook_id: event.daybook_id ?? event.daybookId ?? null,
     issued_item_id: event.issued_item_id ?? event.issuedItemId ?? null,
+    issued_item_source:
+      event.issued_item_source ?? event.issuedItemSource ?? null,
+    requisition_url: event.requisition_url ?? event.requisitionUrl ?? null,
+    requisition_id: event.requisition_id ?? event.requisitionId ?? null,
+    requisition_req_no:
+      event.requisition_req_no ?? event.requisitionReqNo ?? null,
     asset_id: asset?.id ?? assetId,
+    custodian_id: custodianId,
+    custodian_type: custodianType,
+    custodian,
+    from_custodian_id: fromCustodianId,
+    from_custodian_type: fromCustodianType,
+    from_custodian: fromCustodian,
+    to_custodian_id: toCustodianId,
+    to_custodian_type: toCustodianType,
+    to_custodian: toCustodian,
     from_employee_id: fromId,
     to_employee_id: toId,
     from_employee: fromPerson,
@@ -381,22 +540,42 @@ export default function AssetTimeline() {
                       </div>
                     </div>
 
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">
+                        Custodian
+                      </div>
+                      <div className="mt-1 text-slate-800">
+                        {event.custodian
+                          ? custodianText(
+                              event.custodian,
+                              event.custodian_id,
+                              event.custodian_type,
+                            )
+                          : "Not captured"}
+                      </div>
+                    </div>
+
                     <div className="rounded-lg border border-slate-200 bg-white p-3 md:col-span-2">
                       <div className="text-xs uppercase tracking-wide text-slate-500">
                         Noting Approval
                       </div>
                       <div className="mt-1 text-slate-800">
-                        {buildApprovalViewUrl(event.approval_document_url) ? (
+                        {resolveNotingLink(event)?.external ? (
                           <a
-                            href={buildApprovalViewUrl(
-                              event.approval_document_url,
-                            )}
+                            href={resolveNotingLink(event).href}
                             target="_blank"
                             rel="noreferrer"
                             className="text-blue-600 underline"
                           >
-                            View Approval
+                            {resolveNotingLink(event).label}
                           </a>
+                        ) : resolveNotingLink(event) ? (
+                          <Link
+                            to={resolveNotingLink(event).href}
+                            className="text-emerald-700 underline"
+                          >
+                            {resolveNotingLink(event).label}
+                          </Link>
                         ) : (
                           "Not uploaded"
                         )}

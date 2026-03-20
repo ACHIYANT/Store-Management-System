@@ -96,7 +96,7 @@ export default function IssueUnifiedForm({
     setCustodianLoading(true);
     axios
       .get(`${API}/custodians`, {
-        params: { custodian_type: custodianType },
+        params: { custodian_type: custodianType, is_active: true },
       })
       .then((r) => {
         if (!active) return;
@@ -1273,7 +1273,7 @@ export default function IssueUnifiedForm({
                   ) : (
                     custodianOptions.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>
-                        {c.display_name || c.id}
+                        {`${c.id} - ${c.display_name}${c.location ? ` (${c.location})` : ""}`}
                       </SelectItem>
                     ))
                   )}

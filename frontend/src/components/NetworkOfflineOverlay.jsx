@@ -8,14 +8,21 @@ function getInitialConnectionState() {
   return navigator.onLine;
 }
 
-const PROBE_URLS = [
-  "https://api.ipify.org?format=json",
-  "https://jsonplaceholder.typicode.com/todos/1",
-];
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
 const FAST_RECHECK_INTERVAL_MS = 1200;
 const FAST_PROBE_TIMEOUT_MS = 1600;
+
+function getProbeUrls() {
+  if (typeof window === "undefined") {
+    return ["/"];
+  }
+
+  return [
+    `${window.location.origin}/`,
+    `${window.location.origin}/login`,
+  ];
+}
 
 async function probeInternetOnce(timeoutMs = PROBE_TIMEOUT_MS) {
   const probe = async (url, ms) => {
@@ -38,7 +45,7 @@ async function probeInternetOnce(timeoutMs = PROBE_TIMEOUT_MS) {
 
   try {
     await Promise.any(
-      PROBE_URLS.map(async (url) => {
+      getProbeUrls().map(async (url) => {
         const ok = await probe(url, timeoutMs);
         if (!ok) throw new Error("Probe failed");
         return true;

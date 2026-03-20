@@ -174,6 +174,8 @@ class AssetService {
       category_head_id: query.categoryHeadId,
       category_group_id: query.categoryGroupId,
       employee_id: query.employee_id,
+      custodian_id: query.custodian_id ?? query.custodianId,
+      custodian_type: query.custodian_type ?? query.custodianType,
       stock_id: query.stock_id,
       search: query.search,
       from_date: query.from_date,

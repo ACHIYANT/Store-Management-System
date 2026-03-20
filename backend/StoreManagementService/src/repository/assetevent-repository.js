@@ -6,7 +6,15 @@ const {
   normalizeLimit,
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
-const { AssetEvent, Employee, Asset, Stock, Custodian } = require("../models");
+const {
+  AssetEvent,
+  Employee,
+  Asset,
+  Stock,
+  Custodian,
+  IssuedItem,
+  Requisition,
+} = require("../models");
 
 class AssetEventRepository {
   eventIncludes() {
@@ -26,19 +34,44 @@ class AssetEventRepository {
       {
         model: Employee,
         as: "fromEmployee",
-        attributes: ["emp_id", "name", "division"],
+        attributes: ["emp_id", "name", "division", "office_location"],
         required: false,
       },
       {
         model: Employee,
         as: "toEmployee",
-        attributes: ["emp_id", "name", "division"],
+        attributes: ["emp_id", "name", "division", "office_location"],
         required: false,
       },
       {
         model: Custodian,
-        attributes: ["id", "custodian_type", "display_name"],
+        as: "custodian",
+        attributes: ["id", "custodian_type", "display_name", "location"],
         required: false,
+      },
+      {
+        model: Custodian,
+        as: "fromCustodian",
+        attributes: ["id", "custodian_type", "display_name", "location"],
+        required: false,
+      },
+      {
+        model: Custodian,
+        as: "toCustodian",
+        attributes: ["id", "custodian_type", "display_name", "location"],
+        required: false,
+      },
+      {
+        model: IssuedItem,
+        attributes: ["id", "source", "requisition_url", "requisition_id"],
+        required: false,
+        include: [
+          {
+            model: Requisition,
+            attributes: ["id", "req_no"],
+            required: false,
+          },
+        ],
       },
     ];
   }
@@ -48,7 +81,11 @@ class AssetEventRepository {
     const from = r?.fromEmployee;
     const to = r?.toEmployee;
     const asset = r?.Asset;
-    const custodian = r?.Custodian || null;
+    const custodian = r?.custodian || null;
+    const fromCustodian = r?.fromCustodian || null;
+    const toCustodian = r?.toCustodian || null;
+    const issuedItem = r?.IssuedItem || r?.issuedItem || null;
+    const requisition = issuedItem?.Requisition || issuedItem?.requisition || null;
     const custodianId = r?.custodian_id ?? null;
     const custodianType = r?.custodian_type ?? null;
     const custodianName = custodian?.display_name ?? null;
@@ -64,6 +101,10 @@ class AssetEventRepository {
       daybook_id: r.daybook_id ?? null,
       daybook_item_id: r.daybook_item_id ?? null,
       issued_item_id: r.issued_item_id ?? null,
+      issued_item_source: issuedItem?.source ?? null,
+      requisition_url: issuedItem?.requisition_url ?? null,
+      requisition_id: issuedItem?.requisition_id ?? null,
+      requisition_req_no: requisition?.req_no ?? null,
       custodian_id: custodianId,
       custodian_type: custodianType,
       custodian:
@@ -72,6 +113,36 @@ class AssetEventRepository {
               id: custodianId,
               type: custodianType,
               name: custodianName,
+              location: custodian?.location ?? null,
+            }
+          : null,
+      from_custodian_id: r?.from_custodian_id ?? null,
+      from_custodian_type: r?.from_custodian_type ?? null,
+      from_custodian:
+        r?.from_custodian_id ||
+        r?.from_custodian_type ||
+        fromCustodian?.display_name
+          ? {
+              id: r?.from_custodian_id ?? fromCustodian?.id ?? null,
+              type:
+                r?.from_custodian_type ??
+                fromCustodian?.custodian_type ??
+                null,
+              name: fromCustodian?.display_name ?? null,
+              location: fromCustodian?.location ?? null,
+            }
+          : null,
+      to_custodian_id: r?.to_custodian_id ?? null,
+      to_custodian_type: r?.to_custodian_type ?? null,
+      to_custodian:
+        r?.to_custodian_id ||
+        r?.to_custodian_type ||
+        toCustodian?.display_name
+          ? {
+              id: r?.to_custodian_id ?? toCustodian?.id ?? null,
+              type: r?.to_custodian_type ?? toCustodian?.custodian_type ?? null,
+              name: toCustodian?.display_name ?? null,
+              location: toCustodian?.location ?? null,
             }
           : null,
       from_employee_id: r.from_employee_id ?? null,
@@ -81,6 +152,7 @@ class AssetEventRepository {
             emp_id: from.emp_id,
             name: from.name,
             division: from.division,
+            office_location: from.office_location ?? null,
           }
         : null,
       to_employee: to
@@ -88,6 +160,7 @@ class AssetEventRepository {
             emp_id: to.emp_id,
             name: to.name,
             division: to.division,
+            office_location: to.office_location ?? null,
           }
         : null,
       asset: asset
@@ -289,6 +362,10 @@ class AssetEventRepository {
           { "$fromEmployee.division$": { [Op.like]: like } },
           { "$toEmployee.name$": { [Op.like]: like } },
           { "$toEmployee.division$": { [Op.like]: like } },
+          { "$fromCustodian.id$": { [Op.like]: like } },
+          { "$fromCustodian.display_name$": { [Op.like]: like } },
+          { "$toCustodian.id$": { [Op.like]: like } },
+          { "$toCustodian.display_name$": { [Op.like]: like } },
         ];
 
         const numericSearch = Number(searchTerm);
