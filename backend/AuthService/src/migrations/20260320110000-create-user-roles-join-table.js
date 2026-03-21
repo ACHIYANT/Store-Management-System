@@ -1,9 +1,11 @@
 "use strict";
+const {
+  ROLE_TABLE,
+  USER_ROLE_TABLE,
+  USER_TABLE,
+} = require("../constants/table-names");
 
 /** @type {import('sequelize-cli').Migration} */
-
-const USER_ROLES_TABLE = "User_Roles";
-
 async function tableExists(queryInterface, tableName) {
   try {
     await queryInterface.describeTable(tableName);
@@ -15,18 +17,18 @@ async function tableExists(queryInterface, tableName) {
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    const hasCanonicalTable = await tableExists(queryInterface, USER_ROLES_TABLE);
+    const hasCanonicalTable = await tableExists(queryInterface, USER_ROLE_TABLE);
     if (hasCanonicalTable) {
       return;
     }
 
-    await queryInterface.createTable(USER_ROLES_TABLE, {
+    await queryInterface.createTable(USER_ROLE_TABLE, {
       UserId: {
         type: Sequelize.INTEGER,
         allowNull: false,
         primaryKey: true,
         references: {
-          model: "Users",
+          model: USER_TABLE,
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -37,7 +39,7 @@ module.exports = {
         allowNull: false,
         primaryKey: true,
         references: {
-          model: "Roles",
+          model: ROLE_TABLE,
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -57,11 +59,11 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    const hasCanonicalTable = await tableExists(queryInterface, USER_ROLES_TABLE);
+    const hasCanonicalTable = await tableExists(queryInterface, USER_ROLE_TABLE);
     if (!hasCanonicalTable) {
       return;
     }
 
-    await queryInterface.dropTable(USER_ROLES_TABLE);
+    await queryInterface.dropTable(USER_ROLE_TABLE);
   },
 };

@@ -1,10 +1,11 @@
 // authservice/src/seeders/20250829033428-approval_stages.js
 "use strict";
+const { APPROVAL_STAGES_TABLE } = require("../constants/table-names");
 
 module.exports = {
   async up(qi) {
     const now = new Date();
-    await qi.bulkInsert("approval_stages", [
+    await qi.bulkInsert(APPROVAL_STAGES_TABLE, [
       {
         role_name: "ADMIN_APPROVER",
         stage_order: 1,
@@ -41,6 +42,6 @@ module.exports = {
   },
 
   async down(qi) {
-    await qi.bulkDelete("approval_stages", null, {});
+    await qi.bulkDelete(APPROVAL_STAGES_TABLE, null, {});
   },
 };
