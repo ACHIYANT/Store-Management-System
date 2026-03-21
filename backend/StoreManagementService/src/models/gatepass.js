@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { GATE_PASS_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class GatePass extends Model {
@@ -83,6 +84,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "GatePass",
+      tableName: GATE_PASS_TABLE,
     },
   );
 

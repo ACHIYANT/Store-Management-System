@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { ITEM_CATEGORY_TABLE, STOCK_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class Stock extends Model {
@@ -62,7 +63,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "ItemCategories",
+          model: ITEM_CATEGORY_TABLE,
           key: "id", // Referencing ItemCategory table's id
         },
       },
@@ -88,6 +89,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "Stock",
+      tableName: STOCK_TABLE,
     },
   );
   return Stock;

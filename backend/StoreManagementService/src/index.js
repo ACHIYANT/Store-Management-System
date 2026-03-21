@@ -81,7 +81,10 @@ const setUpAndStartServer = async () => {
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`server started at ${PORT}`);
 
-    if (String(process.env.SYNC_DB || "").toLowerCase() === "true") {
+    if (
+      String(process.env.SYNC_DB || "").toLowerCase() === "true" &&
+      String(process.env.NODE_ENV || "").toLowerCase() !== "production"
+    ) {
       await db.sequelize.sync({ alter: true });
     }
 

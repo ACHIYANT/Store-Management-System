@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { ITEM_CATEGORY_GROUP_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class ItemCategoryGroup extends Model {
@@ -30,7 +31,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "ItemCategoryGroup",
-      tableName: "ItemCategoryGroups",
+      tableName: ITEM_CATEGORY_GROUP_TABLE,
     }
   );
 
