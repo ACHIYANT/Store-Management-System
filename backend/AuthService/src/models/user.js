@@ -2,6 +2,7 @@
 const { Model } = require("sequelize");
 const bcrypt = require("bcrypt");
 const { SALT_ROUNDS } = require("../config/serverConfig");
+const { USER_ROLE_TABLE, USER_TABLE } = require("../constants/table-names");
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     /**
@@ -11,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
      */
     static associate(models) {
       User.belongsToMany(models.Role, {
-        through: "User_Roles",
+        through: USER_ROLE_TABLE,
         as: "roles",
         foreignKey: "UserId",
         otherKey: "RoleId",
@@ -85,6 +86,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "User",
+      tableName: USER_TABLE,
     }
   );
   User.beforeCreate((user) => {
