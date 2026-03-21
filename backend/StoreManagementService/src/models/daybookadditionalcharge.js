@@ -1,3 +1,5 @@
+const { DAYBOOK_ADDITIONAL_CHARGE_TABLE } = require("../constants/table-names");
+
 module.exports = (sequelize, DataTypes) => {
   const DayBookAdditionalCharge = sequelize.define(
     "DayBookAdditionalCharge",
@@ -10,7 +12,10 @@ module.exports = (sequelize, DataTypes) => {
       gst_rate: DataTypes.DECIMAL,
       gst_amount: DataTypes.DECIMAL,
       total_amount: DataTypes.DECIMAL
-    }
+    },
+    {
+      tableName: DAYBOOK_ADDITIONAL_CHARGE_TABLE,
+    },
   );
 
   DayBookAdditionalCharge.associate = (models) => {

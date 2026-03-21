@@ -1,5 +1,10 @@
 "use strict";
 const { Model } = require("sequelize");
+const {
+  DAYBOOK_ITEM_TABLE,
+  DAYBOOK_TABLE,
+  ITEM_CATEGORY_TABLE,
+} = require("../constants/table-names");
 module.exports = (sequelize, DataTypes) => {
   class DayBookItem extends Model {
     /**
@@ -39,7 +44,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "DayBooks",
+          model: DAYBOOK_TABLE,
           key: "id",
         },
         onDelete: "CASCADE",
@@ -53,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "ItemCategories",
+          model: ITEM_CATEGORY_TABLE,
           key: "id", // Link to ItemCategory table's id
         },
       },
@@ -102,8 +107,8 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "DayBookItem",
+      tableName: DAYBOOK_ITEM_TABLE,
     },
   );
   return DayBookItem;
 };
-

@@ -6,7 +6,6 @@ const {
 } = require("../constants/table-names");
 
 /** @type {import('sequelize-cli').Migration} */
-
 async function tableExists(queryInterface, tableName) {
   try {
     await queryInterface.describeTable(tableName);

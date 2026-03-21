@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { DAYBOOK_TABLE, VENDOR_TABLE } = require("../constants/table-names");
 module.exports = (sequelize, DataTypes) => {
   class DayBook extends Model {
     /**
@@ -57,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "Vendors",
+          model: VENDOR_TABLE,
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -127,6 +128,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "DayBook",
+      tableName: DAYBOOK_TABLE,
     }
   );
   return DayBook;
