@@ -1,4 +1,8 @@
 "use strict";
+const {
+  FORENSIC_AUDIT_ARCHIVE_TABLE,
+  FORENSIC_AUDIT_LOG_TABLE,
+} = require("../constants/table-names");
 
 const hasTable = async (queryInterface, tableName) => {
   const [rows] = await queryInterface.sequelize.query(
@@ -42,8 +46,8 @@ const addIndexIfMissing = async (
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    if (!(await hasTable(queryInterface, "ForensicAuditLogs"))) {
-      await queryInterface.createTable("ForensicAuditLogs", {
+    if (!(await hasTable(queryInterface, FORENSIC_AUDIT_LOG_TABLE))) {
+      await queryInterface.createTable(FORENSIC_AUDIT_LOG_TABLE, {
         id: {
           type: Sequelize.BIGINT.UNSIGNED,
           allowNull: false,
@@ -165,45 +169,45 @@ module.exports = {
       });
     }
 
-    await addIndexIfMissing(queryInterface, "ForensicAuditLogs", ["createdAt"], {
+    await addIndexIfMissing(queryInterface, FORENSIC_AUDIT_LOG_TABLE, ["createdAt"], {
       name: "idx_faudit_logs_created_at",
     });
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditLogs",
+      FORENSIC_AUDIT_LOG_TABLE,
       ["actor_user_id", "createdAt"],
       { name: "idx_faudit_logs_actor_created_at" },
     );
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditLogs",
+      FORENSIC_AUDIT_LOG_TABLE,
       ["entity_type", "entity_id", "createdAt"],
       { name: "idx_faudit_logs_entity_created_at" },
     );
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditLogs",
+      FORENSIC_AUDIT_LOG_TABLE,
       ["action", "createdAt"],
       { name: "idx_faudit_logs_action_created_at" },
     );
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditLogs",
+      FORENSIC_AUDIT_LOG_TABLE,
       ["status_code", "createdAt"],
       { name: "idx_faudit_logs_status_created_at" },
     );
-    await addIndexIfMissing(queryInterface, "ForensicAuditLogs", ["request_id"], {
+    await addIndexIfMissing(queryInterface, FORENSIC_AUDIT_LOG_TABLE, ["request_id"], {
       name: "idx_faudit_logs_request_id",
     });
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditLogs",
+      FORENSIC_AUDIT_LOG_TABLE,
       ["route_path", "createdAt"],
       { name: "idx_faudit_logs_route_created_at" },
     );
 
-    if (!(await hasTable(queryInterface, "ForensicAuditArchives"))) {
-      await queryInterface.createTable("ForensicAuditArchives", {
+    if (!(await hasTable(queryInterface, FORENSIC_AUDIT_ARCHIVE_TABLE))) {
+      await queryInterface.createTable(FORENSIC_AUDIT_ARCHIVE_TABLE, {
         id: {
           type: Sequelize.BIGINT.UNSIGNED,
           allowNull: false,
@@ -263,25 +267,24 @@ module.exports = {
 
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditArchives",
+      FORENSIC_AUDIT_ARCHIVE_TABLE,
       ["archived_at"],
       { name: "idx_faudit_archives_archived_at" },
     );
     await addIndexIfMissing(
       queryInterface,
-      "ForensicAuditArchives",
+      FORENSIC_AUDIT_ARCHIVE_TABLE,
       ["expires_at"],
       { name: "idx_faudit_archives_expires_at" },
     );
   },
 
   async down(queryInterface) {
-    if (await hasTable(queryInterface, "ForensicAuditArchives")) {
-      await queryInterface.dropTable("ForensicAuditArchives");
+    if (await hasTable(queryInterface, FORENSIC_AUDIT_ARCHIVE_TABLE)) {
+      await queryInterface.dropTable(FORENSIC_AUDIT_ARCHIVE_TABLE);
     }
-    if (await hasTable(queryInterface, "ForensicAuditLogs")) {
-      await queryInterface.dropTable("ForensicAuditLogs");
+    if (await hasTable(queryInterface, FORENSIC_AUDIT_LOG_TABLE)) {
+      await queryInterface.dropTable(FORENSIC_AUDIT_LOG_TABLE);
     }
   },
 };
-

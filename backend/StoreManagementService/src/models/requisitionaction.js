@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { REQUISITION_ACTION_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class RequisitionAction extends Model {
@@ -53,6 +54,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "RequisitionAction",
+      tableName: REQUISITION_ACTION_TABLE,
     },
   );
 

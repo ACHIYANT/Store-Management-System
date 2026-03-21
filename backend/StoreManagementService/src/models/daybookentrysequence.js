@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { DAYBOOK_ENTRY_SEQUENCE_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class DayBookEntrySequence extends Model {}
@@ -23,7 +24,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "DayBookEntrySequence",
-      tableName: "DayBookEntrySequences",
+      tableName: DAYBOOK_ENTRY_SEQUENCE_TABLE,
     }
   );
 
