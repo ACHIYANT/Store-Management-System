@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const { Op } = require("sequelize");
+const { FORENSIC_AUDIT_LOG_TABLE } = require("../constants/table-names");
 const {
   ForensicAuditArchive,
   ForensicAuditLog,
@@ -248,12 +249,12 @@ class ForensicAuditService {
     } catch (error) {
       const message = String(error?.message || "");
       if (
-        message.includes("ForensicAuditLogs") &&
+        message.includes(FORENSIC_AUDIT_LOG_TABLE) &&
         message.toLowerCase().includes("doesn't exist")
       ) {
         this.enabled = false;
         console.error(
-          "[ForensicAudit] disabled because table ForensicAuditLogs is missing. Run migrations and restart service.",
+          `[ForensicAudit] disabled because table ${FORENSIC_AUDIT_LOG_TABLE} is missing. Run migrations and restart service.`,
         );
         return;
       }

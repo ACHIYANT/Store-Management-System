@@ -1,4 +1,5 @@
 "use strict";
+const { ROLE_TABLE } = require("../constants/table-names");
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
@@ -14,7 +15,7 @@ module.exports = {
      */
 
     await queryInterface.bulkInsert(
-      "Roles",
+      ROLE_TABLE,
       [
         {
           name: "ADMIN",

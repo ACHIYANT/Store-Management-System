@@ -1,5 +1,6 @@
 // *** authservice/src/models/approval_stages.js
 "use strict";
+const { APPROVAL_STAGES_TABLE } = require("../constants/table-names");
 module.exports = (sequelize, DataTypes) => {
   const ApprovalStage = sequelize.define(
     "approval_stages",
@@ -13,7 +14,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       active: DataTypes.BOOLEAN,
     },
-    {},
+    {
+      tableName: APPROVAL_STAGES_TABLE,
+    },
   );
   return ApprovalStage;
 };

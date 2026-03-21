@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { FORENSIC_AUDIT_ARCHIVE_TABLE } = require("../constants/table-names");
 
 module.exports = (sequelize, DataTypes) => {
   class ForensicAuditArchive extends Model {
@@ -52,9 +53,9 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "ForensicAuditArchive",
+      tableName: FORENSIC_AUDIT_ARCHIVE_TABLE,
     },
   );
 
   return ForensicAuditArchive;
 };
-
