@@ -32,7 +32,6 @@ const ListPage = ({
   searchPlaceholder = "Search...",
 }) => {
   const [internalSelected, setInternalSelected] = useState(null);
-  const [showEmptyState, setShowEmptyState] = useState(false);
   const [renderLoader, setRenderLoader] = useState(Boolean(loading));
   const sel = selectedRows ?? internalSelected;
   const setSel = setSelectedRows ?? setInternalSelected;
@@ -56,21 +55,9 @@ const ListPage = ({
     };
   }, [loading]);
 
-  useEffect(() => {
-    let timeoutId = null;
+  const showEmptyState = !renderLoader && dataLength === 0;
+  const showTable = !renderLoader && !showEmptyState && (table || columns?.length > 0);
 
-    if (renderLoader || dataLength > 0) {
-      setShowEmptyState(false);
-    } else {
-      // Avoid flashing empty-state when data arrives right after loading ends.
-      timeoutId = setTimeout(() => setShowEmptyState(true), 180);
-    }
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [renderLoader, dataLength]);
-  
   const TableLoader = () => (
     <div className="absolute inset-0 grid place-items-center bg-white/70">
       <video
@@ -126,25 +113,23 @@ const ListPage = ({
             />
             <p className="mt-3 text-gray-500 text-sm">No records found</p>
           </div>
-        ) : (
-          (table || columns?.length > 0) && (
-            <div className="overflow-x-auto w-full">
-              {table ? (
-                table
-              ) : (
-                <ListTable
-                  columns={columns || []}
-                  data={data || []}
-                  selectedRows={sel}
-                  /* Pass onRowSelect ONLY if selection is controlled by parent */
-                  onRowSelect={setSelectedRows ? handleRowSelect : undefined}
-                  idCol={idCol}
-                  onRowClick={onRowClick}
-                />
-              )}
-            </div>
-          )
-        )}
+        ) : showTable ? (
+          <div className="overflow-x-auto w-full">
+            {table ? (
+              table
+            ) : (
+              <ListTable
+                columns={columns || []}
+                data={data || []}
+                selectedRows={sel}
+                /* Pass onRowSelect ONLY if selection is controlled by parent */
+                onRowSelect={setSelectedRows ? handleRowSelect : undefined}
+                idCol={idCol}
+                onRowClick={onRowClick}
+              />
+            )}
+          </div>
+        ) : null}
       </div>
       {belowContent}
     </div>
