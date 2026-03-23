@@ -17,12 +17,14 @@ const {
 } = require("./item-master-service");
 const { logStockMovement } = require("./stock-movement-service");
 const {
-  normalizeCustodianInput,
   ensureCustodian,
   toCustodianFields,
 } = require("../utils/custodian-utils");
 
 const SOURCE_FLAG = "MIGRATION_ISSUED";
+const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
+const HISTORICAL_NO_SERIAL_NOTE =
+  "Migrated asset without serial number";
 
 class IssuedMigrationService {
   static normalizeKey(key) {
@@ -155,6 +157,10 @@ class IssuedMigrationService {
       .slice(0, 4) || "AST";
     const yy = new Date().getFullYear();
     return `${safeCategory}-${yy}-${stockId}-${assetId}`;
+  }
+
+  _buildHistoricalNoSerialValue({ stockId, rowNo, index }) {
+    return `${HISTORICAL_NO_SERIAL_PREFIX}-${stockId}-${rowNo}-${Date.now()}-${String(index).padStart(3, "0")}`;
   }
 
   async _findCategory({ categoryId, categoryName }, transaction = null) {
@@ -321,22 +327,33 @@ class IssuedMigrationService {
     transaction = null,
     writeMode = false,
   }) {
-    const normalizedCustodianType = this._normalizeText(row.custodian_type)?.toUpperCase() || null;
-    const normalizedCustodianId = this._normalizeText(row.custodian_id);
-    const employeeEmpId = IssuedMigrationService.toInteger(row.employee_emp_id);
-    const custodianInput = normalizeCustodianInput({
-      employeeId: employeeEmpId,
-      custodianId: normalizedCustodianId,
-      custodianType: normalizedCustodianType,
-    });
-    if (!custodianInput) {
+    const providedCustodianFields = [
+      "custodian_id",
+      "custodian_type",
+      "custodian_name",
+      "custodian_location",
+    ].filter((field) => this._normalizeText(row[field]));
+    if (providedCustodianFields.length > 0) {
       throw new Error(
-        "employee_emp_id or custodian_id/custodian_type is required",
+        "Issued migration currently supports employee-based issuance only. Remove custodian columns/values and provide employee_emp_id.",
       );
     }
-    const resolvedCustodian = await ensureCustodian(custodianInput, {
+
+    const employeeEmpId = IssuedMigrationService.toInteger(row.employee_emp_id);
+    if (employeeEmpId == null) {
+      throw new Error("employee_emp_id is required for issued migration");
+    }
+
+    const resolvedCustodian = await ensureCustodian(
+      {
+        type: "EMPLOYEE",
+        id: String(employeeEmpId),
+        employeeId: employeeEmpId,
+      },
+      {
       transaction,
-    });
+      },
+    );
     const employee = resolvedCustodian.employeeId
       ? {
           emp_id: resolvedCustodian.employeeId,
@@ -582,9 +599,18 @@ class IssuedMigrationService {
   }) {
     const serial = this._normalizeSerial(row.serial_number);
     const assetTag = this._normalizeText(row.asset_tag);
-    if (!serial && !assetTag) {
+    const quantity = IssuedMigrationService.toInteger(row.quantity);
+    const isHistoricalNoSerialRow = !serial && !assetTag;
+
+    if (isHistoricalNoSerialRow) {
+      if (!quantity || quantity <= 0) {
+        throw new Error(
+          "quantity must be a whole number greater than 0 when Asset rows do not have serial_number/asset_tag",
+        );
+      }
+    } else if (quantity != null && quantity !== 1) {
       throw new Error(
-        "serial_number or asset_tag is required for Asset item_type rows",
+        "For Asset rows with serial_number/asset_tag, use one row per asset. quantity should be blank or 1.",
       );
     }
 
@@ -601,6 +627,153 @@ class IssuedMigrationService {
     const resolvedCustodian = resolved.custodian;
     const resolvedEmployeeId = resolvedCustodian?.employeeId ?? null;
     const resolvedCustodianFields = toCustodianFields(resolvedCustodian);
+    const issueDate = resolved.issueDate || new Date();
+
+    if (isHistoricalNoSerialRow) {
+      if (dryRun) {
+        return {
+          status: "ok",
+          message: `Will create ${quantity} historical asset record(s) without serial numbers`,
+          stock_id: resolved.stock?.id || null,
+          item_master_id: resolved.item_master_id || null,
+          employee_emp_id: resolvedEmployeeId,
+          quantity,
+          will_create_stock: !!resolved.willCreateStock,
+          will_create_asset: true,
+          will_generate_asset_tag: true,
+        };
+      }
+
+      if (IssuedMigrationService.toBool(options.adjustStock, false)) {
+        const stock = await Stock.findOne({
+          where: { id: resolved.stock.id, is_active: true },
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+        if (!stock) {
+          throw new Error(`Stock not found during adjustment: ${resolved.stock.id}`);
+        }
+        if (stock.quantity < quantity) {
+          throw new Error(
+            `Insufficient stock for adjustment. stock_id ${stock.id}, quantity ${stock.quantity}`,
+          );
+        }
+        await stock.update({ quantity: stock.quantity - quantity }, { transaction });
+      }
+
+      const eventNotes = this._buildEventNotes({
+        sourceRef: row.source_ref,
+        remarks: [row.remarks, HISTORICAL_NO_SERIAL_NOTE]
+          .filter(Boolean)
+          .join(" | "),
+      });
+
+      const issued = await IssuedItem.create(
+        {
+          employee_id: resolvedEmployeeId,
+          ...resolvedCustodianFields,
+          item_id: resolved.stock.id,
+          item_master_id: resolved.item_master_id || null,
+          quantity,
+          sku_unit: resolved.sku_unit || resolved.stock.sku_unit || "Unit",
+          date: issueDate,
+          requisition_url: null,
+          requisition_id: null,
+          requisition_item_id: null,
+          source: "MIGRATION",
+        },
+        { transaction },
+      );
+
+      if (IssuedMigrationService.toBool(options.adjustStock, false)) {
+        await logStockMovement(
+          {
+            itemMasterId: resolved.item_master_id,
+            stockId: resolved.stock.id,
+            movementType: "ISSUE_OUT",
+            qty: -Math.abs(quantity),
+            skuUnit: resolved.sku_unit || resolved.stock.sku_unit || "Unit",
+            movementAt: issueDate,
+            referenceType: "IssuedItem",
+            referenceId: issued.id,
+            toEmployeeId: resolvedEmployeeId,
+            performedBy: "System Migration",
+            remarks: "Issued migration (asset without serial number)",
+            metadata: {
+              source: SOURCE_FLAG,
+              row_no: row.row_no,
+              item_no: row.item_no,
+              historical_no_serial: true,
+            },
+          },
+          { transaction },
+        );
+      }
+
+      const createdAssetIds = [];
+
+      for (let index = 1; index <= quantity; index += 1) {
+        const createdAsset = await Asset.create(
+          {
+            serial_number: this._buildHistoricalNoSerialValue({
+              stockId: resolved.stock.id,
+              rowNo: row.row_no,
+              index,
+            }),
+            asset_tag: null,
+            stock_id: resolved.stock.id,
+            item_category_id: resolved.stock.item_category_id,
+            item_master_id: resolved.item_master_id || null,
+            status: "Issued",
+            current_employee_id: resolvedEmployeeId,
+            ...resolvedCustodianFields,
+            notes: eventNotes,
+            daybook_id: null,
+            daybook_item_id: null,
+          },
+          { transaction },
+        );
+
+        const generatedTag = this._buildAutoAssetTag({
+          stockId: resolved.stock.id,
+          assetId: createdAsset.id,
+          categoryName: resolved.category?.category_name,
+        });
+        await createdAsset.update({ asset_tag: generatedTag }, { transaction });
+
+        await AssetEvent.create(
+          {
+            asset_id: createdAsset.id,
+            event_type: "Issued",
+            event_date: issueDate,
+            to_employee_id: resolvedEmployeeId,
+            to_custodian_id: resolvedCustodianFields.custodian_id,
+            to_custodian_type: resolvedCustodianFields.custodian_type,
+            ...resolvedCustodianFields,
+            issued_item_id: issued.id,
+            daybook_id: null,
+            daybook_item_id: null,
+            notes: eventNotes,
+            performed_by: "System Migration",
+          },
+          { transaction },
+        );
+
+        createdAssetIds.push(createdAsset.id);
+      }
+
+      return {
+        status: "imported",
+        message: `Historical asset row migrated without serial numbers (${quantity} assets created)`,
+        stock_id: resolved.stock.id,
+        item_master_id: resolved.item_master_id || null,
+        employee_emp_id: resolvedEmployeeId,
+        quantity,
+        asset_count: quantity,
+        asset_ids: createdAssetIds,
+        issued_item_id: issued.id,
+      };
+    }
 
     let asset = null;
     if (serial) {
@@ -638,18 +811,16 @@ class IssuedMigrationService {
       if (sameCustodian || sameLegacyEmployee) {
         return {
           status: "skipped",
-          message: "Asset already issued to same custodian",
+          message: "Asset already issued to same employee",
           stock_id: resolved.stock.id,
           item_master_id: resolved.item_master_id || null,
           employee_emp_id: resolvedEmployeeId,
-          custodian_id: resolvedCustodianFields.custodian_id,
-          custodian_type: resolvedCustodianFields.custodian_type,
           asset_id: asset.id,
         };
       }
 
       throw new Error(
-        `Asset already issued to custodian ${asset.custodian_id || asset.current_employee_id || "UNKNOWN"} (${asset.custodian_type || "EMPLOYEE"})`,
+        `Asset already issued to another holder (${asset.custodian_id || asset.current_employee_id || "UNKNOWN"})`,
       );
     }
 
@@ -664,15 +835,12 @@ class IssuedMigrationService {
         stock_id: resolved.stock?.id || null,
         item_master_id: resolved.item_master_id || null,
         employee_emp_id: resolvedEmployeeId,
-        custodian_id: resolvedCustodianFields.custodian_id,
-        custodian_type: resolvedCustodianFields.custodian_type,
         will_create_stock: !!resolved.willCreateStock,
         will_create_asset: !asset,
         will_generate_asset_tag: !asset && !assetTag,
       };
     }
 
-    const issueDate = resolved.issueDate || new Date();
     const eventNotes = this._buildEventNotes({
       sourceRef: row.source_ref,
       remarks: row.remarks,
@@ -801,8 +969,6 @@ class IssuedMigrationService {
       stock_id: resolved.stock.id,
       item_master_id: resolved.item_master_id || null,
       employee_emp_id: resolvedEmployeeId,
-      custodian_id: resolvedCustodianFields.custodian_id,
-      custodian_type: resolvedCustodianFields.custodian_type,
       asset_id: asset.id,
       issued_item_id: issued.id,
     };
@@ -840,8 +1006,6 @@ class IssuedMigrationService {
         stock_id: resolved.stock?.id || null,
         item_master_id: resolved.item_master_id || null,
         employee_emp_id: resolvedEmployeeId,
-        custodian_id: resolvedCustodianFields.custodian_id,
-        custodian_type: resolvedCustodianFields.custodian_type,
         quantity,
         will_create_stock: !!resolved.willCreateStock,
       };
@@ -911,8 +1075,6 @@ class IssuedMigrationService {
       stock_id: resolved.stock.id,
       item_master_id: resolved.item_master_id || null,
       employee_emp_id: resolvedEmployeeId,
-      custodian_id: resolvedCustodianFields.custodian_id,
-      custodian_type: resolvedCustodianFields.custodian_type,
       quantity,
       issued_item_id: issued.id,
     };

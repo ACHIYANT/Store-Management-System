@@ -150,6 +150,12 @@ export default function IssuedItems() {
       label: "Serials / Asset Tags",
       render: (arr) => {
         if (!Array.isArray(arr) || arr.length === 0) return "—";
+        const allHistoricalNoSerial = arr.every(
+          (asset) => asset?.serial_missing_migration,
+        );
+        if (allHistoricalNoSerial) {
+          return `Migrated data (Serial number not available) x${arr.length}`;
+        }
         const labels = arr.map(
           (a) => a.serial_number || a.asset_tag || a.asset_id,
         );
