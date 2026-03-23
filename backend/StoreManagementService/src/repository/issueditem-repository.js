@@ -395,7 +395,9 @@ class IssuedItemRepository {
         { sku_unit: { [Op.like]: like } },
         { "$Employee.name$": { [Op.like]: like } },
         { "$Employee.division$": { [Op.like]: like } },
+        { "$Employee.office_location$": { [Op.like]: like } },
         { "$Custodian.display_name$": { [Op.like]: like } },
+        { "$Custodian.location$": { [Op.like]: like } },
         { "$Stock.item_name$": { [Op.like]: like } },
         { "$Stock.ItemCategory.category_name$": { [Op.like]: like } },
         { "$Requisition.req_no$": { [Op.like]: like } },
@@ -417,12 +419,12 @@ class IssuedItemRepository {
     /* ---------------- Employee Include ---------------- */
     const employeeInclude = {
       model: Employee,
-      attributes: ["emp_id", "name", "division"],
+      attributes: ["emp_id", "name", "division", "office_location"],
       required: false,
     };
     const custodianInclude = {
       model: Custodian,
-      attributes: ["id", "custodian_type", "display_name"],
+      attributes: ["id", "custodian_type", "display_name", "location"],
       required: false,
     };
 
@@ -536,9 +538,11 @@ class IssuedItemRepository {
         employee_id: r.employee_id,
         employee_name: r.Employee?.name || null,
         division: r.Employee?.division || null,
+        office_location: r.Employee?.office_location || null,
         custodian_id: custodianId,
         custodian_type: custodianType,
         custodian_name: custodianName,
+        custodian_location: r.Custodian?.location || null,
         item_name: r.Stock?.item_name || null,
         sku_unit: r.sku_unit || r.Stock?.sku_unit || "Unit",
         category_name: cat?.category_name || null,

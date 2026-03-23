@@ -68,7 +68,7 @@ export default function IssuedItems() {
     },
     [debouncedSearch, filters],
   );
-
+  // console.log(fetchIssuedPage);
   const {
     rows,
     loading,
@@ -83,6 +83,8 @@ export default function IssuedItems() {
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
   });
+
+  console.log(rows);
 
   /* ---------------- Filter close ---------------- */
 
@@ -99,9 +101,29 @@ export default function IssuedItems() {
   const columns = [
     { key: "id", label: "Issue ID" },
     {
+      key: "type_label",
+      label: "Type",
+      chip: true,
+      chipMap: {
+        Asset: { color: "blue", emoji: "🧰" },
+        Consumable: { color: "green", emoji: "🧴" },
+      },
+    },
+    {
       key: "date",
-      label: "Date",
+      label: "Issue Date",
       render: (v) => new Date(v).toLocaleString(),
+    },
+    {
+      key: "custodian_type",
+      label: "Custodian Type",
+      chip: true,
+      chipMap: {
+        EMPLOYEE: { color: "blue", emoji: "👮‍♀️" },
+        DIVISION: { color: "green", emoji: "🏢" },
+        VEHICLE: { color: "yellow", emoji: "🚘" },
+      },
+      render: (v, row) => v || (row?.employee_id ? "EMPLOYEE" : "—"),
     },
     {
       key: "holder_id",
@@ -114,31 +136,32 @@ export default function IssuedItems() {
         return row?.custodian_id ?? row?.employee_id ?? "—";
       },
     },
-    { key: "employee_name", label: "Employee" },
-    { key: "division", label: "Division" },
     {
       key: "custodian_name",
       label: "Custodian",
-      render: (_v, row) =>
-        row?.custodian_name || row?.employee_name || "—",
+      render: (_v, row) => row?.custodian_name || row?.employee_name || "—",
     },
     {
-      key: "custodian_type",
-      label: "Custodian Type",
-      render: (v, row) =>
-        v || (row?.employee_id ? "EMPLOYEE" : "—"),
-    },
-    { key: "category_name", label: "Category" },
-    { key: "item_name", label: "Item" },
-    {
-      key: "type_label",
-      label: "Type",
-      chip: true,
-      chipMap: {
-        Asset: { color: "blue", emoji: "🧰" },
-        Consumable: { color: "green", emoji: "🧴" },
+      key: "division",
+      label: "Division",
+      render: (value, row) => {
+        const type = String(row?.custodian_type || "").toUpperCase();
+        if (type === "EMPLOYEE") {
+          return value || "—";
+        }
+        return row?.custodian_name || "—";
       },
     },
+    {
+      key: "office_location",
+      label: "Office / Location",
+      render: (_v, row) =>
+        row?.office_location || row?.custodian_location || "—",
+    },
+
+    { key: "category_name", label: "Category" },
+    { key: "item_name", label: "Item" },
+
     {
       key: "quantity",
       label: "Qty",
@@ -179,7 +202,10 @@ export default function IssuedItems() {
         return (
           <div className="flex flex-col gap-1">
             {onlineReqId ? (
-              <Link to={`/requisitions/${onlineReqId}`} className="text-emerald-700 underline">
+              <Link
+                to={`/requisitions/${onlineReqId}`}
+                className="text-emerald-700 underline"
+              >
                 {onlineReqNo || `Online Req #${onlineReqId}`}
               </Link>
             ) : null}
