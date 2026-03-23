@@ -1,5 +1,7 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import axios from "axios";
+import { ArrowLeft } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
 import Modal from "@/components/Modal";
@@ -11,7 +13,6 @@ import AssetRetainForm from "@/components/Forms/AssetRetainForm";
 import PopupMessage from "@/components/PopupMessage";
 import FilterPanel from "@/components/FilterPanel";
 import useDebounce from "@/hooks/useDebounce";
-import { useNavigate } from "react-router-dom";
 import useCursorWindowedList from "@/hooks/useCursorWindowedList";
 import { toStoreApiUrl } from "@/lib/api-config";
 
@@ -21,6 +22,20 @@ const TRIM_BATCH = 1000;
 
 export default function Assets() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { categoryId } = useParams();
+
+  const normalizedParam = String(categoryId || "")
+    .trim()
+    .toLowerCase();
+  const numericCategoryId = Number(categoryId);
+  const isScopedCategoryView =
+    normalizedParam !== "" &&
+    normalizedParam !== "all" &&
+    Number.isFinite(numericCategoryId);
+  const scopedCategoryId = isScopedCategoryView ? numericCategoryId : null;
+
+  const routeState = location.state || {};
 
   /* ------------------ State ------------------ */
   const [selected, setSelected] = useState([]);
@@ -48,8 +63,8 @@ export default function Assets() {
   const [categoryHeads, setCategoryHeads] = useState([]);
   const [categoryGroups, setCategoryGroups] = useState([]);
   const [custodians, setCustodians] = useState([]);
-
   const [showFilters, setShowFilters] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const filterRef = useRef(null);
 
   /* ------------------ Columns ------------------ */
@@ -71,18 +86,17 @@ export default function Assets() {
     {
       key: "daybook_id",
       label: "DayBook Entry",
-      render: (_, r) => r.DayBook?.entry_no || "-",
+      render: (_, row) => row.DayBook?.entry_no || "-",
     },
     {
       key: "item_category_id",
       label: "Category",
-      render: (_, r) => r.ItemCategory?.category_name || "-",
+      render: (_, row) => row.ItemCategory?.category_name || "-",
     },
-
     {
       key: "vendor_id",
       label: "Vendor",
-      render: (_, r) => r.Vendor?.name || "-",
+      render: (_, row) => row.Vendor?.name || "-",
     },
     { key: "status", label: "Status", chip: true, chipMap: statusChipMap },
     { key: "asset_tag", label: "Asset Tag" },
@@ -90,44 +104,50 @@ export default function Assets() {
     {
       key: "purchased_at",
       label: "Purchased",
-      render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
+      render: (value) => (value ? new Date(value).toLocaleDateString() : "-"),
     },
     {
       key: "warranty_expiry",
       label: "Warranty",
-      render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
+      render: (value) => (value ? new Date(value).toLocaleDateString() : "-"),
     },
-
     {
       key: "custodian_name",
       label: "Custodian",
-      render: (_, row) => row.Custodian?.display_name || row.Employee?.name || "-",
+      render: (_, row) =>
+        row.Custodian?.display_name || row.Employee?.name || "-",
     },
     {
       key: "custodian_id",
       label: "Custodian ID",
       render: (_, row) =>
-        row.custodian_id || row.Employee?.emp_id || row.current_employee_id || "-",
+        row.custodian_id ||
+        row.Employee?.emp_id ||
+        row.current_employee_id ||
+        "-",
     },
     {
       key: "custodian_type",
       label: "Custodian Type",
-      render: (_, row) => row.custodian_type || (row.current_employee_id ? "EMPLOYEE" : "-"),
+      render: (_, row) =>
+        row.custodian_type || (row.current_employee_id ? "EMPLOYEE" : "-"),
     },
-
     {
       key: "division",
       label: "Division / Location",
-      render: (_, r) => r.Employee?.division || r.Custodian?.location || "-",
+      render: (_, row) =>
+        row.Employee?.division || row.Custodian?.location || "-",
     },
     { key: "notes", label: "Notes" },
   ];
+
   const fetchAssetsPage = useCallback(
     async ({ cursor, limit }) => {
       const res = await axios.get(toStoreApiUrl("/assets/search"), {
         params: {
           search: debouncedSearch || undefined,
           ...filters,
+          category_id: scopedCategoryId || undefined,
           limit,
           cursorMode: true,
           cursor: cursor || undefined,
@@ -139,7 +159,7 @@ export default function Assets() {
         meta: res?.data?.meta || {},
       };
     },
-    [debouncedSearch, filters],
+    [debouncedSearch, filters, scopedCategoryId],
   );
 
   const {
@@ -152,16 +172,25 @@ export default function Assets() {
     virtualStartIndex,
   } = useCursorWindowedList({
     fetchPage: fetchAssetsPage,
-    deps: [debouncedSearch, filters],
+    deps: [debouncedSearch, filters, scopedCategoryId],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
   });
 
+  const categoryName = useMemo(() => {
+    if (!isScopedCategoryView) return "All Assets";
+    return (
+      routeState?.categoryName ||
+      rows?.[0]?.ItemCategory?.category_name ||
+      `Category #${scopedCategoryId}`
+    );
+  }, [isScopedCategoryView, routeState?.categoryName, rows, scopedCategoryId]);
+
   /* ------------------ Effects ------------------ */
   useEffect(() => {
     setSelected([]);
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, filters, scopedCategoryId]);
 
   useEffect(() => {
     axios
@@ -176,9 +205,7 @@ export default function Assets() {
     }
 
     axios
-      .get(
-        toStoreApiUrl(`/category-group/by-head/${filters.categoryHeadId}`),
-      )
+      .get(toStoreApiUrl(`/category-group/by-head/${filters.categoryHeadId}`))
       .then((res) => setCategoryGroups(res.data.data || []));
   }, [filters.categoryHeadId]);
 
@@ -200,7 +227,7 @@ export default function Assets() {
   };
 
   const listStatuses = (assets) =>
-    [...new Set(assets.map((a) => a?.status || "Unknown"))].join(", ");
+    [...new Set(assets.map((asset) => asset?.status || "Unknown"))].join(", ");
 
   const openActionDialog = (nextDialog) => {
     if (!selected.length) {
@@ -233,7 +260,9 @@ export default function Assets() {
 
     if (allowedByAction[nextDialog]) {
       const allowed = allowedByAction[nextDialog];
-      const invalid = selectedAssets.filter((a) => !allowed.has(String(a.status)));
+      const invalid = selectedAssets.filter(
+        (asset) => !allowed.has(String(asset.status)),
+      );
       if (invalid.length) {
         setPopup({
           open: true,
@@ -255,7 +284,9 @@ export default function Assets() {
         "Retained",
         "Removed as MRN Cancelled",
       ]);
-      const invalid = selectedAssets.filter((a) => blocked.has(String(a.status)));
+      const invalid = selectedAssets.filter((asset) =>
+        blocked.has(String(asset.status)),
+      );
       if (invalid.length) {
         setPopup({
           open: true,
@@ -283,25 +314,172 @@ export default function Assets() {
     { label: "Transfer", onClick: () => openActionDialog("transfer") },
     { label: "Repair Out", onClick: () => openActionDialog("repairOut") },
     { label: "Repair In", onClick: () => openActionDialog("repairIn") },
-    { label: "Dispose / Lost / E-Waste", onClick: () => openActionDialog("finalize") },
+    {
+      label: "Dispose / Lost / E-Waste",
+      onClick: () => openActionDialog("finalize"),
+    },
     { label: "Retain", onClick: () => openActionDialog("retain") },
   ];
+
+  const resetFilters = () => {
+    setFilters({
+      status: "",
+      categoryHeadId: "",
+      categoryGroupId: "",
+      custodian_id: "",
+      custodian_type: "",
+      stock_id: "",
+      from_date: "",
+      to_date: "",
+    });
+    closeFilterPanel();
+  };
+
+  const closeFilterPanel = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setShowFilters(false);
+      setIsClosing(false);
+    }, 160);
+  };
 
   /* ------------------ Render ------------------ */
   return (
     <>
+      <button
+        type="button"
+        className="mb-4 rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-700"
+        onClick={() => navigate("/asset-categories")}
+      >
+        <span className="inline-flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Asset Categories
+        </span>
+      </button>
+
+      {/* {isScopedCategoryView && (
+        <div className="mb-4 rounded border bg-white px-4 py-3 text-sm text-gray-600">
+          Viewing category:{" "}
+          <span className="font-medium text-gray-900">{categoryName}</span>
+        </div>
+      )} */}
+
       <ListPage
-        title="Assets"
+        title="📦 Assets"
         data={rows}
         columns={columns}
         loading={loading}
-        searchPlaceholder="Search asset tag / serial / custodian / division / location..."
+        searchPlaceholder={
+          isScopedCategoryView
+            ? `Search inside ${categoryName}...`
+            : "Search asset tag / serial / custodian / division / location..."
+        }
         searchValue={search}
         onSearch={setSearch}
-        onFilter={() => setShowFilters((v) => !v)}
-        actions={actions}
+        onFilter={() =>
+          showFilters ? closeFilterPanel() : setShowFilters(true)
+        }
         showAdd={false}
         showUpdate={false}
+        aboveContent={
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={action.onClick}
+                  className="h-9 rounded bg-slate-900 px-3 text-xs text-white whitespace-nowrap hover:bg-slate-800 sm:text-sm"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+
+            {showFilters && (
+              <div ref={filterRef} className="relative mt-4">
+                <FilterPanel
+                  title="Asset Filters"
+                  fields={[
+                    {
+                      key: "status",
+                      label: "Status",
+                      type: "select",
+                      options: [
+                        { value: "InStore", label: "In Store" },
+                        { value: "Issued", label: "Issued" },
+                        { value: "InTransit", label: "In Transit" },
+                        { value: "Repair", label: "Repair" },
+                        { value: "EWaste", label: "E-Waste (In Yard)" },
+                        { value: "EWasteOut", label: "E-Waste Out" },
+                        { value: "Disposed", label: "Disposed" },
+                        { value: "Lost", label: "Lost" },
+                        { value: "Retained", label: "Retained" },
+                        {
+                          value: "Removed as MRN Cancelled",
+                          label: "Removed as MRN Cancelled",
+                        },
+                      ],
+                    },
+                    {
+                      key: "categoryHeadId",
+                      label: "Category Head",
+                      type: "select",
+                      options: categoryHeads.map((head) => ({
+                        value: head.id,
+                        label: head.category_head_name,
+                      })),
+                    },
+                    {
+                      key: "categoryGroupId",
+                      label: "Category Group",
+                      type: "select",
+                      options: categoryGroups.map((group) => ({
+                        value: group.id,
+                        label: group.category_group_name,
+                      })),
+                    },
+                    {
+                      key: "custodian_type",
+                      label: "Custodian Type",
+                      type: "select",
+                      options: [
+                        { value: "EMPLOYEE", label: "Employee" },
+                        { value: "DIVISION", label: "Division" },
+                        { value: "VEHICLE", label: "Vehicle" },
+                      ],
+                    },
+                    {
+                      key: "custodian_id",
+                      label: "Custodian",
+                      type: "select",
+                      options: custodians.map((custodian) => ({
+                        value: custodian.id,
+                        label: `${custodian.id} - ${custodian.display_name}${
+                          custodian.location ? ` (${custodian.location})` : ""
+                        }`,
+                      })),
+                    },
+                    { key: "stock_id", label: "Stock ID", type: "text" },
+                  ]}
+                  filters={filters}
+                  onChange={(key, value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      [key]: value,
+                      ...(key === "categoryHeadId"
+                        ? { categoryGroupId: "" }
+                        : {}),
+                    }))
+                  }
+                  onReset={resetFilters}
+                  onClose={closeFilterPanel}
+                  isClosing={isClosing}
+                />
+              </div>
+            )}
+          </>
+        }
         table={
           <ListTable
             data={rows}
@@ -310,7 +488,7 @@ export default function Assets() {
             onRowSelect={(id) =>
               setSelected((prev) =>
                 prev.includes(id)
-                  ? prev.filter((x) => x !== id)
+                  ? prev.filter((value) => value !== id)
                   : [...prev, id],
               )
             }
@@ -322,109 +500,14 @@ export default function Assets() {
             virtualStartIndex={virtualStartIndex}
           />
         }
-        aboveContent={
-          showFilters && (
-            <div ref={filterRef} className="relative">
-              <FilterPanel
-                title="Asset Filters"
-                fields={[
-                  {
-                    key: "status",
-                    label: "Status",
-                    type: "select",
-                    options: [
-                      { value: "InStore", label: "In Store" },
-                      { value: "Issued", label: "Issued" },
-                      { value: "InTransit", label: "In Transit" },
-                      { value: "Repair", label: "Repair" },
-                      { value: "EWaste", label: "E-Waste (In Yard)" },
-                      { value: "EWasteOut", label: "E-Waste Out" },
-                      { value: "Disposed", label: "Disposed" },
-                      { value: "Lost", label: "Lost" },
-                      { value: "Retained", label: "Retained" },
-                      {
-                        value: "Removed as MRN Cancelled",
-                        label: "Removed as MRN Cancelled",
-                      },
-                    ],
-                  },
-                  {
-                    key: "categoryHeadId",
-                    label: "Category Head",
-                    type: "select",
-                    options: categoryHeads.map((h) => ({
-                      value: h.id,
-                      label: h.category_head_name,
-                    })),
-                  },
-                  {
-                    key: "categoryGroupId",
-                    label: "Category Group",
-                    type: "select",
-                    options: categoryGroups.map((g) => ({
-                      value: g.id,
-                      label: g.category_group_name,
-                    })),
-                  },
-                  {
-                    key: "custodian_type",
-                    label: "Custodian Type",
-                    type: "select",
-                    options: [
-                      { value: "EMPLOYEE", label: "Employee" },
-                      { value: "DIVISION", label: "Division" },
-                      { value: "VEHICLE", label: "Vehicle" },
-                    ],
-                  },
-                  {
-                    key: "custodian_id",
-                    label: "Custodian",
-                    type: "select",
-                    options: custodians.map((c) => ({
-                      value: c.id,
-                      label: `${c.id} - ${c.display_name}${c.location ? ` (${c.location})` : ""}`,
-                    })),
-                  },
-                  { key: "stock_id", label: "Stock ID", type: "text" },
-                ]}
-                filters={filters}
-                onChange={(k, v) =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    [k]: v,
-                    ...(k === "categoryHeadId" ? { categoryGroupId: "" } : {}),
-                  }))
-                }
-                onReset={() => {
-                  setFilters({
-                    status: "",
-                    categoryHeadId: "",
-                    categoryGroupId: "",
-                    custodian_id: "",
-                    custodian_type: "",
-                    stock_id: "",
-                    from_date: "",
-                    to_date: "",
-                  });
-                  setShowFilters(false);
-                }}
-                onClose={() => setShowFilters(false)}
-              />
-            </div>
-          )
-        }
       />
 
-      {/* ------------------ Modals ------------------ */}
       <Modal
         isOpen={dialog === "return"}
         onClose={() => setDialog(null)}
         title="Return"
       >
-        <AssetReturnForm
-          assetIds={selected}
-          onDone={handleActionDone}
-        />
+        <AssetReturnForm assetIds={selected} onDone={handleActionDone} />
       </Modal>
 
       <Modal
@@ -432,10 +515,7 @@ export default function Assets() {
         onClose={() => setDialog(null)}
         title="Transfer"
       >
-        <AssetTransferForm
-          assetIds={selected}
-          onDone={handleActionDone}
-        />
+        <AssetTransferForm assetIds={selected} onDone={handleActionDone} />
       </Modal>
 
       <Modal
@@ -467,10 +547,7 @@ export default function Assets() {
         onClose={() => setDialog(null)}
         title="Dispose / Lost / E-Waste"
       >
-        <AssetFinalizeForm
-          assetIds={selected}
-          onDone={handleActionDone}
-        />
+        <AssetFinalizeForm assetIds={selected} onDone={handleActionDone} />
       </Modal>
 
       <Modal
@@ -478,10 +555,7 @@ export default function Assets() {
         onClose={() => setDialog(null)}
         title="Retain"
       >
-        <AssetRetainForm
-          assetIds={selected}
-          onDone={handleActionDone}
-        />
+        <AssetRetainForm assetIds={selected} onDone={handleActionDone} />
       </Modal>
 
       <PopupMessage
