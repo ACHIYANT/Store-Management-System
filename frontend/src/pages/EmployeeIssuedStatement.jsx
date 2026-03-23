@@ -186,18 +186,35 @@ export default function EmployeeIssuedStatement() {
 
     issuedItems.forEach((item) => {
       if (item.serialized && Array.isArray(item.assets) && item.assets.length) {
-        item.assets.forEach((asset) => {
+        const allHistoricalNoSerial = item.assets.every(
+          (asset) => asset?.serial_missing_migration,
+        );
+
+        if (allHistoricalNoSerial) {
           flattened.push({
             item_name: item.item_name,
             category_name: item.category_name,
             type: "Asset",
-            quantity: 1,
-            asset_id: asset.asset_id ?? asset.id ?? null,
-            asset_tag: asset.asset_tag || "-",
-            serial_number: asset.serial_number || "-",
+            quantity: item.assets.length,
+            asset_id: null,
+            asset_tag: "-",
+            serial_number: "Migrated data (Serial number not available)",
             issue_date: item.date,
           });
-        });
+        } else {
+          item.assets.forEach((asset) => {
+            flattened.push({
+              item_name: item.item_name,
+              category_name: item.category_name,
+              type: "Asset",
+              quantity: 1,
+              asset_id: asset.asset_id ?? asset.id ?? null,
+              asset_tag: asset.asset_tag || "-",
+              serial_number: asset.serial_number || "-",
+              issue_date: item.date,
+            });
+          });
+        }
       } else {
         flattened.push({
           item_name: item.item_name,

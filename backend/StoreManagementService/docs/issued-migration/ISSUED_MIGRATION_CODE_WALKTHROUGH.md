@@ -328,6 +328,11 @@ Important aliases it supports:
 - `quantity / qty`
 - `source_ref / source_reference / ref_no`
 
+Current migration policy:
+- issued migration accepts employee-based rows only.
+- division/vehicle/custodian input is intentionally rejected in this migration flow.
+- for historical asset rows where serial numbers were never recorded, one asset row may carry a cumulative quantity and the service will expand it internally.
+
 Why needed:
 - prevents strict template dependency; supports slight header variations.
 
@@ -406,11 +411,13 @@ Purpose:
 What it validates/resolves:
 1. employee id presence.
 2. employee existence.
-3. category resolution.
-4. stock resolution.
-5. optional stock auto-create when enabled.
-6. category-stock mismatch checks.
-7. issue date parse check.
+3. rejects custodian/division/vehicle style migration input for now.
+4. category resolution.
+5. stock resolution.
+6. optional stock auto-create when enabled.
+7. category-stock mismatch checks.
+8. special historical asset rows without serial number can use cumulative quantity.
+9. issue date parse check.
 
 Pre-functions used:
 - `_findCategory`

@@ -30,10 +30,18 @@ const {
   toCustodianFields,
 } = require("../utils/custodian-utils");
 
+const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
+const HISTORICAL_NO_SERIAL_DISPLAY =
+  "Migrated data (Serial number not available)";
+
 class IssuedItemRepository {
   _toPositiveIntOrNull(value) {
     const n = Number(value);
     return Number.isInteger(n) && n > 0 ? n : null;
+  }
+
+  _isHistoricalNoSerialAsset(serialNumber) {
+    return String(serialNumber || "").startsWith(HISTORICAL_NO_SERIAL_PREFIX);
   }
 
   async issueItem({
@@ -490,7 +498,12 @@ class IssuedItemRepository {
         r.AssetEvents?.map((ev) => ({
           asset_id: ev.Asset?.id,
           asset_tag: ev.Asset?.asset_tag,
-          serial_number: ev.Asset?.serial_number,
+          serial_number: this._isHistoricalNoSerialAsset(ev.Asset?.serial_number)
+            ? HISTORICAL_NO_SERIAL_DISPLAY
+            : ev.Asset?.serial_number,
+          serial_missing_migration: this._isHistoricalNoSerialAsset(
+            ev.Asset?.serial_number,
+          ),
           status: ev.Asset?.status || null,
           current_employee_id: ev.Asset?.current_employee_id ?? null,
           custodian_id: ev.Asset?.custodian_id ?? null,

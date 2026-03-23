@@ -71,8 +71,8 @@ function applyDropdownValidations({
   worksheet,
   startRow = 2,
   endRow = 5000,
-  itemTypeColumn = 9, // I
-  categoryNameColumn = 10, // J
+  itemTypeColumn = 5, // E
+  categoryNameColumn = 6, // F
 }) {
   for (let row = startRow; row <= endRow; row += 1) {
     worksheet.getCell(row, itemTypeColumn).dataValidation = {
@@ -115,15 +115,11 @@ function buildWorkbook(categoryNames) {
     },
     {
       Field: "employee_emp_id",
-      Rule: "Required for employee issuance if custodian_id/custodian_type are blank. Keep employee fields blank for continuation rows.",
+      Rule: "Required. Issued migration currently supports employee-based issuance only. Keep employee fields blank for continuation rows of the same employee.",
     },
     {
-      Field: "custodian_id + custodian_type",
-      Rule: "Optional for employee issuance. Required for division/vehicle issuance. Example: DIV-MUM-001 with DIVISION.",
-    },
-    {
-      Field: "custodian_name + custodian_location",
-      Rule: "Optional reference fields for data preparation; import resolves ownership primarily using custodian_id + custodian_type.",
+      Field: "Current scope",
+      Rule: "Do not provide division/vehicle/custodian values in this migration. Historical issued data is imported in employee format only.",
     },
     {
       Field: "category_name",
@@ -150,6 +146,10 @@ function buildWorkbook(categoryNames) {
       Rule: "For item_type=Asset: serial_number is preferred. asset_tag is optional (auto-generated if blank for new assets).",
     },
     {
+      Field: "Historical asset rows without serial number",
+      Rule: "For old register data only: if serial_number and asset_tag are both blank, give the cumulative asset quantity in one row. The system will create that many issued asset records with migration placeholders internally.",
+    },
+    {
       Field: "Consumable rows",
       Rule: "For item_type=Consumable: quantity is required, whole number (>0).",
     },
@@ -169,10 +169,6 @@ function buildWorkbook(categoryNames) {
       employee_emp_id: 101,
       employee_name: "Achiyant",
       division: "Procurement Division",
-      custodian_id: "",
-      custodian_type: "",
-      custodian_name: "",
-      custodian_location: "",
       item_type: "Asset",
       category_name: "Laptop",
       item_code: "",
@@ -193,10 +189,6 @@ function buildWorkbook(categoryNames) {
       employee_emp_id: "",
       employee_name: "",
       division: "",
-      custodian_id: "",
-      custodian_type: "",
-      custodian_name: "",
-      custodian_location: "",
       item_type: "Consumable",
       category_name: "Stationery",
       item_code: "",
@@ -214,26 +206,22 @@ function buildWorkbook(categoryNames) {
     },
     {
       item_no: 3,
-      employee_emp_id: "",
-      employee_name: "",
-      division: "",
-      custodian_id: "DIV-MUM-001",
-      custodian_type: "DIVISION",
-      custodian_name: "Administrative Division",
-      custodian_location: "Mumbai",
+      employee_emp_id: 102,
+      employee_name: "Employee Name",
+      division: "Personnel & Administrative Division",
       item_type: "Asset",
-      category_name: "Desktop",
+      category_name: "Laptop",
       item_code: "",
       item_master_id: "",
       category_id: "",
       stock_id: "",
-      item_name: "Desktop Workstation",
-      serial_number: "SN-DT-0007",
+      item_name: "Laptops i5 512GB SSD 8GB RAM",
+      serial_number: "",
       asset_tag: "",
-      quantity: "",
+      quantity: 30,
       sku_unit: "Unit",
       issue_date: "2026-02-11",
-      remarks: "New employee block starts",
+      remarks: "Historical asset issue without serial numbers",
       source_ref: "LEGACY-ISSUE-EMP102-01",
     },
   ];
@@ -249,10 +237,6 @@ function buildWorkbook(categoryNames) {
     "employee_emp_id",
     "employee_name",
     "division",
-    "custodian_id",
-    "custodian_type",
-    "custodian_name",
-    "custodian_location",
     "item_type",
     "category_name",
     "item_code",
@@ -282,16 +266,12 @@ function buildWorkbook(categoryNames) {
   issuedSheet.addRow(issuedHeaders);
   setHeaderStyle(issuedSheet.getRow(1));
   addRowsFromObjects(issuedSheet, issuedHeaders, rows);
-  addAutoFilter(issuedSheet, 1, 22, rows.length + 1);
+  addAutoFilter(issuedSheet, 1, 18, rows.length + 1);
   setColumnWidths(issuedSheet, [
     10, // item_no
     16, // employee_emp_id
     28, // employee_name
     32, // division
-    18, // custodian_id
-    16, // custodian_type
-    28, // custodian_name
-    18, // custodian_location
     14, // item_type
     30, // category_name
     18, // item_code
