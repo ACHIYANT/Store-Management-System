@@ -15,6 +15,10 @@ const {
   IssuedItem,
   Requisition,
 } = require("../models");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+} = require("../utils/location-scope");
 
 class AssetEventRepository {
   eventIncludes() {
@@ -96,6 +100,7 @@ class AssetEventRepository {
       event_type: r.event_type,
       event_date: r.event_date,
       notes: r.notes,
+      location_scope: r.location_scope || null,
       approval_document_url: r.approval_document_url ?? null,
       performed_by: r.performed_by,
       daybook_id: r.daybook_id ?? null,
@@ -197,10 +202,15 @@ class AssetEventRepository {
     }
   }
 
-  async getByAssetId(assetId) {
+  async getByAssetId(assetId, viewerActor = null) {
     try {
+      const where = { asset_id: assetId };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const rows = await AssetEvent.findAll({
-        where: { asset_id: assetId },
+        where,
         order: [
           ["event_date", "ASC"],
           ["id", "ASC"],
@@ -216,15 +226,20 @@ class AssetEventRepository {
     }
   }
 
-  async getTimeline(assetId) {
+  async getTimeline(assetId, viewerActor = null) {
     // alias of getByAssetId with explicit name
-    return this.getByAssetId(assetId);
+    return this.getByAssetId(assetId, viewerActor);
   }
 
-  async getByDayBookId(daybookId) {
+  async getByDayBookId(daybookId, viewerActor = null) {
     try {
+      const where = { daybook_id: daybookId };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const rows = await AssetEvent.findAll({
-        where: { daybook_id: daybookId },
+        where,
         order: [
           ["event_date", "ASC"],
           ["id", "ASC"],
@@ -240,10 +255,15 @@ class AssetEventRepository {
     }
   }
 
-  async getByIssuedItemId(issuedItemId) {
+  async getByIssuedItemId(issuedItemId, viewerActor = null) {
     try {
+      const where = { issued_item_id: issuedItemId };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const rows = await AssetEvent.findAll({
-        where: { issued_item_id: issuedItemId },
+        where,
         order: [
           ["event_date", "ASC"],
           ["id", "ASC"],
@@ -259,15 +279,17 @@ class AssetEventRepository {
     }
   }
 
-  async getByEmployeeHistory(employeeId) {
+  async getByEmployeeHistory(employeeId, viewerActor = null) {
     try {
+      const where = {
+        [Op.or]: [{ to_employee_id: employeeId }, { from_employee_id: employeeId }],
+      };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const rows = await AssetEvent.findAll({
-        where: {
-          [Op.or]: [
-            { to_employee_id: employeeId },
-            { from_employee_id: employeeId },
-          ],
-        },
+        where,
         order: [
           ["event_date", "ASC"],
           ["id", "ASC"],
@@ -283,10 +305,16 @@ class AssetEventRepository {
     }
   }
 
-  async recent(limit = 50) {
+  async recent(limit = 50, viewerActor = null) {
     try {
       const safeLimit = Math.max(1, Number(limit) || 50);
+      const where = {};
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const rows = await AssetEvent.findAll({
+        where,
         limit: safeLimit,
         order: [
           ["event_date", "DESC"],
@@ -315,6 +343,7 @@ class AssetEventRepository {
     issuedItemId,
     fromDate,
     toDate,
+    viewerActor = null,
   }) {
     try {
       const safePage = Math.max(1, Number(page) || 1);
@@ -328,6 +357,10 @@ class AssetEventRepository {
       };
 
       const where = {};
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
 
       if (eventType) where.event_type = eventType;
       const parsedAssetId = toNumber(assetId);

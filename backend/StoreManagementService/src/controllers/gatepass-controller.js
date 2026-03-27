@@ -16,14 +16,17 @@ const list = async (req, res) => {
       status = "",
     } = req.query || {};
 
-    const data = await service.list({
-      page: Number(page),
-      limit: normalizeLimit(limit, 20, 100),
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: parseCursorMode(cursorMode),
-      search,
-      status,
-    });
+    const data = await service.list(
+      {
+        page: Number(page),
+        limit: normalizeLimit(limit, 20, 100),
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: parseCursorMode(cursorMode),
+        search,
+        status,
+      },
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -34,7 +37,7 @@ const list = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.list error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch gate passes",
       data: [],
@@ -46,7 +49,7 @@ const list = async (req, res) => {
 
 const getById = async (req, res) => {
   try {
-    const data = await service.getById(req.params.id);
+    const data = await service.getById(req.params.id, req.user || null);
     if (!data) {
       return res.status(404).json({
         success: false,
@@ -64,7 +67,7 @@ const getById = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.getById error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch gate pass",
       data: {},
@@ -85,7 +88,7 @@ const verifyByCode = async (req, res) => {
       });
     }
 
-    const data = await service.verifyByCode(code);
+    const data = await service.verifyByCode(code, req.user || null);
     if (!data.valid) {
       return res.status(404).json({
         success: false,
@@ -103,7 +106,7 @@ const verifyByCode = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.verifyByCode error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Gate pass verification failed",
       data: {},
@@ -115,17 +118,20 @@ const verifyByCode = async (req, res) => {
 const createEWasteOutPass = async (req, res) => {
   try {
     const payload = req.body || {};
-    const data = await service.createEWasteOutPass({
-      assetIds: payload.assetIds || [],
-      notes: payload.notes || null,
-      createdBy: payload.createdBy || null,
-      vendorSignatoryName: payload.vendorSignatoryName || null,
-      vendorSignatoryAddress: payload.vendorSignatoryAddress || null,
-      issuedSignatoryEmpId: payload.issuedSignatoryEmpId || null,
-      issuedSignatoryName: payload.issuedSignatoryName || null,
-      issuedSignatoryDesignation: payload.issuedSignatoryDesignation || null,
-      issuedSignatoryDivision: payload.issuedSignatoryDivision || null,
-    });
+    const data = await service.createEWasteOutPass(
+      {
+        assetIds: payload.assetIds || [],
+        notes: payload.notes || null,
+        createdBy: payload.createdBy || null,
+        vendorSignatoryName: payload.vendorSignatoryName || null,
+        vendorSignatoryAddress: payload.vendorSignatoryAddress || null,
+        issuedSignatoryEmpId: payload.issuedSignatoryEmpId || null,
+        issuedSignatoryName: payload.issuedSignatoryName || null,
+        issuedSignatoryDesignation: payload.issuedSignatoryDesignation || null,
+        issuedSignatoryDivision: payload.issuedSignatoryDivision || null,
+      },
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -135,7 +141,7 @@ const createEWasteOutPass = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.createEWasteOutPass error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to create E-Waste gate pass",
       data: {},
@@ -148,7 +154,10 @@ const verifyOut = async (req, res) => {
   try {
     const gatePassId = Number(req.params.id);
     const { assetIds = [], verifiedBy = null } = req.body || {};
-    const data = await service.verifyOut({ gatePassId, assetIds, verifiedBy });
+    const data = await service.verifyOut(
+      { gatePassId, assetIds, verifiedBy },
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -158,7 +167,7 @@ const verifyOut = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.verifyOut error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to update gate-out verification",
       data: {},
@@ -171,7 +180,10 @@ const verifyIn = async (req, res) => {
   try {
     const gatePassId = Number(req.params.id);
     const { assetIds = [], verifiedBy = null } = req.body || {};
-    const data = await service.verifyIn({ gatePassId, assetIds, verifiedBy });
+    const data = await service.verifyIn(
+      { gatePassId, assetIds, verifiedBy },
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -181,7 +193,7 @@ const verifyIn = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.verifyIn error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to update gate-in verification",
       data: {},
@@ -193,10 +205,13 @@ const verifyIn = async (req, res) => {
 const updateSignatories = async (req, res) => {
   try {
     const gatePassId = Number(req.params.id);
-    const data = await service.updateSignatories({
-      gatePassId,
-      payload: req.body || {},
-    });
+    const data = await service.updateSignatories(
+      {
+        gatePassId,
+        payload: req.body || {},
+      },
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -206,7 +221,7 @@ const updateSignatories = async (req, res) => {
     });
   } catch (error) {
     console.error("GatePassController.updateSignatories error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to update gate pass signatories",
       data: {},

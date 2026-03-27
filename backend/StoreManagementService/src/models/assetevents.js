@@ -117,6 +117,7 @@ module.exports = (sequelize, DataTypes) => {
       notes: { type: DataTypes.TEXT, allowNull: true },
       approval_document_url: { type: DataTypes.TEXT, allowNull: true },
       performed_by: { type: DataTypes.STRING, allowNull: true },
+      location_scope: { type: DataTypes.STRING(80), allowNull: true },
     },
     {
       sequelize,

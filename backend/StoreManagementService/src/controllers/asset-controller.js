@@ -91,7 +91,11 @@ const buildAssetActionPayload = (req, { includeType = false } = {}) => {
 const finalizeApprovedDaybook = async (req, res) => {
   try {
     const { daybookId } = req.params;
-    const data = await service.finalizeApprovedDaybook(daybookId);
+    const data = await service.finalizeApprovedDaybook(
+      daybookId,
+      null,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -100,7 +104,7 @@ const finalizeApprovedDaybook = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to finalize daybook approval",
@@ -112,7 +116,11 @@ const finalizeApprovedDaybook = async (req, res) => {
 const getInStoreByStock = async (req, res) => {
   try {
     const { stockId } = req.params;
-    const result = await service.getInStoreByStock(stockId, req.query || {});
+    const result = await service.getInStoreByStock(
+      stockId,
+      req.query || {},
+      req.user || null,
+    );
     const data = Array.isArray(result) ? result : result?.rows || [];
     const meta = Array.isArray(result) ? null : result?.meta || null;
     return res.status(200).json({
@@ -124,7 +132,7 @@ const getInStoreByStock = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch in-store assets",
@@ -134,12 +142,12 @@ const getInStoreByStock = async (req, res) => {
 };
 const getAll = async (req, res) => {
   try {
-    const data = await service.getAll();
+    const data = await service.getAll(req.user || null);
     return res
       .status(200)
       .json({ data, success: true, message: "Fetched assets", err: {} });
   } catch (e) {
-    return res.status(500).json({
+    return res.status(e?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch assets",
@@ -150,7 +158,7 @@ const getAll = async (req, res) => {
 const getByEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const data = await service.getByEmployee(employeeId);
+    const data = await service.getByEmployee(employeeId, req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -159,7 +167,7 @@ const getByEmployee = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch assets by employee",
@@ -188,7 +196,7 @@ const returnAssets = async (req, res) => {
       });
     }
 
-    const data = await service.returnAssets(payload); // { assetIds, fromEmployeeId?, notes? }
+    const data = await service.returnAssets(payload, req.user || null); // { assetIds, fromEmployeeId?, notes? }
     return res.status(200).json({
       data,
       success: true,
@@ -197,7 +205,7 @@ const returnAssets = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to return assets",
@@ -238,7 +246,7 @@ const transferAssets = async (req, res) => {
       });
     }
 
-    const data = await service.transferAssets(payload); // { assetIds, fromEmployeeId?, toEmployeeId, notes? }
+    const data = await service.transferAssets(payload, req.user || null); // { assetIds, fromEmployeeId?, toEmployeeId, notes? }
     return res.status(200).json({
       data,
       success: true,
@@ -247,7 +255,7 @@ const transferAssets = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to transfer assets",
@@ -276,7 +284,7 @@ const repairOut = async (req, res) => {
       });
     }
 
-    const data = await service.repairOut(payload); // { assetIds, notes? }
+    const data = await service.repairOut(payload, req.user || null); // { assetIds, notes? }
     return res.status(200).json({
       data,
       success: true,
@@ -287,7 +295,7 @@ const repairOut = async (req, res) => {
     console.error(error);
     const errMessage =
       error?.message || error?.error?.message || "Failed to send to repair";
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: errMessage,
@@ -308,7 +316,7 @@ const repairIn = async (req, res) => {
       });
     }
 
-    const data = await service.repairIn(payload); // { assetIds, notes? }
+    const data = await service.repairIn(payload, req.user || null); // { assetIds, notes? }
     return res.status(200).json({
       data,
       success: true,
@@ -319,7 +327,7 @@ const repairIn = async (req, res) => {
     console.error(error);
     const errMessage =
       error?.message || error?.error?.message || "Failed to receive from repair";
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: errMessage,
@@ -348,7 +356,7 @@ const finalize = async (req, res) => {
       });
     }
 
-    const data = await service.finalize(payload); // { assetIds, type: "Disposed"|"Lost"|"EWaste", notes? }
+    const data = await service.finalize(payload, req.user || null); // { assetIds, type: "Disposed"|"Lost"|"EWaste", notes? }
     return res.status(200).json({
       data,
       success: true,
@@ -359,7 +367,7 @@ const finalize = async (req, res) => {
     console.error(error);
     const errMessage =
       error?.message || error?.error?.message || "Failed to finalize assets";
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: errMessage,
@@ -388,7 +396,7 @@ const retainAssets = async (req, res) => {
       });
     }
 
-    const data = await service.retain(payload);
+    const data = await service.retain(payload, req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -399,7 +407,7 @@ const retainAssets = async (req, res) => {
     console.error(error);
     const errMessage =
       error?.message || error?.error?.message || "Failed to retain assets";
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: errMessage,
@@ -413,7 +421,10 @@ const retainAssets = async (req, res) => {
 ===================================== */
 const getAssetsByCategorySummary = async (req, res) => {
   try {
-    const result = await service.getAssetsGroupedByCategory(req.query || {});
+    const result = await service.getAssetsGroupedByCategory(
+      req.query || {},
+      req.user || null,
+    );
     const data = Array.isArray(result) ? result : result?.rows || [];
     const meta = Array.isArray(result) ? null : result?.meta || null;
     return res.status(200).json({
@@ -423,7 +434,7 @@ const getAssetsByCategorySummary = async (req, res) => {
     });
   } catch (error) {
     console.error("getAssetsByCategorySummary error", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch asset categories",
     });
@@ -437,7 +448,11 @@ const getAssetsByCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await service.getAssetsByCategory(id, req.query || {});
+    const result = await service.getAssetsByCategory(
+      id,
+      req.query || {},
+      req.user || null,
+    );
     const data = Array.isArray(result) ? result : result?.rows || [];
     const meta = Array.isArray(result) ? null : result?.meta || null;
 
@@ -448,7 +463,7 @@ const getAssetsByCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("getAssetsByCategory error", error);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch assets by category",
     });
@@ -457,7 +472,7 @@ const getAssetsByCategory = async (req, res) => {
 
 const getAssets = async (req, res) => {
   try {
-    const result = await service.getAssets(req.query);
+    const result = await service.getAssets(req.query, req.user || null);
     return res.json({
       success: true,
       data: result.rows,
@@ -465,7 +480,7 @@ const getAssets = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch assets",
     });

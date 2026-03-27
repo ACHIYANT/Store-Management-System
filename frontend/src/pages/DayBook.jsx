@@ -135,29 +135,10 @@ export default function DayBook() {
           setSelectedRows(null);
         }
 
-        const roles = JSON.parse(localStorage.getItem("roles")) || [];
         let apiUrl = toStoreApiUrl("/daybook");
-
-        console.log(roles);
-        let level = null;
-        let isStoreEntry = false;
-
-        if (roles.includes("STORE_ENTRY")) {
-          isStoreEntry = true; // fetch all
-        } else if (roles.includes("CLERK_APPROVER")) {
-          level = 1;
-        } else if (roles.includes("INSPECTION_OFFICER")) {
-          level = 2;
-        } else if (roles.includes("ADMIN_APPROVER")) {
-          level = 3;
-        } else if (roles.includes("SUPER_APPROVER")) {
-          level = 4;
-        }
 
         const response = await axios.get(apiUrl, {
           params: {
-            level,
-            isStoreEntry,
             entryNo: debouncedSearchTerm || undefined,
             finYear: filters.finYear || undefined,
             status: filters.status || undefined,

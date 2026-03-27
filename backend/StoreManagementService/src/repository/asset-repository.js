@@ -30,6 +30,12 @@ const {
   ensureCustodian,
   toCustodianFields,
 } = require("../utils/custodian-utils");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+  getLocationScopeFromResolvedCustodian,
+  normalizeLocationScope,
+} = require("../utils/location-scope");
 
 const resolveCustodian = async (
   { employeeId, custodianId, custodianType },
@@ -50,6 +56,27 @@ const resolveCustodian = async (
   return ensureCustodian(normalized, { transaction });
 };
 
+const ensureSameLocationScope = (
+  sourceLocationScope,
+  targetLocationScope,
+  label,
+) => {
+  const source = normalizeLocationScope(sourceLocationScope);
+  const target = normalizeLocationScope(targetLocationScope);
+
+  if (!source || !target) {
+    throw new Error(
+      `${label} is missing location information. Please backfill the location before continuing.`,
+    );
+  }
+
+  if (source !== target) {
+    throw new Error(`${label} must belong to the same location.`);
+  }
+
+  return source;
+};
+
 /**
  * Fields referenced exist per your migrations for Assets and AssetEvents.
  * - Assets: serial_number, status, purchased_at, warranty_expiry, asset_tag,
@@ -63,6 +90,7 @@ const resolveCustodian = async (
 class AssetRepository {
   async _applyStockDelta(deltaByStockId, t, movementMeta = null) {
     const ids = Object.keys(deltaByStockId).map(Number).filter(Boolean);
+    const locationScopeByStock = movementMeta?.locationScopeByStock || {};
     for (const stockId of ids) {
       const delta = Number(deltaByStockId[stockId]) || 0;
       if (!delta) continue;
@@ -98,6 +126,10 @@ class AssetRepository {
             toEmployeeId: movementMeta.toEmployeeId || null,
             performedBy: movementMeta.performedBy || null,
             remarks: movementMeta.remarks || null,
+            locationScope:
+              locationScopeByStock[String(stockId)] ||
+              movementMeta.locationScope ||
+              null,
             metadata: metadataByStock[String(stockId)] || movementMeta.metadata || null,
           },
           { transaction: t },
@@ -109,7 +141,7 @@ class AssetRepository {
    * On approved DayBook, migrate all staged serials (migrated_at = null)
    * into Assets and emit "Created" events. DayBookItems and DayBook schema exist.
    */
-  async migrateSerialsToAssets(daybookId, transaction) {
+  async migrateSerialsToAssets(daybookId, transaction, actor = null) {
     const t = transaction;
     // const t = await sequelize.transaction();
     if (!t) {
@@ -117,6 +149,13 @@ class AssetRepository {
     }
     const db = await DayBook.findByPk(daybookId, { transaction: t });
     if (!db) throw new Error("DayBook not found");
+    if (actor) {
+      assertActorCanAccessLocation(
+        actor,
+        db.location_scope,
+        "finalize approved daybooks for this location",
+      );
+    }
     // if (db.approval_level !== 3) throw new Error("DayBook not approved");
     if (db.status !== "Approved") throw new Error("DayBook not approved");
 
@@ -148,6 +187,7 @@ class AssetRepository {
             vendor_id: db.vendor_id || null,
             current_employee_id: null,
             ...toCustodianFields(null),
+            location_scope: db.location_scope || null,
           },
           { transaction: t },
         );
@@ -159,6 +199,7 @@ class AssetRepository {
             event_date: db.bill_date || new Date(),
             daybook_id: db.id,
             daybook_item_id: it.id,
+            location_scope: db.location_scope || null,
             notes: "Created from approved DayBook",
           },
           { transaction: t },
@@ -176,6 +217,7 @@ class AssetRepository {
   async getInStoreByStock(
     stockId,
     { search = "", limit = null, cursor = null, cursorMode = false } = {},
+    actor = null,
   ) {
     const where = {
       stock_id: stockId,
@@ -190,6 +232,11 @@ class AssetRepository {
         { asset_tag: { [Op.like]: like } },
         { serial_number: { [Op.like]: like } },
       ];
+    }
+
+    const locationWhere = buildLocationScopeWhere(actor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
     }
 
     const order = [["id", "DESC"]];
@@ -227,15 +274,21 @@ class AssetRepository {
   }
 
   /** List assets currently with an employee. */
-  async getByEmployee(employeeId) {
-    return Asset.findAll({
-      where: {
-        current_employee_id: employeeId,
-        status: {
-          [Op.in]: ["Issued", "Repair"],
-        },
-        is_active: true,
+  async getByEmployee(employeeId, actor = null) {
+    const where = {
+      current_employee_id: employeeId,
+      status: {
+        [Op.in]: ["Issued", "Repair"],
       },
+      is_active: true,
+    };
+    const locationWhere = buildLocationScopeWhere(actor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
+
+    return Asset.findAll({
+      where,
       include: [
         {
           model: ItemCategory,
@@ -246,9 +299,14 @@ class AssetRepository {
       order: [["id", "ASC"]],
     });
   }
-  async getAll() {
+  async getAll(actor = null) {
+    const where = { is_active: true };
+    const locationWhere = buildLocationScopeWhere(actor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
     return await Asset.findAll({
-      where: { is_active: true },
+      where,
       order: [["id", "DESC"]],
     });
   }
@@ -260,6 +318,7 @@ class AssetRepository {
     fromCustodianType,
     notes,
     approvalDocumentUrl,
+    actor = null,
   }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
@@ -283,7 +342,13 @@ class AssetRepository {
         throw new Error("One or more assets not found");
       // accumulate increments per stock
       const incr = {};
+      const locationScopeByStock = {};
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "return assets from this location",
+        );
         const inferredFromCustodian =
           fromCustodian ||
           normalizeCustodianInput({
@@ -310,12 +375,16 @@ class AssetRepository {
               inferredFromCustodian?.type ??
               (a.current_employee_id != null ? "EMPLOYEE" : null),
             ...toCustodianFields(inferredFromCustodian),
+            location_scope: assetLocationScope,
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
           { transaction: t },
         );
-        if (a.stock_id) incr[a.stock_id] = (incr[a.stock_id] || 0) + 1;
+        if (a.stock_id) {
+          incr[a.stock_id] = (incr[a.stock_id] || 0) + 1;
+          locationScopeByStock[String(a.stock_id)] = assetLocationScope;
+        }
       }
       // reflect back in Stock.quantity
       await this._applyStockDelta(incr, t, {
@@ -325,6 +394,7 @@ class AssetRepository {
         fromEmployeeId: fromEmployeeId || null,
         performedBy: "Asset Return",
         remarks: notes || "Asset returned to store",
+        locationScopeByStock,
       });
       await t.commit();
       return { affected: assets.length };
@@ -345,6 +415,7 @@ class AssetRepository {
     toCustodianType,
     notes,
     approvalDocumentUrl,
+    actor = null,
   }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
@@ -368,6 +439,7 @@ class AssetRepository {
         { required: true },
       );
       const resolvedToEmployeeId = toCustodian?.employeeId ?? null;
+      const toLocationScope = getLocationScopeFromResolvedCustodian(toCustodian);
 
       const assets = await Asset.findAll({
         where: { id: assetIds, status: "Issued" },
@@ -378,6 +450,16 @@ class AssetRepository {
         throw new Error("One or more assets are not in Issued state");
 
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "transfer assets from this location",
+        );
+        ensureSameLocationScope(
+          assetLocationScope,
+          toLocationScope,
+          "Transfer target",
+        );
         await a.update(
           {
             current_employee_id: resolvedToEmployeeId,
@@ -397,6 +479,7 @@ class AssetRepository {
             to_custodian_id: toCustodian?.id ?? null,
             to_custodian_type: toCustodian?.type ?? null,
             ...toCustodianFields(toCustodian),
+            location_scope: assetLocationScope,
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -413,7 +496,13 @@ class AssetRepository {
   }
 
   /** Send assets to repair and log events. */
-  async repairOut({ assetIds = [], notes, createdBy, approvalDocumentUrl }) {
+  async repairOut({
+    assetIds = [],
+    notes,
+    createdBy,
+    approvalDocumentUrl,
+    actor = null,
+  }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
 
@@ -439,7 +528,13 @@ class AssetRepository {
         );
       }
       const decr = {};
+      const locationScopeByStock = {};
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "send assets to repair from this location",
+        );
         const wasInStore = a.status === "InStore"; // capture BEFORE update
         const updatePayload = { status: "Repair" };
         if (wasInStore) {
@@ -452,6 +547,7 @@ class AssetRepository {
             asset_id: a.id,
             event_type: "RepairOut",
             event_date: new Date(),
+            location_scope: assetLocationScope,
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -460,6 +556,7 @@ class AssetRepository {
         if (wasInStore && a.stock_id) {
           // only decrement if it was previously available in store
           decr[a.stock_id] = (decr[a.stock_id] || 0) - 1;
+          locationScopeByStock[String(a.stock_id)] = assetLocationScope;
         }
       }
 
@@ -469,12 +566,14 @@ class AssetRepository {
         movementAt: new Date(),
         performedBy: createdBy?.name || createdBy?.fullname || "Asset Repair",
         remarks: notes || "Asset moved to repair",
+        locationScopeByStock,
       });
       const gatePassRepo = new GatePassRepository();
       const gatePass = await gatePassRepo.createRepairOutPass({
         assets,
         notes,
         createdBy,
+        actor,
         transaction: t,
       });
 
@@ -487,7 +586,7 @@ class AssetRepository {
   }
 
   /** Receive assets back from repair and log events. */
-  async repairIn({ assetIds = [], notes }) {
+  async repairIn({ assetIds = [], notes, actor = null }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
 
@@ -541,7 +640,13 @@ class AssetRepository {
       if (assets.length !== normalizedAssetIds.length)
         throw new Error("One or more assets are not in Repair state");
       const incr = {};
+      const locationScopeByStock = {};
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "receive repaired assets for this location",
+        );
         // return to store; custody reassignment can be handled by issue flow
         await a.update(
           {
@@ -556,11 +661,15 @@ class AssetRepository {
             asset_id: a.id,
             event_type: "RepairIn",
             event_date: new Date(),
+            location_scope: assetLocationScope,
             notes: notes || null,
           },
           { transaction: t },
         );
-        if (a.stock_id) incr[a.stock_id] = (incr[a.stock_id] || 0) + 1;
+        if (a.stock_id) {
+          incr[a.stock_id] = (incr[a.stock_id] || 0) + 1;
+          locationScopeByStock[String(a.stock_id)] = assetLocationScope;
+        }
       }
       await this._applyStockDelta(incr, t, {
         movementType: "REPAIR_IN",
@@ -568,6 +677,7 @@ class AssetRepository {
         movementAt: new Date(),
         performedBy: "Asset Repair",
         remarks: notes || "Asset returned from repair",
+        locationScopeByStock,
       });
       await t.commit();
       return {
@@ -583,7 +693,13 @@ class AssetRepository {
   }
 
   /** Dispose or mark lost and log events. */
-  async finalize({ assetIds = [], type = "Disposed", notes, approvalDocumentUrl }) {
+  async finalize({
+    assetIds = [],
+    type = "Disposed",
+    notes,
+    approvalDocumentUrl,
+    actor = null,
+  }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
     if (!["Disposed", "Lost", "EWaste"].includes(type))
@@ -620,7 +736,13 @@ class AssetRepository {
 
       // Track stock decrements only for assets that were actually InStore
       const decr = {};
+      const locationScopeByStock = {};
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "finalize assets for this location",
+        );
         const wasInStore = a.status === "InStore"; // capture BEFORE update
         const eventType = type === "EWaste" ? "MarkedEWaste" : type;
         await a.update(
@@ -632,6 +754,7 @@ class AssetRepository {
             asset_id: a.id,
             event_type: eventType,
             event_date: new Date(),
+            location_scope: assetLocationScope,
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -640,6 +763,7 @@ class AssetRepository {
         // Business rule: disposing an InStore asset reduces available stock
         if ((type === "Disposed" || type === "EWaste") && wasInStore && a.stock_id) {
           decr[a.stock_id] = (decr[a.stock_id] || 0) - 1;
+          locationScopeByStock[String(a.stock_id)] = assetLocationScope;
         }
         // If you also want "Lost" to reduce stock when lost from store, uncomment:
         // if (type === "Lost" && wasInStore && a.stock_id) {
@@ -660,6 +784,7 @@ class AssetRepository {
         movementAt: new Date(),
         performedBy: "Asset Finalization",
         remarks: notes || `Asset marked as ${type}`,
+        locationScopeByStock,
         metadata: {
           finalize_type: type,
         },
@@ -674,7 +799,7 @@ class AssetRepository {
   }
 
   /** Mark issued assets as retained by employee (retirement policy). */
-  async retain({ assetIds = [], notes, approvalDocumentUrl }) {
+  async retain({ assetIds = [], notes, approvalDocumentUrl, actor = null }) {
     if (!Array.isArray(assetIds) || assetIds.length === 0)
       throw new Error("assetIds[] is required");
 
@@ -705,6 +830,11 @@ class AssetRepository {
       }
 
       for (const a of assets) {
+        const assetLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          a.location_scope,
+          "retain assets for this location",
+        );
         const retainedEmployeeId = a.current_employee_id;
         await a.update(
           { status: "Retained", current_employee_id: null, ...toCustodianFields(null) },
@@ -725,6 +855,7 @@ class AssetRepository {
             to_custodian_id: retainedCustodian?.id ?? null,
             to_custodian_type: retainedCustodian?.type ?? null,
             ...toCustodianFields(retainedCustodian),
+            location_scope: assetLocationScope,
             notes: notes || null,
             approval_document_url: approvalDocumentUrl || null,
           },
@@ -751,9 +882,14 @@ class AssetRepository {
     limit = null,
     cursor = null,
     cursorMode = false,
+    viewerActor = null,
   } = {}) {
     try {
       const where = { is_active: true };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const useCursorMode = Boolean(cursorMode) && limit != null;
       const safeLimit = useCursorMode ? normalizeLimit(limit, 100, 500) : null;
       const cursorParts = useCursorMode ? decodeCursor(cursor) : null;
@@ -831,13 +967,17 @@ class AssetRepository {
   ===================================== */
   async getAssetsByCategory(
     categoryId,
-    { limit = null, cursor = null, cursorMode = false } = {},
+    { limit = null, cursor = null, cursorMode = false, viewerActor = null } = {},
   ) {
     try {
       const where = {
         item_category_id: categoryId,
         is_active: true,
       };
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
       const useCursorMode = Boolean(cursorMode) && limit != null;
       const safeLimit = useCursorMode ? normalizeLimit(limit, 100, 500) : null;
       const cursorParts = useCursorMode ? decodeCursor(cursor) : null;
@@ -890,9 +1030,14 @@ class AssetRepository {
     limit = 50,
     cursor = null,
     cursorMode = false,
+    viewerActor = null,
   }) {
     const where = {};
     where.is_active = true;
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
 
     if (filters.status) where.status = filters.status;
     if (filters.category_id) where.item_category_id = filters.category_id;

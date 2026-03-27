@@ -23,6 +23,7 @@ const {
 
 const axios = require("axios");
 const { AUTH_BASE_URL } = require("../config/serverConfig");
+const { buildLocationScopeWhere } = require("../utils/location-scope");
 
 const APPROVER_TOKEN = "|";
 
@@ -50,14 +51,19 @@ function addApproverId(serialized, userId) {
   return `${APPROVER_TOKEN}${[...merged].sort((a, b) => a - b).join(APPROVER_TOKEN)}${APPROVER_TOKEN}`;
 }
 
-function buildScopedVisibilityConditions({ viewerUserId, viewerRoleStageOrders }) {
+function buildScopedVisibilityConditions({
+  viewerUserId,
+  viewerRoleStageOrders,
+}) {
   const conditions = [];
   const numericUserId = toNumber(viewerUserId);
 
   if (Number.isFinite(numericUserId)) {
     conditions.push({ created_by_user_id: numericUserId });
     conditions.push({
-      approved_by_user_ids: { [Op.like]: `%${APPROVER_TOKEN}${numericUserId}${APPROVER_TOKEN}%` },
+      approved_by_user_ids: {
+        [Op.like]: `%${APPROVER_TOKEN}${numericUserId}${APPROVER_TOKEN}%`,
+      },
     });
   }
 
@@ -213,6 +219,7 @@ class DayBookRepository {
         applyOwnershipScope = false,
         viewerUserId = null,
         viewerRoleStageOrders = [],
+        viewerActor = null,
       } = filters;
       const whereClause = {};
       console.log(
@@ -230,7 +237,12 @@ class DayBookRepository {
       );
 
       // ✅ Legacy role based filtering (kept for backward compatibility)
-      if (!enforceStageInbox && !applyOwnershipScope && !storeFlag && lvll !== null) {
+      if (
+        !enforceStageInbox &&
+        !applyOwnershipScope &&
+        !storeFlag &&
+        lvll !== null
+      ) {
         whereClause.approval_level = lvll;
       }
 
@@ -282,10 +294,17 @@ class DayBookRepository {
         }
       }
 
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(whereClause, locationWhere);
+      }
+
       const parseCursor = (rawCursor) => {
         if (!rawCursor) return null;
         try {
-          const decoded = Buffer.from(String(rawCursor), "base64").toString("utf8");
+          const decoded = Buffer.from(String(rawCursor), "base64").toString(
+            "utf8",
+          );
           const payload = JSON.parse(decoded);
           if (!payload?.createdAt || payload?.id == null) return null;
           const createdAtDate = new Date(payload.createdAt);
@@ -300,9 +319,10 @@ class DayBookRepository {
 
       const encodeCursor = (row) => {
         const payload = JSON.stringify({
-          createdAt: row.createdAt instanceof Date
-            ? row.createdAt.toISOString()
-            : new Date(row.createdAt).toISOString(),
+          createdAt:
+            row.createdAt instanceof Date
+              ? row.createdAt.toISOString()
+              : new Date(row.createdAt).toISOString(),
           id: row.id,
         });
         return Buffer.from(payload, "utf8").toString("base64");
@@ -317,9 +337,7 @@ class DayBookRepository {
       };
 
       const hasCursorPagination =
-        Boolean(cursorMode) &&
-        Number.isInteger(limit) &&
-        limit > 0;
+        Boolean(cursorMode) && Number.isInteger(limit) && limit > 0;
 
       if (hasCursorPagination) {
         const cursorParts = parseCursor(cursor);
@@ -344,7 +362,9 @@ class DayBookRepository {
         const hasMore = rowsWithExtra.length > limit;
         const rows = hasMore ? rowsWithExtra.slice(0, limit) : rowsWithExtra;
         const nextCursor =
-          hasMore && rows.length > 0 ? encodeCursor(rows[rows.length - 1]) : null;
+          hasMore && rows.length > 0
+            ? encodeCursor(rows[rows.length - 1])
+            : null;
 
         return {
           rows,
@@ -399,6 +419,7 @@ class DayBookRepository {
         applyOwnershipScope = false,
         viewerUserId = null,
         viewerRoleStageOrders = [],
+        viewerActor = null,
       } = options;
 
       const whereClause = {
@@ -413,6 +434,11 @@ class DayBookRepository {
         if (scopedConditions.length > 0) {
           whereClause[Op.and] = [{ [Op.or]: scopedConditions }];
         }
+      }
+
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(whereClause, locationWhere);
       }
 
       const dayBook = await DayBook.findAll({
@@ -443,6 +469,7 @@ class DayBookRepository {
         applyOwnershipScope = false,
         viewerUserId = null,
         viewerRoleStageOrders = [],
+        viewerActor = null,
       } = options;
 
       const whereClause = {
@@ -484,6 +511,11 @@ class DayBookRepository {
         if (scopedConditions.length > 0) {
           whereClause[Op.and] = [{ [Op.or]: scopedConditions }];
         }
+      }
+
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(whereClause, locationWhere);
       }
 
       const dayBooks = await DayBook.findAll({ where: whereClause });
@@ -528,15 +560,18 @@ class DayBookRepository {
 
   // Approve DayBook to next stage
   // ! The below function is use for moving the daybook entry to the next stage by checking the active stages and the currect stage fo the daybook if still there is any left stage then it will push the daybook to the next stage.
-  async advanceApprovalUsingStages(id, transaction = null, approverUserId = null) {
+  async advanceApprovalUsingStages(
+    id,
+    transaction = null,
+    approverUserId = null,
+  ) {
     const daybook = await DayBook.findByPk(id, { transaction });
     if (!daybook) throw new Error("DayBook not found");
 
     // Fetch approval stages from AuthService
-    const { data } = await axios.get(
-      `${AUTH_BASE_URL}/approval/stages`,
-      { params: { flow_type: "DAYBOOK" } },
-    );
+    const { data } = await axios.get(`${AUTH_BASE_URL}/approval/stages`, {
+      params: { flow_type: "DAYBOOK" },
+    });
 
     const stages = (data.data || []).filter((s) => s.active);
 
@@ -649,6 +684,7 @@ class DayBookRepository {
     applyOwnershipScope = false,
     viewerUserId = null,
     viewerRoleStageOrders = [],
+    viewerActor = null,
   }) {
     try {
       const where = {
@@ -685,6 +721,11 @@ class DayBookRepository {
         }
       }
 
+      const locationWhere = buildLocationScopeWhere(viewerActor || {});
+      if (locationWhere) {
+        Object.assign(where, locationWhere);
+      }
+
       const order = [
         ["createdAt", "DESC"],
         ["id", "DESC"],
@@ -694,7 +735,12 @@ class DayBookRepository {
       if (useCursorMode) {
         const safeLimit = normalizeLimit(limit, 100, 500);
         const cursorParts = decodeCursor(cursor);
-        const cursorWhere = applyDateIdDescCursor(where, cursorParts, "createdAt", "id");
+        const cursorWhere = applyDateIdDescCursor(
+          where,
+          cursorParts,
+          "createdAt",
+          "id",
+        );
 
         const rowsWithExtra = await DayBook.findAll({
           where: cursorWhere,
@@ -702,7 +748,9 @@ class DayBookRepository {
           limit: safeLimit + 1,
         });
         const hasMore = rowsWithExtra.length > safeLimit;
-        const rows = hasMore ? rowsWithExtra.slice(0, safeLimit) : rowsWithExtra;
+        const rows = hasMore
+          ? rowsWithExtra.slice(0, safeLimit)
+          : rowsWithExtra;
         const nextCursor =
           hasMore && rows.length
             ? encodeCursor({

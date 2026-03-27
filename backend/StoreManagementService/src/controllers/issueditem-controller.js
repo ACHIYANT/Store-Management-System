@@ -72,7 +72,7 @@ const issue = async (req, res) => {
         custodianType: resolvedCustodianType,
         assetIds,
         skuUnit: normalizedSkuUnit,
-      });
+      }, req.user || null);
     } else {
       // non-serialized flow
       if (!quantity) {
@@ -90,7 +90,7 @@ const issue = async (req, res) => {
         custodianType: resolvedCustodianType,
         quantity,
         skuUnit: normalizedSkuUnit,
-      });
+      }, req.user || null);
     }
 
     return res.status(201).json({
@@ -101,7 +101,7 @@ const issue = async (req, res) => {
     });
   } catch (error) {
     console.error("IssuedItemController.issue error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Issuance failed",
@@ -132,7 +132,7 @@ async function listAll(req, res) {
     });
   } catch (error) {
     console.error("Error in issuedItemController.listAll:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch issued items",
       data: [],
@@ -166,21 +166,24 @@ async function search(req, res) {
     const useCursorMode = parseCursorMode(cursorMode);
     const useCurrentOnly = parseCursorMode(currentOnly);
 
-    const result = await service.search({
-      page: Number(page),
-      limit: safeLimit,
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: useCursorMode,
-      currentOnly: useCurrentOnly,
-      search,
-      employeeId,
-      custodianId: custodianId ?? custodian_id,
-      custodianType: custodianType ?? custodian_type,
-      categoryId,
-      itemType,
-      fromDate,
-      toDate,
-    });
+    const result = await service.search(
+      {
+        page: Number(page),
+        limit: safeLimit,
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: useCursorMode,
+        currentOnly: useCurrentOnly,
+        search,
+        employeeId,
+        custodianId: custodianId ?? custodian_id,
+        custodianType: custodianType ?? custodian_type,
+        categoryId,
+        itemType,
+        fromDate,
+        toDate,
+      },
+      req.user || null,
+    );
 
     const meta = result?.meta
       ? result.meta
@@ -199,7 +202,9 @@ async function search(req, res) {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, data: [], meta: {} });
+    res
+      .status(err?.statusCode || 500)
+      .json({ success: false, data: [], meta: {} });
   }
 }
 
@@ -274,6 +279,7 @@ const issueBulk = async (req, res) => {
   } catch (e) {
     console.error("issueBulk error:", e);
     const statusCode =
+      e?.statusCode ||
       e?.name === "SequelizeForeignKeyConstraintError" ||
       e?.name === "SequelizeValidationError" ||
       e?.message?.includes("requisition") ||

@@ -4,6 +4,7 @@ const UserController = require("../../controllers/user-controller");
 const { AuthRequestValidator } = require("../../middlewares/index");
 const ApprovalController = require("../../controllers/approval-controller");
 const ForensicAuditController = require("../../controllers/forensic-audit-controller");
+const OrgAssignmentController = require("../../controllers/org-assignment-controller");
 const {
   ensureAuth,
   requireAnyRole,
@@ -49,6 +50,73 @@ router.get(
 );
 
 router.get("/users/isAuthenticated", UserController.isAuthenticated);
+router.get(
+  "/users",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.listUsers,
+);
+router.get(
+  "/users/:userId/roles",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.getRoles,
+);
+router.get(
+  "/users/:userId/location-scopes",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.getLocationScopes,
+);
+router.post(
+  "/users/:userId/roles",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.assignRole,
+);
+router.post(
+  "/users/:userId/location-scopes",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.assignLocationScope,
+);
+router.delete(
+  "/users/:userId/roles/:roleName",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.removeRole,
+);
+router.delete(
+  "/users/:userId/location-scopes/:locationScope",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.removeLocationScope,
+);
+router.get(
+  "/roles",
+  ensureAuth,
+  requireAdminOperations,
+  UserController.listRoles,
+);
+
+router.get(
+  "/org-assignments",
+  ensureAuth,
+  requireAdminOperations,
+  OrgAssignmentController.list,
+);
+router.post(
+  "/org-assignments",
+  ensureAuth,
+  requireAdminOperations,
+  OrgAssignmentController.assign,
+);
+router.patch(
+  "/org-assignments/:assignmentId/end",
+  ensureAuth,
+  requireAdminOperations,
+  OrgAssignmentController.end,
+);
 
 router.get("/approval/stages", ApprovalController.getApprovalStages);
 router.post(

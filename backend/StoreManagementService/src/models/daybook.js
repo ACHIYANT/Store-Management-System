@@ -112,6 +112,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      location_scope: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       approved_by_user_ids: {
         type: DataTypes.TEXT,
         allowNull: true,

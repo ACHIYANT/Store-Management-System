@@ -10,7 +10,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export  function SelectScrollable({ division, setDivision }) {
+// ✅ Single source of truth
+const DIVISIONS = [
+  "Procurement (Proc.)",
+  "Business Promotion Group (BPG)",
+  "Computer Education & Training - Assessment",
+  "Computer Education & Training - Awarding - I",
+  "Computer Education & Training - Awarding - II",
+  "Deployment Division",
+  "Estate Management (EM)",
+  "Finance & Accounts (F&A)",
+  "Information & Communication Technology (ICT) - I",
+  "JMD Camp Office",
+  "JMD Office",
+  "Legal Secretarial & CSR",
+  "MD Camp Office",
+  "MD Office",
+  "Personnel & Administration (P&A)",
+  "Project Division - 1",
+  "Project Division - 2",
+  "Scanning & Digitization",
+  "Telecom & Data Services (TDS)",
+];
+
+export function SelectScrollable({ division, setDivision }) {
   return (
     <div className="w-full flex flex-col">
       <Select value={division} onValueChange={setDivision} className="w-full">
@@ -20,25 +43,12 @@ export  function SelectScrollable({ division, setDivision }) {
         <SelectContent className="">
           <SelectGroup className="">
             <SelectLabel>Divisions</SelectLabel>
-            <SelectItem value="Procurement Division">
-              Procurement Division
-            </SelectItem>
-            <SelectItem value="Administrative Division">
-              Administrative Division
-            </SelectItem>
-            <SelectItem value="Assessment Division">
-              Assessment Division
-            </SelectItem>
-            <SelectItem value="Awarding Division">Awarding Division</SelectItem>
-            <SelectItem value="CS Division">CS Division</SelectItem>
-            <SelectItem value="MD Staff">MD Staff</SelectItem>
-            <SelectItem value="ICT Division">ICT Division</SelectItem>
-            <SelectItem value="BPG Division">BPG Division</SelectItem>
-            <SelectItem value="TDS Division">TDS Division</SelectItem>
-            <SelectItem value="Accounts Division">Accounts Division</SelectItem>
-            <SelectItem value="Deployment Division">
-              Deployment Division
-            </SelectItem>
+            {/* ✅ Dynamic rendering */}
+            {DIVISIONS.map((item) => (
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
+            ))}
           </SelectGroup>
         </SelectContent>
       </Select>

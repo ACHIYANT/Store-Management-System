@@ -6,10 +6,14 @@ const {
   AssetEvent,
   DayBookItem,
   DayBookItemSerial,
+  Employee,
+  Custodian,
 } = require("../models");
+const { Op } = require("sequelize");
 const { normalizeSkuUnit } = require("../utils/sku-units");
 const { ensureItemMaster } = require("./item-master-service");
 const { logStockMovement } = require("./stock-movement-service");
+const { normalizeLocationScope } = require("../utils/location-scope");
 
 const MIGRATION_DAYBOOK_ID = 107; // <-- replace with yours
 const OPENING_VENDOR_ID = 55; // replace with your actual Opening Vendor ID
@@ -23,6 +27,10 @@ const SERIALIZED_AFFECTED_TABLES = [
 ];
 
 class MigrationService {
+  constructor() {
+    this._cachedImplicitLocationScope = undefined;
+  }
+
   resolveSkuUnit(value) {
     return normalizeSkuUnit(value ?? "Unit");
   }
@@ -84,6 +92,86 @@ class MigrationService {
     }
 
     return null;
+  }
+
+  async getImplicitSingleLocationScope(transaction) {
+    if (this._cachedImplicitLocationScope !== undefined) {
+      return this._cachedImplicitLocationScope;
+    }
+
+    const [employeeRows, custodianRows] = await Promise.all([
+      Employee.findAll({
+        attributes: [
+          [sequelize.fn("DISTINCT", sequelize.col("office_location")), "office_location"],
+        ],
+        where: {
+          office_location: { [Op.ne]: null },
+        },
+        raw: true,
+        transaction,
+      }),
+      Custodian.findAll({
+        attributes: [[sequelize.fn("DISTINCT", sequelize.col("location")), "location"]],
+        where: {
+          location: { [Op.ne]: null },
+        },
+        raw: true,
+        transaction,
+      }),
+    ]);
+
+    const scopes = [
+      ...new Set(
+        [...employeeRows, ...custodianRows]
+          .map((row) =>
+            normalizeLocationScope(row.office_location || row.location || null),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    this._cachedImplicitLocationScope = scopes.length === 1 ? scopes[0] : null;
+    return this._cachedImplicitLocationScope;
+  }
+
+  async resolveGroupLocationScope(records = [], stock = null, transaction = null) {
+    const explicitScopes = [
+      ...new Set(
+        (records || [])
+          .flatMap((row) => [
+            row?.location_scope,
+            row?.location,
+            row?.office_location,
+            row?.store_location,
+          ])
+          .map((value) => normalizeLocationScope(value))
+          .filter(Boolean),
+      ),
+    ];
+
+    const stockScope = normalizeLocationScope(stock?.location_scope || null);
+    if (stockScope && !explicitScopes.includes(stockScope)) {
+      explicitScopes.push(stockScope);
+    }
+
+    if (explicitScopes.length > 1) {
+      throw new Error(
+        `Rows ${records.map((row) => this.getRowNo(row, 0)).filter(Boolean).join(", ")} contain multiple locations. Opening stock groups must stay within a single location.`,
+      );
+    }
+
+    if (explicitScopes.length === 1) {
+      return explicitScopes[0];
+    }
+
+    const implicitScope = await this.getImplicitSingleLocationScope(transaction);
+    if (implicitScope) {
+      return implicitScope;
+    }
+
+    throw new Error(
+      `Rows ${records.map((row) => this.getRowNo(row, 0)).filter(Boolean).join(", ")} need location_scope/location because the system has multiple locations.`,
+    );
   }
 
   getWouldAffectTables(serializedRequired = false) {
@@ -452,6 +540,11 @@ class MigrationService {
           where: { item_name: sample.item_name, sku_unit: skuUnit, is_active: true },
           transaction,
         });
+        const locationScope = await this.resolveGroupLocationScope(
+          records,
+          stock,
+          transaction,
+        );
         const stockQtyBefore = Number(stock?.quantity || 0);
         let stockAction = "created";
         let stockQtyAfter = totalQty;
@@ -468,6 +561,7 @@ class MigrationService {
               item_category_id: category.id,
               item_master_id: itemMasterId,
               source: "MIGRATION",
+              location_scope: locationScope,
             },
             { transaction },
           );
@@ -481,9 +575,11 @@ class MigrationService {
             {
               quantity: nextQty,
               item_master_id: stock.item_master_id || itemMasterId,
+              location_scope: stock.location_scope || locationScope,
             },
             { transaction },
           );
+          stock.location_scope = stock.location_scope || locationScope;
           affected.stocksUpdated.add(stock.id);
           affected.stocksTouched.add(stock.id);
         }
@@ -507,6 +603,7 @@ class MigrationService {
             referenceId: stock.id,
             performedBy: "System Migration",
             remarks: "Opening stock migration import",
+            locationScope,
           },
           { transaction },
         );
@@ -610,6 +707,7 @@ class MigrationService {
                 purchased_at: purchasedDate, // ✅ fixed date
                 warranty_expiry: warrantyDate, // ✅ fixed date
                 status: "InStore",
+                location_scope: locationScope,
                 notes: "MIGRATED_OPENING_STOCK", // ✅ uniform tag
               },
               { transaction },
@@ -623,6 +721,7 @@ class MigrationService {
                 event_date: new Date(),
                 daybook_id: MIGRATION_DAYBOOK_ID, // ✅ add
                 daybook_item_id: daybookItem.id, // ✅ add
+                location_scope: locationScope,
                 notes: "MIGRATED_OPENING_STOCK", // ✅ uniform
                 performed_by: "System Migration",
               },

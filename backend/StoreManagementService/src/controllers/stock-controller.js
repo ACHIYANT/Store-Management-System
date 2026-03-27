@@ -27,7 +27,11 @@ const moveDayBookItemsToStock = async (req, res) => {
     const { daybookId } = req.params; // Get daybookId from the route parameter
 
     // Call the service to move items to stock
-    const stocks = await stockService.moveDayBookItemsToStock(daybookId);
+    const stocks = await stockService.moveDayBookItemsToStock(
+      daybookId,
+      null,
+      req.user || null,
+    );
 
     // Return response
     return res.status(200).json({
@@ -37,7 +41,7 @@ const moveDayBookItemsToStock = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in StockController:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Error moving DayBookItems to Stock",
       error: error.message,
@@ -46,7 +50,7 @@ const moveDayBookItemsToStock = async (req, res) => {
 };
 const getAll = async (req, res) => {
   try {
-    const data = await stockService.getAll();
+    const data = await stockService.getAll(req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -54,7 +58,7 @@ const getAll = async (req, res) => {
       err: {},
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch stocks",
@@ -82,16 +86,19 @@ const getAllStocksByCategory = async (req, res) => {
         ? normalizeLimit(limit, 100, 500)
         : null;
 
-    const data = await stockService.getAllStocksByCategory({
-      search,
-      categoryHeadId,
-      categoryGroupId,
-      stockLevel,
-      source: parseStockSource(source),
-      limit: safeLimit,
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: useCursorMode,
-    });
+    const data = await stockService.getAllStocksByCategory(
+      {
+        search,
+        categoryHeadId,
+        categoryGroupId,
+        stockLevel,
+        source: parseStockSource(source),
+        limit: safeLimit,
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: useCursorMode,
+      },
+      req.user || null,
+    );
 
     const rows = Array.isArray(data) ? data : data?.rows || [];
     const meta = Array.isArray(data) ? null : data?.meta || null;
@@ -104,7 +111,7 @@ const getAllStocksByCategory = async (req, res) => {
       err: {},
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       data: {},
       message: "Failed to fetch stocks",
@@ -132,16 +139,20 @@ const getStocksByCategoryId = async (req, res) => {
         ? normalizeLimit(limit, 100, 500)
         : null;
 
-    const response = await stockService.getStocksByCategoryId(req.params.id, {
-      search,
-      stockLevel,
-      onlyInStock: parseBoolean(onlyInStock, false),
-      groupByMaster: parseBoolean(groupByMaster, false),
-      source: parseStockSource(source),
-      limit: safeLimit,
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: useCursorMode,
-    });
+    const response = await stockService.getStocksByCategoryId(
+      req.params.id,
+      {
+        search,
+        stockLevel,
+        onlyInStock: parseBoolean(onlyInStock, false),
+        groupByMaster: parseBoolean(groupByMaster, false),
+        source: parseStockSource(source),
+        limit: safeLimit,
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: useCursorMode,
+      },
+      req.user || null,
+    );
     const rows = Array.isArray(response) ? response : response?.rows || [];
     const meta = Array.isArray(response) ? null : response?.meta || null;
 
@@ -161,7 +172,7 @@ const getStocksByCategoryId = async (req, res) => {
       sqlState: error?.parent?.sqlState,
       sql: error?.sql,
     });
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       data: {},
       message: "Failed to fetch stock items",

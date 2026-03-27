@@ -8,12 +8,13 @@ class AssetService {
   constructor() {
     this.assetRepository = new AssetRepository();
   }
-  async finalizeApprovedDaybook(daybookId, transaction = null) {
+  async finalizeApprovedDaybook(daybookId, transaction = null, actor = null) {
     try {
       const repo = new AssetRepository();
       const assetData = await repo.migrateSerialsToAssets(
         daybookId,
         transaction,
+        actor,
       );
       console.log("Asset", assetData);
       return assetData;
@@ -25,11 +26,11 @@ class AssetService {
     }
   }
 
-  async getAll() {
-    return await new AssetRepository().getAll();
+  async getAll(actor = null) {
+    return await new AssetRepository().getAll(actor);
   }
 
-  async getInStoreByStock(stockId, query = {}) {
+  async getInStoreByStock(stockId, query = {}, actor = null) {
     try {
       const repo = new AssetRepository();
       const useCursorMode = parseCursorMode(query.cursorMode);
@@ -37,82 +38,86 @@ class AssetService {
         query.limit != null && String(query.limit).trim() !== ""
           ? normalizeLimit(query.limit, 100, 500)
           : null;
-      return await repo.getInStoreByStock(stockId, {
-        search: query.search,
-        limit: safeLimit,
-        cursor: query.cursor,
-        cursorMode: useCursorMode,
-      });
+      return await repo.getInStoreByStock(
+        stockId,
+        {
+          search: query.search,
+          limit: safeLimit,
+          cursor: query.cursor,
+          cursorMode: useCursorMode,
+        },
+        actor,
+      );
     } catch (error) {
       console.log("Something went wrong at service layer (getInStoreByStock).");
       throw { error };
     }
   }
 
-  async getByEmployee(employeeId) {
+  async getByEmployee(employeeId, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.getByEmployee(employeeId);
+      return await repo.getByEmployee(employeeId, actor);
     } catch (error) {
       console.log("Something went wrong at service layer (getByEmployee).");
       throw { error };
     }
   }
 
-  async returnAssets(payload) {
+  async returnAssets(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.returnAssets(payload);
+      return await repo.returnAssets({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (returnAssets).");
       throw { error };
     }
   }
 
-  async transferAssets(payload) {
+  async transferAssets(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.transferAssets(payload);
+      return await repo.transferAssets({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (transferAssets).");
       throw { error };
     }
   }
 
-  async repairOut(payload) {
+  async repairOut(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.repairOut(payload);
+      return await repo.repairOut({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (repairOut).");
       throw error;
     }
   }
 
-  async repairIn(payload) {
+  async repairIn(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.repairIn(payload);
+      return await repo.repairIn({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (repairIn).");
       throw error;
     }
   }
 
-  async finalize(payload) {
+  async finalize(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.finalize(payload);
+      return await repo.finalize({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (finalize).");
       throw error;
     }
   }
 
-  async retain(payload) {
+  async retain(payload, actor = null) {
     try {
       const repo = new AssetRepository();
-      return await repo.retain(payload);
+      return await repo.retain({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (retain).");
       throw error;
@@ -122,7 +127,7 @@ class AssetService {
   /* =====================================
      ✅ Asset Categories Summary
   ===================================== */
-  async getAssetsGroupedByCategory(query = {}) {
+  async getAssetsGroupedByCategory(query = {}, actor = null) {
     const useCursorMode = parseCursorMode(query.cursorMode);
     const safeLimit =
       query.limit != null && String(query.limit).trim() !== ""
@@ -133,6 +138,7 @@ class AssetService {
       limit: safeLimit,
       cursor: query.cursor ? String(query.cursor) : null,
       cursorMode: useCursorMode,
+      viewerActor: actor,
     });
     const rows = Array.isArray(result) ? result : result?.rows || [];
     const meta = Array.isArray(result) ? null : result?.meta || null;
@@ -149,20 +155,24 @@ class AssetService {
   /* =====================================
      ✅ Assets By Category
   ===================================== */
-  async getAssetsByCategory(categoryId, query = {}) {
+  async getAssetsByCategory(categoryId, query = {}, actor = null) {
     const useCursorMode = parseCursorMode(query.cursorMode);
     const safeLimit =
       query.limit != null && String(query.limit).trim() !== ""
         ? normalizeLimit(query.limit, 100, 500)
         : null;
-    return await this.assetRepository.getAssetsByCategory(categoryId, {
-      limit: safeLimit,
-      cursor: query.cursor ? String(query.cursor) : null,
-      cursorMode: useCursorMode,
-    });
+    return await this.assetRepository.getAssetsByCategory(
+      categoryId,
+      {
+        limit: safeLimit,
+        cursor: query.cursor ? String(query.cursor) : null,
+        cursorMode: useCursorMode,
+        viewerActor: actor,
+      },
+    );
   }
 
-  async getAssets(query) {
+  async getAssets(query, actor = null) {
     const page = Number(query.page || 1);
     const limit = normalizeLimit(query.limit || 50, 50, 500);
     const cursor = query.cursor ? String(query.cursor) : null;
@@ -188,6 +198,7 @@ class AssetService {
       limit,
       cursor,
       cursorMode,
+      viewerActor: actor,
     });
 
     if (result?.meta) {

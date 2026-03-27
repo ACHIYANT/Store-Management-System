@@ -1,5 +1,6 @@
 const {
   DayBookItem,
+  DayBook,
   ItemCategory,
   Stock,
   sequelize,
@@ -8,6 +9,10 @@ const {
 } = require("../models"); // Import Sequelize models
 const { ensureItemMaster } = require("../services/item-master-service");
 const { logStockMovement } = require("../services/stock-movement-service");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+} = require("../utils/location-scope");
 
 const { Op } = require("sequelize");
 const {
@@ -25,8 +30,23 @@ const normalizeStockSource = (value) => {
 };
 
 class StockRepository {
-  async moveDayBookItemsToStock(daybookId, transaction = null) {
+  async moveDayBookItemsToStock(daybookId, transaction = null, actor = null) {
     try {
+      const daybook = await DayBook.findByPk(daybookId, {
+        attributes: ["id", "location_scope"],
+        transaction: transaction || undefined,
+      });
+      if (!daybook) {
+        throw new Error("DayBook not found");
+      }
+      if (actor) {
+        assertActorCanAccessLocation(
+          actor,
+          daybook.location_scope,
+          "move this daybook into stock",
+        );
+      }
+
       // Step 1: Find approved DayBookItems where the approval_level is 3
       const dayBookItems = await DayBookItem.findAll({
         where: { daybook_id: daybookId, stock_id: null }, // Only get items without a stock_id
@@ -55,6 +75,7 @@ class StockRepository {
             amount: item.amount, // Amount from DayBookItem
             item_master_id: itemMaster?.id || null,
             source: "DAYBOOK",
+            location_scope: daybook.location_scope || null,
           },
           { transaction },
         );
@@ -80,6 +101,7 @@ class StockRepository {
             referenceId: item.id,
             performedBy: "System",
             remarks: "Stock created from approved DayBook",
+            locationScope: daybook.location_scope || null,
             metadata: {
               daybook_id: Number(item.daybook_id),
               daybook_item_id: Number(item.id),
@@ -96,10 +118,15 @@ class StockRepository {
     }
   }
 
-  async getAll() {
+  async getAll(actor = null) {
     try {
+      const where = {
+        is_active: true,
+      };
+      const locationWhere = buildLocationScopeWhere(actor || {});
+      if (locationWhere) Object.assign(where, locationWhere);
       return await Stock.findAll({
-        where: { is_active: true },
+        where,
         order: [["id", "DESC"]],
       });
     } catch (error) {
@@ -117,6 +144,7 @@ class StockRepository {
       limit = null,
       cursor = null,
       cursorMode = false,
+      viewerActor = null,
     } = filters;
 
     const categoryWhereClauses = [];
@@ -184,6 +212,8 @@ class StockRepository {
       is_active: true,
       ...(normalizedSource ? { source: normalizedSource } : {}),
     };
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) Object.assign(stockWhere, locationWhere);
 
     const stocks = await Stock.findAll({
       where: stockWhere,
@@ -322,8 +352,12 @@ class StockRepository {
       cursorMode = false,
       onlyInStock = false,
       groupByMaster = false,
+      viewerActor = null,
     } = filters;
     const normalizedSource = normalizeStockSource(source);
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    const scopedLocations =
+      locationWhere?.location_scope?.[Op.in] || null;
 
     if (groupByMaster) {
       const categoryIdNum = Number(categoryId);
@@ -341,6 +375,12 @@ class StockRepository {
           ? ` HAVING ${groupedHaving.join(" AND ")}`
           : "";
       const sourceWhereSql = normalizedSource ? " AND s.source = :source" : "";
+      const locationWhereSql =
+        Array.isArray(scopedLocations) && scopedLocations.length
+          ? " AND s.location_scope IN (:locationScopes)"
+          : locationWhere?.location_scope
+            ? " AND s.location_scope = :singleLocationScope"
+            : "";
 
       const searchTerm = String(search || "").trim();
       const searchLike = searchTerm ? `%${searchTerm}%` : null;
@@ -399,6 +439,7 @@ class StockRepository {
             WHERE s.item_category_id = :categoryId
               AND s.is_active = 1
               ${sourceWhereSql}
+              ${locationWhereSql}
               AND (
                 :searchLike IS NULL
                 OR s.item_name LIKE :searchLike
@@ -420,6 +461,11 @@ class StockRepository {
               categoryId: categoryIdNum,
               searchLike,
               source: normalizedSource,
+              locationScopes: scopedLocations,
+              singleLocationScope:
+                !Array.isArray(scopedLocations) && locationWhere?.location_scope
+                  ? locationWhere.location_scope
+                  : null,
             },
           },
         );
@@ -466,6 +512,7 @@ class StockRepository {
       is_active: true,
       ...(normalizedSource ? { source: normalizedSource } : {}),
     };
+    if (locationWhere) Object.assign(where, locationWhere);
 
     if (search) {
       where.item_name = { [Op.like]: `%${search}%` };

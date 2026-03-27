@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import axios from "axios";
 import ListPage from "@/components/ListPage";
 import ListTable from "@/components/ListTable";
@@ -10,30 +10,6 @@ const API = STORE_API_BASE_URL;
 const PAGE_SIZE = 100;
 const MAX_BUFFER_ROWS = 3000;
 const TRIM_BATCH = 1000;
-
-function resolveApprovalScope() {
-  const roles = JSON.parse(localStorage.getItem("roles") || "[]");
-
-  let level = null;
-  let isStoreEntry = false;
-
-  if (roles.includes("STORE_ENTRY")) {
-    isStoreEntry = true;
-  } else if (roles.includes("CLERK_APPROVER") || roles.includes("PROC_APPROVER")) {
-    level = 1;
-  } else if (
-    roles.includes("INSPECTION_OFFICER") ||
-    roles.includes("ACCTS_APPROVER")
-  ) {
-    level = 2;
-  } else if (roles.includes("ADMIN_APPROVER")) {
-    level = 3;
-  } else if (roles.includes("SUPER_APPROVER")) {
-    level = 4;
-  }
-
-  return { level, isStoreEntry };
-}
 
 function normalizeApprovalRow(row) {
   return {
@@ -49,8 +25,6 @@ export default function ApprovalInbox() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
 
-  const { level, isStoreEntry } = useMemo(() => resolveApprovalScope(), []);
-
   const fetchRows = useCallback(
     async ({ cursor, limit }) => {
       const params = {
@@ -58,8 +32,6 @@ export default function ApprovalInbox() {
         cursorMode: true,
         cursor: cursor || undefined,
         entryNo: debouncedSearch || undefined,
-        level: isStoreEntry ? undefined : level,
-        isStoreEntry: isStoreEntry || undefined,
       };
 
       const res = await axios.get(`${API}/daybook`, {
@@ -71,7 +43,7 @@ export default function ApprovalInbox() {
 
       return { rows, meta };
     },
-    [debouncedSearch, isStoreEntry, level],
+    [debouncedSearch],
   );
 
   const {
@@ -84,7 +56,7 @@ export default function ApprovalInbox() {
     virtualStartIndex,
   } = useCursorWindowedList({
     fetchPage: fetchRows,
-    deps: [debouncedSearch, level, isStoreEntry],
+    deps: [debouncedSearch],
     pageSize: PAGE_SIZE,
     maxBufferRows: MAX_BUFFER_ROWS,
     trimBatch: TRIM_BATCH,
