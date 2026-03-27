@@ -55,10 +55,6 @@ const ensureSameLocationScope = (sourceLocationScope, targetLocationScope, label
   return source;
 };
 
-const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
-const HISTORICAL_NO_SERIAL_DISPLAY =
-  "Migrated data (Serial number not available)";
-
 class IssuedItemRepository {
   _toPositiveIntOrNull(value) {
     const n = Number(value);
