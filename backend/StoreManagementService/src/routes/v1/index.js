@@ -59,6 +59,8 @@ const ForensicAuditController = require("../../controllers/forensic-audit-contro
 // 🔎 Stage inbox — role-based (shows only what you can act on now)
 router.use(ensureAuth);
 
+const requireStoreOperations = requireAnyRole(["STORE_ENTRY", "SUPER_ADMIN"]);
+
 router.post(
   "/vendor",
   ensureAuth,
@@ -137,19 +139,31 @@ router.post(
 router.get("/custodians", CustodianController.list);
 router.get("/custodians/:id", CustodianController.get);
 
-router.post("/daybook", DayBookController.create);
-router.post("/daybook/full", DayBookController.createFullDayBook);
+router.post("/daybook", requireStoreOperations, DayBookController.create);
+router.post(
+  "/daybook/full",
+  requireStoreOperations,
+  DayBookController.createFullDayBook,
+);
 router.get("/last-entry", DayBookController.getLastEntryForType);
 router.get("/daybookById/:id", DayBookController.getById);
 router.get("/daybook", DayBookController.getAll);
-router.patch("/daybook/:id", DayBookController.update);
+router.patch("/daybook/:id", requireStoreOperations, DayBookController.update);
 router.get("/daybook/search", DayBookController.searchDayBookByEntryNo);
-router.get("/mrn", DayBookController.getDayBookForMrn);
+router.get("/mrn", requireStoreOperations, DayBookController.getDayBookForMrn);
 router.get("/daybook/:id/full", DayBookController.getDayBookFullDetails);
 
-router.put("/daybook/:id/items", DayBookItemController.updateDayBookItems);
-router.put("/daybook/:id", DayBookController.update);
-router.post("/daybook/:id/cancel-mrn", DayBookController.cancelMrn);
+router.put(
+  "/daybook/:id/items",
+  requireStoreOperations,
+  DayBookItemController.updateDayBookItems,
+);
+router.put("/daybook/:id", requireStoreOperations, DayBookController.update);
+router.post(
+  "/daybook/:id/cancel-mrn",
+  requireStoreOperations,
+  DayBookController.cancelMrn,
+);
 
 // ? Stocks Routes
 
@@ -178,7 +192,11 @@ router.post(
 
 router.get("/view-image", ImageController.viewDecryptedImage);
 
-router.post("/daybook-items", DayBookItemController.createDayBookItems);
+router.post(
+  "/daybook-items",
+  requireStoreOperations,
+  DayBookItemController.createDayBookItems,
+);
 router.get(
   "/daybook-items/:id/additional-charges",
   DayBookItemController.getAdditionalChargesByDayBookId,
@@ -186,10 +204,15 @@ router.get(
 router.get("/daybook-items/:id", DayBookItemController.getItemsByDayBookId);
 
 // ? DayBookItemSerial Routes
-router.post("/daybook-item-serial", DayBookItemSerialController.createOne);
+router.post(
+  "/daybook-item-serial",
+  requireStoreOperations,
+  DayBookItemSerialController.createOne,
+);
 
 router.post(
   "/daybook-item-serials/bulk",
+  requireStoreOperations,
   DayBookItemSerialController.bulkUpsert,
 );
 
@@ -200,11 +223,13 @@ router.get(
 
 router.patch(
   "/daybook-item-serials/mark-migrated",
+  requireStoreOperations,
   DayBookItemSerialController.markMigrated,
 );
 
 router.delete(
   "/daybook-item-serials/:daybook_item_id",
+  requireStoreOperations,
   DayBookItemSerialController.deleteByDayBookItem,
 );
 
@@ -286,6 +311,7 @@ router.get("/issued-items", IssuedItemController.search);
 // ? Assets
 router.post(
   "/daybook/:daybookId/finalize-approval",
+  requireStoreOperations,
   AssetController.finalizeApprovedDaybook,
 );
 router.get("/assets/instore/:stockId", AssetController.getInStoreByStock);
@@ -329,8 +355,12 @@ router.get("/assets", AssetController.getAll);
 router.get("/assets/search", AssetController.getAssets);
 
 // ? Asset Events
-router.post("/asset-events", AssetEventController.create);
-router.post("/asset-events/bulk", AssetEventController.bulkCreate);
+router.post("/asset-events", requireStoreOperations, AssetEventController.create);
+router.post(
+  "/asset-events/bulk",
+  requireStoreOperations,
+  AssetEventController.bulkCreate,
+);
 router.get("/asset-events", AssetEventController.search);
 
 // ? Gate Passes (repair out / in movement verification)
@@ -400,7 +430,11 @@ router.patch(
 
 router.get("/mrn/verify", verifyMrn);
 
-router.get("/mrn/filter", DayBookController.getMrnWithFilters);
+router.get(
+  "/mrn/filter",
+  requireStoreOperations,
+  DayBookController.getMrnWithFilters,
+);
 
 router.post(
   "/migration/opening-stock/validate",

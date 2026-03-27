@@ -21,7 +21,7 @@ const create = async (req, res) => {
       ...req.body, // no file logic needed here
     };
     console.log("Creating DayBook with data:", data);
-    const daybook = await daybookService.createDayBook(data, req.user?.id || null);
+    const daybook = await daybookService.createDayBook(data, req.user || null);
     return res.status(201).json({
       data: daybook,
       success: true,
@@ -30,7 +30,7 @@ const create = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to create a day book",
@@ -43,7 +43,7 @@ const createFullDayBook = async (req, res) => {
   try {
     const result = await daybookService.createFullDayBook(
       req.body,
-      req.user?.id || null,
+      req.user || null,
     );
     return res.status(201).json({
       success: true,
@@ -51,7 +51,7 @@ const createFullDayBook = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
       message: err.message || "Failed to create daybook",
     });
@@ -69,7 +69,7 @@ const destroy = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to delete vendor",
@@ -80,7 +80,10 @@ const destroy = async (req, res) => {
 
 const getById = async (req, res) => {
   try {
-    const response = await daybookService.getDayBookById(req.params.id);
+    const response = await daybookService.getDayBookById(
+      req.params.id,
+      req.user || null,
+    );
     return res.status(201).json({
       data: response,
       success: true,
@@ -89,7 +92,7 @@ const getById = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to fetch a daybook by id",
@@ -102,6 +105,7 @@ const update = async (req, res) => {
     const response = await daybookService.updateDayBookNew(
       req.params.id,
       req.body,
+      req.user || null,
     );
     return res.status(201).json({
       data: response,
@@ -111,7 +115,7 @@ const update = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to update daybook record",
@@ -125,6 +129,12 @@ const getDayBookForMrn = async (req, res) => {
     const response = await daybookService.getDayBookForMrn({
       viewerUserId: req.user?.id || null,
       viewerRoles: Array.isArray(req.user?.roles) ? req.user.roles : [],
+      viewerAssignments: Array.isArray(req.user?.assignments)
+        ? req.user.assignments
+        : [],
+      viewerLocationScopes: Array.isArray(req.user?.location_scopes)
+        ? req.user.location_scopes
+        : [],
     });
     return res.status(200).json({
       data: response,
@@ -135,7 +145,7 @@ const getDayBookForMrn = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to fetch approved daybook to display in the MRN.",
@@ -146,10 +156,7 @@ const getDayBookForMrn = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    // Read optional query params from frontend: level and isStoreEntry
     const {
-      level = null,
-      isStoreEntry = "false",
       entryNo = "",
       finYear = null,
       status = null,
@@ -160,9 +167,6 @@ const getAll = async (req, res) => {
       cursorMode = "false",
     } = req.query || {};
 
-    // Normalize
-    const lvl = level !== null && level !== "" ? parseInt(level, 10) : null;
-    const isStoreEntryFlag = String(isStoreEntry).toLowerCase() === "true";
     const pageNum =
       page !== null && page !== "" && Number.isFinite(Number(page))
         ? parseInt(page, 10)
@@ -178,9 +182,7 @@ const getAll = async (req, res) => {
     const useCursorMode = String(cursorMode).toLowerCase() === "true";
 
     console.log(
-      "controller : level",
-      lvl,
-      isStoreEntryFlag,
+      "controller : daybook filters",
       entryNo,
       finYear,
       status,
@@ -193,8 +195,6 @@ const getAll = async (req, res) => {
 
     // Use the filtered service so role-based visibility is enforced
     const response = await daybookService.getAllDayBooksByLevel({
-      lvl,
-      isStoreEntryFlag,
       entryNo,
       finYear,
       status,
@@ -205,6 +205,12 @@ const getAll = async (req, res) => {
       cursorMode: useCursorMode,
       viewerUserId: req.user?.id || null,
       viewerRoles: Array.isArray(req.user?.roles) ? req.user.roles : [],
+      viewerAssignments: Array.isArray(req.user?.assignments)
+        ? req.user.assignments
+        : [],
+      viewerLocationScopes: Array.isArray(req.user?.location_scopes)
+        ? req.user.location_scopes
+        : [],
     });
 
     const rows = Array.isArray(response) ? response : response?.rows || [];
@@ -219,7 +225,7 @@ const getAll = async (req, res) => {
     });
   } catch (error) {
     console.error("getAll daybooks error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to fetch daybook records",
@@ -228,33 +234,27 @@ const getAll = async (req, res) => {
   }
 };
 
-// GET /api/v1/daybook/search?entryNo=123&level=1&isStoreEntry=false+// GET /api/v1/daybook/search?entryNo=123&level=1&isStoreEntry=false
 const searchDayBookByEntryNo = async (req, res) => {
   try {
-    // read raw query values
-    const {
-      entryNo = "",
-      level = null,
-      isStoreEntry = "false",
-    } = req.query || {};
-
-    // normalize types: level -> number|null, isStoreEntry -> boolean
-    const lvl = level !== null && level !== "" ? parseInt(level, 10) : null;
-    const storeFlag = String(isStoreEntry).toLowerCase() === "true";
+    const { entryNo = "" } = req.query || {};
 
     const records = await daybookService.searchDayBookByEntryNo(
       entryNo,
-      lvl,
-      storeFlag,
       {
         viewerUserId: req.user?.id || null,
         viewerRoles: Array.isArray(req.user?.roles) ? req.user.roles : [],
+        viewerAssignments: Array.isArray(req.user?.assignments)
+          ? req.user.assignments
+          : [],
+        viewerLocationScopes: Array.isArray(req.user?.location_scopes)
+          ? req.user.location_scopes
+          : [],
       },
     );
     return res.status(200).json({ success: true, data: records });
   } catch (error) {
     console.error("searchDayBookByEntryNo error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       error: error && error.message ? error.message : "Internal Server Error",
     });
@@ -267,7 +267,7 @@ const approveDayBook = async (req, res) => {
     const { id } = req.params;
     const updated = await daybookService.advanceApprovalUsingStages(
       id,
-      req.user?.id || null,
+      req.user || null,
     );
     return res.status(200).json({
       success: true,
@@ -277,7 +277,7 @@ const approveDayBook = async (req, res) => {
   } catch (error) {
     console.log(error);
     return res
-      .status(400)
+      .status(error?.statusCode || 400)
       .json({ success: false, error: error.message || "Approval failed" });
   }
 };
@@ -287,7 +287,7 @@ const rejectDayBook = async (req, res) => {
   try {
     const { id } = req.params;
     const { remarks = null } = req.body || {};
-    const updated = await daybookService.rejectToStore(id, remarks);
+    const updated = await daybookService.rejectToStore(id, remarks, req.user || null);
     return res.status(200).json({
       success: true,
       data: updated,
@@ -295,7 +295,7 @@ const rejectDayBook = async (req, res) => {
     });
   } catch (error) {
     return res
-      .status(400)
+      .status(error?.statusCode || 400)
       .json({ success: false, error: error.message || "Reject failed" });
   }
 };
@@ -315,7 +315,7 @@ const getLastEntryForType = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Not able to fetch entry details",
@@ -340,7 +340,7 @@ const sendBack = async (req, res) => {
     res.status(200).json({ message: "Sent back to store" });
   } catch (error) {
     res
-      .status(500)
+      .status(error?.statusCode || 500)
       .json({ message: "Error sending back to store", error: error.message });
   }
 };
@@ -350,7 +350,11 @@ const cancelMrn = async (req, res) => {
     const { id } = req.params;
     const { confirmedNonSerialized } = req.body;
 
-    const result = await daybookService.cancelMrn(id, confirmedNonSerialized);
+    const result = await daybookService.cancelMrn(
+      id,
+      confirmedNonSerialized,
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -368,7 +372,7 @@ const cancelMrn = async (req, res) => {
 const getDayBookFullDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const data = await daybookService.getDayBookFullDetails(id);
+    const data = await daybookService.getDayBookFullDetails(id, req.user || null);
 
     return res.status(200).json({
       success: true,
@@ -376,7 +380,7 @@ const getDayBookFullDetails = async (req, res) => {
     });
   } catch (error) {
     console.error("getDayBookFullDetails error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error.message || "Failed to fetch DayBook details",
     });
@@ -417,6 +421,12 @@ const getMrnWithFilters = async (req, res) => {
       cursorMode: useCursorMode,
       viewerUserId: req.user?.id || null,
       viewerRoles: Array.isArray(req.user?.roles) ? req.user.roles : [],
+      viewerAssignments: Array.isArray(req.user?.assignments)
+        ? req.user.assignments
+        : [],
+      viewerLocationScopes: Array.isArray(req.user?.location_scopes)
+        ? req.user.location_scopes
+        : [],
     });
     const data = Array.isArray(result) ? result : result?.rows || [];
     const meta = Array.isArray(result) ? null : result?.meta || null;
@@ -428,7 +438,7 @@ const getMrnWithFilters = async (req, res) => {
     });
   } catch (error) {
     console.error("getMrnWithFilters error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: "Failed to fetch MRN list",
     });

@@ -3,6 +3,7 @@ const { sequelize } = require("../models");
 const DayBookAdditionalChargeRepository = require("../repository/daybook-additional-charge-repository");
 const DayBookItemSerialRepository = require("../repository/daybookitemserials-repository");
 const { normalizeSkuUnit } = require("../utils/sku-units");
+const { assertActorCanAccessLocation } = require("../utils/location-scope");
 
 const { DayBook } = require("../models");
 
@@ -50,8 +51,18 @@ class DayBookItemService {
     items,
     additionalCharges = [],
     transaction,
+    actor = null,
   ) {
     try {
+      if (actor) {
+        await this.assertActorCanAccessDaybook(
+          daybookId,
+          actor,
+          "add items to this daybook",
+          transaction,
+        );
+      }
+
       /* ----------------------
        1. SAVE ITEMS
     ---------------------- */
@@ -145,8 +156,13 @@ class DayBookItemService {
     }
   }
 
-  async getItemsByDayBookId(daybookId) {
+  async getItemsByDayBookId(daybookId, actor = null) {
     try {
+      await this.assertActorCanAccessDaybook(
+        daybookId,
+        actor,
+        "view items for this daybook",
+      );
       return await this.dayBookItemRepository.findByDayBookId(daybookId);
     } catch (error) {
       console.log("Something went wrong at service layer.");
@@ -154,13 +170,25 @@ class DayBookItemService {
     }
   }
 
-  async getAdditionalChargesByDayBookId(daybookId) {
+  async getAdditionalChargesByDayBookId(daybookId, actor = null) {
+    await this.assertActorCanAccessDaybook(
+      daybookId,
+      actor,
+      "view additional charges for this daybook",
+    );
     const repo = new DayBookAdditionalChargeRepository();
     return await repo.findByDaybookId(daybookId);
   }
 
-  async replaceDayBookItems(daybookId, payload) {
+  async replaceDayBookItems(daybookId, payload, actor = null) {
     return sequelize.transaction(async (t) => {
+      await this.assertActorCanAccessDaybook(
+        daybookId,
+        actor,
+        "update items for this daybook",
+        t,
+      );
+
       /* -----------------------------------
        1️⃣ Load existing DB items
     ----------------------------------- */
@@ -312,6 +340,29 @@ class DayBookItemService {
 
       // return true;
     });
+  }
+
+  async assertActorCanAccessDaybook(
+    daybookId,
+    actor = null,
+    action = "access this daybook",
+    transaction = null,
+  ) {
+    if (!actor) return null;
+
+    const daybook = await DayBook.findByPk(daybookId, {
+      attributes: ["id", "location_scope"],
+      transaction,
+    });
+
+    if (!daybook) {
+      const error = new Error("DayBook not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    assertActorCanAccessLocation(actor, daybook.location_scope, action);
+    return daybook;
   }
 }
 

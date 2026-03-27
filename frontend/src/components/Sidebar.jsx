@@ -60,6 +60,7 @@ export default function Sidebar() {
     MRN: false,
     Vendor: false,
     "Master Entry": false,
+    Administration: false,
     "Gate Pass": false,
     Stocks: false,
     Reports: false,
@@ -181,6 +182,7 @@ export default function Sidebar() {
     employee: ["SUPER_ADMIN", "STORE_ENTRY"],
     custodians: ["SUPER_ADMIN", "STORE_ENTRY"],
     itemCategory: ["SUPER_ADMIN", "STORE_ENTRY"],
+    accessControl: ["SUPER_ADMIN"],
     disposeOff: ["SUPER_ADMIN", "STORE_ENTRY"],
     eWaste: ["SUPER_ADMIN", "STORE_ENTRY"],
   };
@@ -287,6 +289,10 @@ export default function Sidebar() {
   const showMasterEntryNav =
     canAccessMasterEntry &&
     (canSeeVendor || canSeeEmployee || canSeeCustodians || canSeeItemCategory);
+  const canSeeAccessControl = hasSubItemAccessStrict(
+    subItemRoleRules.accessControl,
+  );
+  const showAdministrationNav = canSeeAccessControl;
 
   const canSeeDisposeOff = hasSubItemAccessStrict(subItemRoleRules.disposeOff);
   const canSeeEWaste = hasSubItemAccessStrict(subItemRoleRules.eWaste);
@@ -369,6 +375,9 @@ export default function Sidebar() {
       path.startsWith("/itemcategory")
     ) {
       return "Master Entry";
+    }
+    if (path.startsWith("/access-control")) {
+      return "Administration";
     }
     if (path.startsWith("/daybook")) return "Day Book Entry";
     if (path.startsWith("/mrn")) return "MRN";
@@ -715,6 +724,17 @@ export default function Sidebar() {
                   icon={ShoppingBasket}
                   label="Item Category"
                   onClick={() => handleNavigate("/itemCategory")}
+                />
+              )}
+            </NavItem>
+          )}
+          {showAdministrationNav && (
+            <NavItem icon={Settings} label="Administration" collapsible>
+              {canSeeAccessControl && (
+                <SubItem
+                  icon={UserRoundCog}
+                  label="Access Control"
+                  onClick={() => handleNavigate("/access-control")}
                 />
               )}
             </NavItem>

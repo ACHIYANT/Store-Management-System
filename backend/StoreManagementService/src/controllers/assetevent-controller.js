@@ -17,7 +17,7 @@ const create = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.create error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to create asset event",
@@ -37,7 +37,7 @@ const bulkCreate = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.bulkCreate error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to bulk create asset events",
@@ -48,7 +48,7 @@ const bulkCreate = async (req, res) => {
 
 const getByAssetId = async (req, res) => {
   try {
-    const data = await service.getByAssetId(req.params.assetId);
+    const data = await service.getByAssetId(req.params.assetId, req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -57,7 +57,7 @@ const getByAssetId = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.getByAssetId error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch events by asset",
@@ -68,7 +68,7 @@ const getByAssetId = async (req, res) => {
 
 const getTimeline = async (req, res) => {
   try {
-    const data = await service.getTimeline(req.params.assetId);
+    const data = await service.getTimeline(req.params.assetId, req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -77,7 +77,7 @@ const getTimeline = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.getTimeline error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch timeline",
@@ -88,7 +88,10 @@ const getTimeline = async (req, res) => {
 
 const getByDayBookId = async (req, res) => {
   try {
-    const data = await service.getByDayBookId(req.params.daybookId);
+    const data = await service.getByDayBookId(
+      req.params.daybookId,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -97,7 +100,7 @@ const getByDayBookId = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.getByDayBookId error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch events by daybook",
@@ -108,7 +111,10 @@ const getByDayBookId = async (req, res) => {
 
 const getByIssuedItemId = async (req, res) => {
   try {
-    const data = await service.getByIssuedItemId(req.params.issuedItemId);
+    const data = await service.getByIssuedItemId(
+      req.params.issuedItemId,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -117,7 +123,7 @@ const getByIssuedItemId = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.getByIssuedItemId error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch events by issued item",
@@ -128,7 +134,10 @@ const getByIssuedItemId = async (req, res) => {
 
 const getByEmployeeHistory = async (req, res) => {
   try {
-    const data = await service.getByEmployeeHistory(req.params.employeeId);
+    const data = await service.getByEmployeeHistory(
+      req.params.employeeId,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -137,7 +146,7 @@ const getByEmployeeHistory = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.getByEmployeeHistory error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch events by employee",
@@ -149,7 +158,7 @@ const getByEmployeeHistory = async (req, res) => {
 const recent = async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
-    const data = await service.recent(limit);
+    const data = await service.recent(limit, req.user || null);
     return res.status(200).json({
       data,
       success: true,
@@ -158,7 +167,7 @@ const recent = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.recent error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
       message: "Failed to fetch recent events",
@@ -188,21 +197,24 @@ const search = async (req, res) => {
     const safeLimit = normalizeLimit(limit, 50, 500);
     const useCursorMode = parseCursorMode(cursorMode);
 
-    const result = await service.search({
-      page: Number(page),
-      limit: safeLimit,
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: useCursorMode,
-      search,
-      eventType,
-      assetId,
-      fromEmployeeId,
-      toEmployeeId,
-      daybookId,
-      issuedItemId,
-      fromDate,
-      toDate,
-    });
+    const result = await service.search(
+      {
+        page: Number(page),
+        limit: safeLimit,
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: useCursorMode,
+        search,
+        eventType,
+        assetId,
+        fromEmployeeId,
+        toEmployeeId,
+        daybookId,
+        issuedItemId,
+        fromDate,
+        toDate,
+      },
+      req.user || null,
+    );
 
     const meta = result?.meta
       ? result.meta
@@ -223,7 +235,7 @@ const search = async (req, res) => {
     });
   } catch (error) {
     console.error("AssetEventController.search error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       data: [],
       meta: {},

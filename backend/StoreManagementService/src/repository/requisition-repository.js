@@ -16,6 +16,10 @@ const {
 } = require("../utils/cursor-pagination");
 const { normalizeSkuUnit, sameSkuUnit } = require("../utils/sku-units");
 const { ensureItemMaster } = require("../services/item-master-service");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+} = require("../utils/location-scope");
 
 const FINAL_REQUISITION_STATUSES = new Set([
   "Approved",
@@ -78,6 +82,67 @@ function toWholeQty(value) {
 
 function eqText(a, b) {
   return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+}
+
+function normalizeAssignments(assignments = []) {
+  return Array.isArray(assignments)
+    ? assignments
+        .map((assignment) => ({
+          assignment_type: String(assignment?.assignment_type || "")
+            .trim()
+            .toUpperCase(),
+          scope_type: String(assignment?.scope_type || "")
+            .trim()
+            .toUpperCase(),
+          scope_key: String(assignment?.scope_key || "").trim(),
+          scope_label: String(assignment?.scope_label || "").trim(),
+          metadata_json:
+            assignment?.metadata_json && typeof assignment.metadata_json === "object"
+              ? assignment.metadata_json
+              : null,
+        }))
+        .filter((assignment) => assignment.assignment_type && assignment.scope_type)
+    : [];
+}
+
+function getAssignmentScopeValues(
+  assignments = [],
+  assignmentType,
+  scopeType = null,
+) {
+  const normalizedType = String(assignmentType || "")
+    .trim()
+    .toUpperCase();
+  const normalizedScopeType = scopeType
+    ? String(scopeType).trim().toUpperCase()
+    : null;
+  const values = [];
+
+  for (const assignment of normalizeAssignments(assignments)) {
+    if (assignment.assignment_type !== normalizedType) continue;
+    if (normalizedScopeType && assignment.scope_type !== normalizedScopeType) continue;
+    if (assignment.scope_label) values.push(assignment.scope_label);
+    if (assignment.scope_key) values.push(assignment.scope_key);
+    if (assignment.metadata_json?.display_name) {
+      values.push(String(assignment.metadata_json.display_name));
+    }
+  }
+
+  return [...new Set(values.filter(Boolean))];
+}
+
+function hasMatchingAssignmentScope(
+  assignments = [],
+  assignmentType,
+  expectedScopeValue,
+  scopeType = null,
+) {
+  const expected = String(expectedScopeValue || "").trim();
+  if (!expected) return false;
+
+  return getAssignmentScopeValues(assignments, assignmentType, scopeType).some(
+    (value) => eqText(value, expected),
+  );
 }
 
 function deriveStageRoleDisplay(status, currentStageRole) {
@@ -193,6 +258,7 @@ class RequisitionRepository {
       requester_emp_id: p.requester_emp_id,
       requester_name: p.requester_name,
       requester_division: p.requester_division,
+      location_scope: p.location_scope || null,
       purpose: p.purpose,
       status: p.status,
       current_stage_order: p.current_stage_order,
@@ -285,6 +351,7 @@ class RequisitionRepository {
       requester_emp_id: p.requester_emp_id,
       requester_name: p.requester_name,
       requester_division: p.requester_division,
+      location_scope: p.location_scope || null,
       purpose: p.purpose,
       status: p.status,
       current_stage_order: p.current_stage_order,
@@ -336,6 +403,7 @@ class RequisitionRepository {
     requesterEmpId = null,
     requesterName = null,
     requesterDivision = null,
+    requesterLocationScope = null,
     purpose = null,
     remarks = null,
     items = [],
@@ -445,6 +513,7 @@ class RequisitionRepository {
           requester_emp_id: requesterEmpId,
           requester_name: requesterName,
           requester_division: requesterDivision,
+          location_scope: requesterLocationScope || null,
           purpose: purpose || null,
           status,
           current_stage_order: autoSubmit && hasStage ? initialStage.stage_order : null,
@@ -575,6 +644,11 @@ class RequisitionRepository {
         lock: transaction.LOCK.UPDATE,
       });
       if (!requisition) throw new Error("Requisition not found.");
+      assertActorCanAccessLocation(
+        actor || {},
+        requisition.location_scope,
+        "map store items for this requisition",
+      );
 
       if (!["Approved", "PartiallyApproved", "Fulfilling"].includes(String(requisition.status))) {
         throw new Error("Item mapping is allowed only for store-queue requisitions.");
@@ -601,7 +675,11 @@ class RequisitionRepository {
       const [stocks, categories] = await Promise.all([
         stockIds.length
           ? Stock.findAll({
-              where: { id: stockIds, is_active: true },
+              where: {
+                id: stockIds,
+                is_active: true,
+                location_scope: requisition.location_scope,
+              },
               attributes: ["id", "item_category_id", "item_master_id", "item_name", "sku_unit"],
               transaction,
             })
@@ -897,6 +975,8 @@ class RequisitionRepository {
     viewerUserId = null,
     viewerDivision = null,
     viewerRoles = [],
+    viewerAssignments = [],
+    viewerActor = {},
     viewerStageOrders = [],
     firstStageOrder = null,
   }) {
@@ -914,6 +994,10 @@ class RequisitionRepository {
     const resolvedViewerUserId = toNumber(viewerUserId);
 
     const where = {};
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
 
     if (status) where.status = String(status).trim();
 
@@ -984,8 +1068,17 @@ class RequisitionRepository {
         if (hasDivisionMatchConstraint) {
           const firstStage = toNumber(firstStageOrder);
           const scopedOr = [{ current_stage_order: { [Op.ne]: firstStage } }];
+          const scopedDivisions = getAssignmentScopeValues(
+            viewerAssignments,
+            "DIVISION_HEAD",
+          );
 
-          if (String(viewerDivision || "").trim()) {
+          if (scopedDivisions.length) {
+            scopedOr.push({
+              current_stage_order: firstStage,
+              requester_division: { [Op.in]: scopedDivisions },
+            });
+          } else if (String(viewerDivision || "").trim()) {
             scopedOr.push({
               current_stage_order: firstStage,
               requester_division: String(viewerDivision).trim(),
@@ -1447,6 +1540,11 @@ class RequisitionRepository {
         lock: transaction.LOCK.UPDATE,
       });
       if (!requisition) throw new Error("Requisition not found.");
+      assertActorCanAccessLocation(
+        actor || {},
+        requisition.location_scope,
+        "reject this requisition",
+      );
 
       if (FINAL_REQUISITION_STATUSES.has(String(requisition.status || ""))) {
         throw new Error("Requisition is already finalized.");
@@ -1467,8 +1565,16 @@ class RequisitionRepository {
         currentStageOrder === firstStage &&
         String(requisition.requester_division || "").trim()
       ) {
+        const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
+          actor?.assignments,
+          "DIVISION_HEAD",
+          requisition.requester_division,
+        );
         const viewerDivision = String(actor?.division || "").trim();
-        if (!viewerDivision || !eqText(viewerDivision, requisition.requester_division)) {
+        if (
+          !hasDivisionHeadAssignment &&
+          (!viewerDivision || !eqText(viewerDivision, requisition.requester_division))
+        ) {
           throw new Error(
             "You can approve first-stage requisitions only for your own division.",
           );
@@ -1691,6 +1797,11 @@ class RequisitionRepository {
         lock: transaction.LOCK.UPDATE,
       });
       if (!requisition) throw new Error("Requisition not found.");
+      assertActorCanAccessLocation(
+        actor || {},
+        requisition.location_scope,
+        "submit this requisition",
+      );
 
       const currentStageOrder = toNumber(requisition.current_stage_order);
       const currentStageRole = this._normalizeRoleName(
@@ -1707,8 +1818,16 @@ class RequisitionRepository {
         currentStageOrder === firstStage &&
         String(requisition.requester_division || "").trim()
       ) {
+        const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
+          actor?.assignments,
+          "DIVISION_HEAD",
+          requisition.requester_division,
+        );
         const viewerDivision = String(actor?.division || "").trim();
-        if (!viewerDivision || !eqText(viewerDivision, requisition.requester_division)) {
+        if (
+          !hasDivisionHeadAssignment &&
+          (!viewerDivision || !eqText(viewerDivision, requisition.requester_division))
+        ) {
           throw new Error(
             "You can reject first-stage requisitions only for your own division.",
           );
@@ -1777,6 +1896,11 @@ class RequisitionRepository {
         lock: transaction.LOCK.UPDATE,
       });
       if (!requisition) throw new Error("Requisition not found.");
+      assertActorCanAccessLocation(
+        actor || {},
+        requisition.location_scope,
+        "cancel this requisition",
+      );
 
       if (String(requisition.status) !== "Draft") {
         throw new Error("Only draft requisition can be submitted.");
@@ -1926,6 +2050,7 @@ class RequisitionRepository {
     cursor = null,
     cursorMode = false,
     limit = 50,
+    viewerActor = {},
   }) {
     const safeLimit = normalizeLimit(limit, 50, 500);
     const useCursorMode = Boolean(cursorMode);
@@ -1933,6 +2058,10 @@ class RequisitionRepository {
     const where = {
       status: { [Op.in]: ["Approved", "PartiallyApproved", "Fulfilling"] },
     };
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
     if (employeeId !== null && employeeId !== undefined && String(employeeId) !== "") {
       where.requester_emp_id = String(employeeId);
     }
@@ -2063,6 +2192,11 @@ class RequisitionRepository {
       lock: transaction.LOCK.UPDATE,
     });
     if (!requisition) throw new Error("Linked requisition not found.");
+    assertActorCanAccessLocation(
+      actor || {},
+      requisition.location_scope,
+      "fulfill this requisition",
+    );
 
     if (!["Approved", "PartiallyApproved", "Fulfilling", "Fulfilled"].includes(requisition.status)) {
       throw new Error("Linked requisition is not in fulfillable status.");

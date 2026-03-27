@@ -1,30 +1,30 @@
 const GatePassRepository = require("../repository/gatepass-repository");
 
 class GatePassService {
-  async list(query = {}) {
+  async list(query = {}, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.list(query);
+      return await repo.list({ ...query, viewerActor: actor });
     } catch (error) {
       console.log("Something went wrong at service layer (gatePass.list).");
       throw error;
     }
   }
 
-  async getById(id) {
+  async getById(id, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.getById(id);
+      return await repo.getById(id, null, actor);
     } catch (error) {
       console.log("Something went wrong at service layer (gatePass.getById).");
       throw error;
     }
   }
 
-  async verifyByCode(code) {
+  async verifyByCode(code, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.verifyByCode(code);
+      return await repo.verifyByCode(code, actor);
     } catch (error) {
       console.log(
         "Something went wrong at service layer (gatePass.verifyByCode).",
@@ -33,10 +33,10 @@ class GatePassService {
     }
   }
 
-  async createEWasteOutPass(payload) {
+  async createEWasteOutPass(payload, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.createEWasteOutPass(payload);
+      return await repo.createEWasteOutPass({ ...payload, actor });
     } catch (error) {
       console.log(
         "Something went wrong at service layer (gatePass.createEWasteOutPass).",
@@ -45,30 +45,30 @@ class GatePassService {
     }
   }
 
-  async verifyOut(payload) {
+  async verifyOut(payload, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.verifyOut(payload);
+      return await repo.verifyOut({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (gatePass.verifyOut).");
       throw error;
     }
   }
 
-  async verifyIn(payload) {
+  async verifyIn(payload, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.verifyIn(payload);
+      return await repo.verifyIn({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (gatePass.verifyIn).");
       throw error;
     }
   }
 
-  async updateSignatories(payload) {
+  async updateSignatories(payload, actor = null) {
     try {
       const repo = new GatePassRepository();
-      return await repo.updateSignatories(payload);
+      return await repo.updateSignatories({ ...payload, actor });
     } catch (error) {
       console.log(
         "Something went wrong at service layer (gatePass.updateSignatories).",

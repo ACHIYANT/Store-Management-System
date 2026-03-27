@@ -16,13 +16,16 @@ const createDayBookItems = async (req, res) => {
       daybook_id,
       items,
       additionalCharges,
+      undefined,
+      req.user || null,
     );
     res.status(201).json({ message: "Items added successfully", data: result });
   } catch (err) {
     console.error("Error adding items:", err);
-    res
-      .status(500)
-      .json({ message: "Failed to add items", error: err.message });
+    res.status(err?.statusCode || 500).json({
+      message: err?.message || "Failed to add items",
+      error: err?.message,
+    });
   }
 };
 const updateDayBookItems = async (req, res) => {
@@ -30,7 +33,11 @@ const updateDayBookItems = async (req, res) => {
     const { id } = req.params;
     const payload = req.body;
 
-    const data = await dayBookItemService.replaceDayBookItems(id, payload);
+    const data = await dayBookItemService.replaceDayBookItems(
+      id,
+      payload,
+      req.user || null,
+    );
 
     return res.status(200).json({
       success: true,
@@ -39,9 +46,9 @@ const updateDayBookItems = async (req, res) => {
     });
   } catch (error) {
     console.error("updateDayBookItems error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
-      message: "Failed to update DayBook items",
+      message: error?.message || "Failed to update DayBook items",
     });
   }
 };
@@ -49,12 +56,16 @@ const updateDayBookItems = async (req, res) => {
 const getItemsByDayBookId = async (req, res) => {
   try {
     const { id } = req.params;
-    const items = await dayBookItemService.getItemsByDayBookId(id);
+    const items = await dayBookItemService.getItemsByDayBookId(
+      id,
+      req.user || null,
+    );
     res.status(200).json({ data: items });
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch items", error: err.message });
+    res.status(err?.statusCode || 500).json({
+      message: err?.message || "Failed to fetch items",
+      error: err?.message,
+    });
   }
 };
 
@@ -63,16 +74,19 @@ const getAdditionalChargesByDayBookId = async (req, res) => {
     console.log("I am inside the getAdditionalChargesByDayBookId");
     const { id } = req.params;
     const charges =
-      await dayBookItemService.getAdditionalChargesByDayBookId(id);
+      await dayBookItemService.getAdditionalChargesByDayBookId(
+        id,
+        req.user || null,
+      );
 
     return res.status(200).json({
       success: true,
       data: charges,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
-      message: "Failed to fetch additional charges",
+      message: error?.message || "Failed to fetch additional charges",
     });
   }
 };

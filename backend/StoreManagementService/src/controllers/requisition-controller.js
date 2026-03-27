@@ -22,7 +22,7 @@ const create = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.create error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to create requisition",
       data: {},
@@ -69,7 +69,7 @@ const list = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.list error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to fetch requisitions",
       data: [],
@@ -119,7 +119,7 @@ const approve = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.approve error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to approve requisition",
       data: {},
@@ -139,7 +139,7 @@ const reject = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.reject error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to reject requisition",
       data: {},
@@ -159,7 +159,7 @@ const submit = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.submit error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to submit requisition",
       data: {},
@@ -179,7 +179,7 @@ const cancel = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.cancel error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to cancel requisition",
       data: {},
@@ -240,7 +240,7 @@ const addAttachment = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.addAttachment error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to add attachment",
       data: {},
@@ -259,13 +259,16 @@ const listForIssue = async (req, res) => {
       limit = 50,
     } = req.query || {};
 
-    const result = await service.listForIssue({
-      employeeId,
-      search,
-      cursor: cursor ? String(cursor) : null,
-      cursorMode: parseCursorMode(cursorMode),
-      limit: normalizeLimit(limit, 50, 500),
-    });
+    const result = await service.listForIssue(
+      {
+        employeeId,
+        search,
+        cursor: cursor ? String(cursor) : null,
+        cursorMode: parseCursorMode(cursorMode),
+        limit: normalizeLimit(limit, 50, 500),
+      },
+      req.user || {},
+    );
 
     return res.status(200).json({
       success: true,
@@ -276,7 +279,7 @@ const listForIssue = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.listForIssue error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to fetch issue-ready requisitions",
       data: [],
@@ -307,7 +310,7 @@ const getUserDashboardSummary = async (req, res) => {
     });
   } catch (error) {
     console.error("RequisitionController.getUserDashboardSummary error:", error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       success: false,
       message: error?.message || "Failed to fetch user dashboard summary",
       data: {},

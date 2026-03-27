@@ -48,6 +48,7 @@ import AssetsInStore from "./pages/AssetInstore"; // adjust path if needed
 import OutOfStockReport from "./pages/OutOfStockReport";
 import EWasteItems from "./pages/EWasteItems";
 import DisposeList from "./pages/DisposeList";
+import AccessControl from "./pages/AccessControl";
 import NetworkOfflineOverlay from "./components/NetworkOfflineOverlay";
 import Requisitions from "./pages/Requisitions";
 import RequisitionInbox from "./pages/RequisitionInbox";
@@ -93,6 +94,14 @@ function App() {
           <Route path="itemCategory" element={<ItemCategory />} />
           <Route path="employees" element={<Employee />} />
           <Route path="custodians" element={<Custodians />} />
+          <Route
+            path="access-control"
+            element={
+              <ProtectedRoute user={user} anyOf={["SUPER_ADMIN"]}>
+                <AccessControl />
+              </ProtectedRoute>
+            }
+          />
           {/* Entry Forms */}
           <Route
             path="employees-entry"

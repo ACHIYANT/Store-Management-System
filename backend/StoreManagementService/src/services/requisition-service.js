@@ -1,11 +1,64 @@
 const axios = require("axios");
 const RequisitionRepository = require("../repository/requisition-repository");
 const { AUTH_BASE_URL } = require("../config/serverConfig");
+const {
+  assertActorCanAccessLocation,
+  resolveActorLocationScope,
+  resolveEmployeeLocationScope,
+} = require("../utils/location-scope");
 
 const DEFAULT_REQUISITION_STAGES = [
   { role_name: "DIVISION_HEAD", stage_order: 1, flow_type: "REQUISITION" },
   { role_name: "ADMIN_APPROVER", stage_order: 2, flow_type: "REQUISITION" },
 ];
+
+const normalizeAssignmentScopeValues = (
+  assignments = [],
+  assignmentType,
+  scopeType = null,
+) => {
+  const normalizedType = String(assignmentType || "").trim().toUpperCase();
+  const normalizedScopeType = scopeType
+    ? String(scopeType).trim().toUpperCase()
+    : null;
+
+  if (!Array.isArray(assignments)) return [];
+
+  const values = [];
+  for (const assignment of assignments) {
+    const type = String(assignment?.assignment_type || "").trim().toUpperCase();
+    const currentScopeType = String(assignment?.scope_type || "")
+      .trim()
+      .toUpperCase();
+    if (!type || type !== normalizedType) continue;
+    if (normalizedScopeType && currentScopeType !== normalizedScopeType) continue;
+
+    const label = String(assignment?.scope_label || "").trim();
+    const key = String(assignment?.scope_key || "").trim();
+    const metadataLabel = String(assignment?.metadata_json?.display_name || "").trim();
+    if (label) values.push(label);
+    if (key) values.push(key);
+    if (metadataLabel) values.push(metadataLabel);
+  }
+
+  return [...new Set(values)];
+};
+
+const hasMatchingAssignmentScope = (
+  assignments = [],
+  assignmentType,
+  expectedValue,
+  scopeType = null,
+) => {
+  const expected = String(expectedValue || "").trim().toLowerCase();
+  if (!expected) return false;
+
+  return normalizeAssignmentScopeValues(
+    assignments,
+    assignmentType,
+    scopeType,
+  ).some((value) => String(value || "").trim().toLowerCase() === expected);
+};
 
 class RequisitionService {
   constructor() {
@@ -107,6 +160,12 @@ class RequisitionService {
     const items = Array.isArray(payload.items) ? payload.items : [];
     const stages = await this.getStagesForRequisition();
     const initialStage = stages[0] || null;
+    const requesterLocationScope =
+      (await resolveEmployeeLocationScope(actor?.empcode || null)) ||
+      resolveActorLocationScope(
+        actor || {},
+        payload?.location_scope || payload?.location,
+      );
 
     return this.repository.create({
       requesterUserId: Number(actor?.id),
@@ -116,6 +175,7 @@ class RequisitionService {
           : null,
       requesterName: actor?.fullname || actor?.name || null,
       requesterDivision: actor?.division || null,
+      requesterLocationScope,
       purpose: payload?.purpose || null,
       remarks: payload?.remarks || null,
       items,
@@ -143,6 +203,8 @@ class RequisitionService {
       viewerUserId: actor?.id || null,
       viewerDivision: actor?.division || null,
       viewerRoles: actor?.roles || [],
+      viewerAssignments: actor?.assignments || [],
+      viewerActor: actor || {},
       viewerStageOrders,
       firstStageOrder,
     });
@@ -151,6 +213,11 @@ class RequisitionService {
   async getById(id, actor = {}) {
     const record = await this.repository.getById(id);
     if (!record) return null;
+    assertActorCanAccessLocation(
+      actor || {},
+      record.location_scope,
+      "access this requisition",
+    );
 
     const actorUserId = Number(actor?.id);
     const actorRoles = this._normalizeRoles(actor?.roles || []);
@@ -175,9 +242,14 @@ class RequisitionService {
       String(record.requester_division || "").trim()
     ) {
       canSeeAsCurrentApprover =
-        String(actor?.division || "").trim() &&
-        String(actor.division).trim().toLowerCase() ===
-          String(record.requester_division).trim().toLowerCase();
+        hasMatchingAssignmentScope(
+          actor?.assignments || [],
+          "DIVISION_HEAD",
+          record.requester_division,
+        ) ||
+        (String(actor?.division || "").trim() &&
+          String(actor.division).trim().toLowerCase() ===
+            String(record.requester_division).trim().toLowerCase());
     }
 
     if (
@@ -261,13 +333,14 @@ class RequisitionService {
     });
   }
 
-  async listForIssue(query = {}) {
+  async listForIssue(query = {}, actor = {}) {
     return this.repository.listForIssue({
       employeeId: query.employeeId || null,
       search: query.search || "",
       cursor: query.cursor || null,
       cursorMode: Boolean(query.cursorMode),
       limit: query.limit,
+      viewerActor: actor || {},
     });
   }
 

@@ -17,6 +17,16 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "UserId",
         otherKey: "RoleId",
       });
+      User.hasMany(models.OrgAssignment, {
+        as: "orgAssignments",
+        foreignKey: "user_id",
+        sourceKey: "id",
+      });
+      User.hasMany(models.UserLocationScope, {
+        as: "userLocationScopes",
+        foreignKey: "user_id",
+        sourceKey: "id",
+      });
     }
   }
   User.init(

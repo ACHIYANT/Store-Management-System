@@ -20,6 +20,10 @@ const {
   ensureCustodian,
   toCustodianFields,
 } = require("../utils/custodian-utils");
+const {
+  getLocationScopeFromResolvedCustodian,
+  normalizeLocationScope,
+} = require("../utils/location-scope");
 
 const SOURCE_FLAG = "MIGRATION_ISSUED";
 const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
@@ -361,6 +365,14 @@ class IssuedMigrationService {
           division: this._normalizeText(row.division),
         }
       : null;
+    const resolvedLocationScope = getLocationScopeFromResolvedCustodian(
+      resolvedCustodian,
+    );
+    if (!resolvedLocationScope) {
+      throw new Error(
+        "Employee office location is required for issued migration. Please update the employee location before importing.",
+      );
+    }
 
     const hintedItemMaster = await this._findItemMaster(
       {
@@ -470,6 +482,7 @@ class IssuedMigrationService {
           sku_unit: parsedInputSkuUnit || "Unit",
           item_master_id: ensuredItemMaster?.id || null,
           source: "MIGRATION",
+          location_scope: resolvedLocationScope,
         },
         { transaction },
       );
@@ -511,6 +524,24 @@ class IssuedMigrationService {
       throw new Error(
         "Stock not found. Provide valid stock_id or item_name/category_name mapping",
       );
+    }
+
+    const stockLocationScope = normalizeLocationScope(
+      stock.location_scope || resolvedLocationScope,
+    );
+    if (!stockLocationScope) {
+      throw new Error(
+        `Stock ${stock.id} is missing location information. Please backfill the stock location before continuing.`,
+      );
+    }
+    if (stockLocationScope !== resolvedLocationScope) {
+      throw new Error(
+        `Stock ${stock.id} belongs to ${stockLocationScope}, but employee belongs to ${resolvedLocationScope}. Issued migration must stay within one location.`,
+      );
+    }
+    if (!stock.location_scope && writeMode) {
+      await stock.update({ location_scope: stockLocationScope }, { transaction });
+      stock.location_scope = stockLocationScope;
     }
 
     if (
@@ -584,6 +615,7 @@ class IssuedMigrationService {
       custodian: resolvedCustodian,
       category: stock.ItemCategory || category || null,
       stock,
+      location_scope: stockLocationScope,
       sku_unit: requestedSkuUnit,
       item_master_id: Number.isFinite(itemMasterId) && itemMasterId > 0 ? itemMasterId : null,
       willCreateStock: false,
@@ -628,6 +660,7 @@ class IssuedMigrationService {
     const resolvedEmployeeId = resolvedCustodian?.employeeId ?? null;
     const resolvedCustodianFields = toCustodianFields(resolvedCustodian);
     const issueDate = resolved.issueDate || new Date();
+    const locationScope = resolved.location_scope || null;
 
     if (isHistoricalNoSerialRow) {
       if (dryRun) {
@@ -677,6 +710,7 @@ class IssuedMigrationService {
           quantity,
           sku_unit: resolved.sku_unit || resolved.stock.sku_unit || "Unit",
           date: issueDate,
+          location_scope: locationScope,
           requisition_url: null,
           requisition_id: null,
           requisition_item_id: null,
@@ -699,6 +733,7 @@ class IssuedMigrationService {
             toEmployeeId: resolvedEmployeeId,
             performedBy: "System Migration",
             remarks: "Issued migration (asset without serial number)",
+            locationScope,
             metadata: {
               source: SOURCE_FLAG,
               row_no: row.row_no,
@@ -727,6 +762,7 @@ class IssuedMigrationService {
             status: "Issued",
             current_employee_id: resolvedEmployeeId,
             ...resolvedCustodianFields,
+            location_scope: locationScope,
             notes: eventNotes,
             daybook_id: null,
             daybook_item_id: null,
@@ -753,6 +789,7 @@ class IssuedMigrationService {
             issued_item_id: issued.id,
             daybook_id: null,
             daybook_item_id: null,
+            location_scope: locationScope,
             notes: eventNotes,
             performed_by: "System Migration",
           },
@@ -858,6 +895,7 @@ class IssuedMigrationService {
           status: "Issued",
           current_employee_id: resolvedEmployeeId,
           ...resolvedCustodianFields,
+          location_scope: locationScope,
           notes: eventNotes,
           daybook_id: null,
           daybook_item_id: null,
@@ -881,6 +919,7 @@ class IssuedMigrationService {
           status: "Issued",
           current_employee_id: resolvedEmployeeId,
           ...resolvedCustodianFields,
+          location_scope: locationScope,
           notes: noteParts,
         },
         { transaction },
@@ -913,6 +952,7 @@ class IssuedMigrationService {
         quantity: 1,
         sku_unit: resolved.sku_unit || resolved.stock.sku_unit || "Unit",
         date: issueDate,
+        location_scope: locationScope,
         requisition_url: null,
         requisition_id: null,
         requisition_item_id: null,
@@ -935,6 +975,7 @@ class IssuedMigrationService {
           toEmployeeId: resolvedEmployeeId,
           performedBy: "System Migration",
           remarks: "Issued migration (asset)",
+          locationScope,
           metadata: {
             source: SOURCE_FLAG,
             row_no: row.row_no,
@@ -957,6 +998,7 @@ class IssuedMigrationService {
         issued_item_id: issued.id,
         daybook_id: null,
         daybook_item_id: null,
+        location_scope: locationScope,
         notes: eventNotes,
         performed_by: "System Migration",
       },
@@ -998,6 +1040,7 @@ class IssuedMigrationService {
     const resolvedCustodian = resolved.custodian;
     const resolvedEmployeeId = resolvedCustodian?.employeeId ?? null;
     const resolvedCustodianFields = toCustodianFields(resolvedCustodian);
+    const locationScope = resolved.location_scope || null;
 
     if (dryRun) {
       return {
@@ -1037,6 +1080,7 @@ class IssuedMigrationService {
         quantity,
         sku_unit: resolved.sku_unit || resolved.stock.sku_unit || "Unit",
         date: resolved.issueDate || new Date(),
+        location_scope: locationScope,
         requisition_url: null,
         requisition_id: null,
         requisition_item_id: null,
@@ -1059,6 +1103,7 @@ class IssuedMigrationService {
           toEmployeeId: resolvedEmployeeId,
           performedBy: "System Migration",
           remarks: "Issued migration (consumable)",
+          locationScope,
           metadata: {
             source: SOURCE_FLAG,
             row_no: row.row_no,

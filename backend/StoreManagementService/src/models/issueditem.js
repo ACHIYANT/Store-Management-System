@@ -59,6 +59,10 @@ module.exports = (sequelize, DataTypes) => {
       requisition_url: DataTypes.STRING, // NEW
       requisition_id: DataTypes.BIGINT.UNSIGNED,
       requisition_item_id: DataTypes.BIGINT.UNSIGNED,
+      location_scope: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       source: {
         type: DataTypes.ENUM(
           "OFFLINE_REQUISITION",

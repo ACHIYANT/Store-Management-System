@@ -81,6 +81,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: true,
       },
+      location_scope: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       deleted_at: {
         type: DataTypes.DATE,
         allowNull: true,

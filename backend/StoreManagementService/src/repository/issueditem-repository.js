@@ -29,10 +29,31 @@ const {
   ensureCustodian,
   toCustodianFields,
 } = require("../utils/custodian-utils");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+  getLocationScopeFromResolvedCustodian,
+  normalizeLocationScope,
+} = require("../utils/location-scope");
 
 const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
 const HISTORICAL_NO_SERIAL_DISPLAY =
   "Migrated data (Serial number not available)";
+
+const ensureSameLocationScope = (sourceLocationScope, targetLocationScope, label) => {
+  const source = normalizeLocationScope(sourceLocationScope);
+  const target = normalizeLocationScope(targetLocationScope);
+  if (!source) {
+    throw new Error("Source location is missing. Please backfill the record before continuing.");
+  }
+  if (!target) {
+    throw new Error("Target location is missing. Please update the employee/custodian location before continuing.");
+  }
+  if (source !== target) {
+    throw new Error(`${label} must stay within the same location.`);
+  }
+  return source;
+};
 
 class IssuedItemRepository {
   _toPositiveIntOrNull(value) {
@@ -52,6 +73,7 @@ class IssuedItemRepository {
     quantity,
     requisitionUrl = null,
     skuUnit = null,
+    actor = null,
   }) {
     const t = await sequelize.transaction();
     try {
@@ -88,6 +110,11 @@ class IssuedItemRepository {
       });
 
       if (!stock) throw new Error("Stock item not found");
+      const stockLocationScope = assertActorCanAccessLocation(
+        actor || {},
+        stock.location_scope,
+        "issue stock from this location",
+      );
       if (stock.quantity < qty) {
         throw new Error(`Insufficient stock. Available: ${stock.quantity}`);
       }
@@ -127,6 +154,11 @@ class IssuedItemRepository {
         transaction: t,
       });
       const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
+      ensureSameLocationScope(
+        stockLocationScope,
+        getLocationScopeFromResolvedCustodian(resolvedCustodian),
+        "Item issuance",
+      );
 
       // 3) Decrement stock
       await stock.update(
@@ -145,6 +177,7 @@ class IssuedItemRepository {
           sku_unit: normalizedSkuUnit,
           date: new Date(),
           requisition_url: requisitionUrl, // <— FIX: save it if provided
+          location_scope: stockLocationScope,
           source: "OFFLINE_REQUISITION",
         },
         { transaction: t },
@@ -163,6 +196,7 @@ class IssuedItemRepository {
           toEmployeeId: resolvedEmployeeId,
           performedBy: "Store Issue",
           remarks: requisitionUrl ? "Issued against requisition" : "Issued",
+          locationScope: stockLocationScope,
         },
         { transaction: t },
       );
@@ -184,6 +218,7 @@ class IssuedItemRepository {
     assetIds = [],
     requisitionUrl = null,
     skuUnit = null,
+    actor = null,
   }) {
     const { Asset, AssetEvent } = require("../models");
     const t = await sequelize.transaction();
@@ -216,6 +251,11 @@ class IssuedItemRepository {
         lock: t.LOCK.UPDATE,
       });
       if (!stock) throw new Error("Stock item not found");
+      const stockLocationScope = assertActorCanAccessLocation(
+        actor || {},
+        stock.location_scope,
+        "issue stock from this location",
+      );
       const normalizedSkuUnit = normalizeSkuUnit(skuUnit ?? stock.sku_unit);
       if (!sameSkuUnit(normalizedSkuUnit, stock.sku_unit || "Unit")) {
         throw new Error(
@@ -251,6 +291,11 @@ class IssuedItemRepository {
         transaction: t,
       });
       const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
+      ensureSameLocationScope(
+        stockLocationScope,
+        getLocationScopeFromResolvedCustodian(resolvedCustodian),
+        "Serialized asset issuance",
+      );
 
       // Fetch assets to issue
       const assets = await Asset.findAll({
@@ -285,6 +330,7 @@ class IssuedItemRepository {
           sku_unit: normalizedSkuUnit,
           date: new Date(),
           requisition_url: requisitionUrl, // <— FIX
+          location_scope: stockLocationScope,
           source: "OFFLINE_REQUISITION",
         },
         { transaction: t },
@@ -303,6 +349,7 @@ class IssuedItemRepository {
           toEmployeeId: resolvedEmployeeId,
           performedBy: "Store Issue",
           remarks: "Serialized asset issue",
+          locationScope: stockLocationScope,
           metadata: {
             asset_ids: assetIds,
           },
@@ -330,6 +377,7 @@ class IssuedItemRepository {
             to_custodian_type: resolvedCustodian?.type ?? null,
             ...toCustodianFields(resolvedCustodian),
             issued_item_id: issued.id,
+            location_scope: stockLocationScope,
           },
           { transaction: t },
         );
@@ -357,6 +405,7 @@ class IssuedItemRepository {
     itemType, // Asset | Consumable
     fromDate,
     toDate,
+    viewerActor = null,
   }) {
     const safePage = Math.max(1, Number(page) || 1);
     const safeLimit = normalizeLimit(limit, 50, 500);
@@ -371,6 +420,10 @@ class IssuedItemRepository {
 
     /* ---------------- Base WHERE (IssuedItem) ---------------- */
     const issuedWhere = {};
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) {
+      Object.assign(issuedWhere, locationWhere);
+    }
 
     if (employeeId) {
       issuedWhere.employee_id = employeeId;
@@ -535,6 +588,7 @@ class IssuedItemRepository {
       return {
         id: r.id,
         date: r.date,
+        location_scope: r.location_scope || null,
         employee_id: r.employee_id,
         employee_name: r.Employee?.name || null,
         division: r.Employee?.division || null,
@@ -658,6 +712,9 @@ class IssuedItemRepository {
         transaction: t,
       });
       const resolvedEmployeeId = resolvedCustodian.employeeId ?? null;
+      const targetLocationScope = getLocationScopeFromResolvedCustodian(
+        resolvedCustodian,
+      );
 
       const results = [];
       const requisitionIdNum = this._toPositiveIntOrNull(requisitionId);
@@ -687,6 +744,16 @@ class IssuedItemRepository {
         if (!requisitionRow) {
           throw new Error(`Requisition not found: ${requisitionIdNum}`);
         }
+        assertActorCanAccessLocation(
+          actor || {},
+          requisitionRow.location_scope,
+          "issue requisition items for this location",
+        );
+        ensureSameLocationScope(
+          requisitionRow.location_scope,
+          targetLocationScope,
+          "Requisition fulfillment",
+        );
 
         const requesterEmpId = Number(requisitionRow.requester_emp_id);
         if (
@@ -776,6 +843,23 @@ class IssuedItemRepository {
         });
 
         if (!stock) throw new Error(`Stock not found: ${stockId}`);
+        const stockLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          stock.location_scope,
+          "issue stock from this location",
+        );
+        ensureSameLocationScope(
+          stockLocationScope,
+          targetLocationScope,
+          "Bulk item issuance",
+        );
+        if (requisitionRow) {
+          ensureSameLocationScope(
+            requisitionRow.location_scope,
+            stockLocationScope,
+            "Requisition stock mapping",
+          );
+        }
         const requestedSkuUnit = normalizeSkuUnit(
           requestedSkuUnitInput ?? stock.sku_unit,
         );
@@ -819,6 +903,7 @@ class IssuedItemRepository {
               item_master_id: itemMasterId,
               sku_unit: requestedSkuUnit,
               is_active: true,
+              location_scope: stockLocationScope,
               quantity: { [Op.gt]: 0 },
               id: { [Op.ne]: stock.id },
             },
@@ -867,6 +952,7 @@ class IssuedItemRepository {
               requisition_url: requisitionUrl || null,
               requisition_id: requisitionIdNum,
               requisition_item_id: requisitionItemId,
+              location_scope: stockLocationScope,
               source: issuedSource,
             },
             { transaction: t },
@@ -885,6 +971,7 @@ class IssuedItemRepository {
               toEmployeeId: resolvedEmployeeId,
               performedBy: actor?.fullname || actor?.name || "Store Issue",
               remarks: "Bulk issue (non-serialized)",
+              locationScope: stockLocationScope,
               metadata: {
                 requisition_id: requisitionIdNum,
                 requisition_item_id: requisitionItemId,
@@ -985,6 +1072,23 @@ class IssuedItemRepository {
         });
 
         if (!stock) throw new Error(`Stock not found: ${stockId}`);
+        const stockLocationScope = assertActorCanAccessLocation(
+          actor || {},
+          stock.location_scope,
+          "issue stock from this location",
+        );
+        ensureSameLocationScope(
+          stockLocationScope,
+          targetLocationScope,
+          "Bulk serialized issuance",
+        );
+        if (requisitionRow) {
+          ensureSameLocationScope(
+            requisitionRow.location_scope,
+            stockLocationScope,
+            "Requisition stock mapping",
+          );
+        }
         const requestedSkuUnit = normalizeSkuUnit(
           requestedSkuUnitInput ?? stock.sku_unit,
         );
@@ -1049,6 +1153,7 @@ class IssuedItemRepository {
             requisition_url: requisitionUrl || null,
             requisition_id: requisitionIdNum,
             requisition_item_id: requisitionItemId,
+            location_scope: stockLocationScope,
             source: issuedSource,
           },
           { transaction: t },
@@ -1067,6 +1172,7 @@ class IssuedItemRepository {
             toEmployeeId: resolvedEmployeeId,
             performedBy: actor?.fullname || actor?.name || "Store Issue",
             remarks: "Bulk issue (serialized)",
+            locationScope: stockLocationScope,
             metadata: {
               asset_ids: assetIds,
               requisition_id: requisitionIdNum,
@@ -1102,6 +1208,7 @@ class IssuedItemRepository {
               to_custodian_type: resolvedCustodian?.type ?? null,
               ...toCustodianFields(resolvedCustodian),
               issued_item_id: issued.id,
+              location_scope: stockLocationScope,
               notes: notes || null,
             },
             { transaction: t },
