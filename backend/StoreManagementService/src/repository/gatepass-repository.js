@@ -16,6 +16,11 @@ const {
   applyDateIdDescCursor,
 } = require("../utils/cursor-pagination");
 const { toCustodianFields } = require("../utils/custodian-utils");
+const {
+  assertActorCanAccessLocation,
+  buildLocationScopeWhere,
+  normalizeLocationScope,
+} = require("../utils/location-scope");
 
 class GatePassRepository {
   _sanitizeAssetIds(assetIds = []) {
@@ -49,6 +54,7 @@ class GatePassRepository {
               "status",
               "current_employee_id",
               "vendor_id",
+              "location_scope",
             ],
             include: [
               {
@@ -188,6 +194,7 @@ class GatePassRepository {
       in_verified_at: p.in_verified_at,
       notes: p.notes,
       created_by: p.created_by,
+      location_scope: p.location_scope || null,
       items,
       issued_to: issuedTo,
       vendor_representatives: vendorRepresentatives,
@@ -221,12 +228,35 @@ class GatePassRepository {
       in_verified_at: p.in_verified_at,
       notes: p.notes,
       created_by: p.created_by,
+      location_scope: p.location_scope || null,
       totals: {
         total_items: items.length,
         out_verified: outVerifiedCount,
         in_verified: inVerifiedCount,
       },
     };
+  }
+
+  _resolveSingleLocationScope(rows = [], label = "Selected records") {
+    const normalizedScopes = [
+      ...new Set(
+        rows
+          .map((row) => normalizeLocationScope(row?.location_scope))
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!normalizedScopes.length) {
+      throw new Error(
+        `${label} are missing location information. Please backfill the location before continuing.`,
+      );
+    }
+
+    if (normalizedScopes.length > 1) {
+      throw new Error(`${label} must belong to a single location.`);
+    }
+
+    return normalizedScopes[0];
   }
 
   async list({
@@ -236,6 +266,7 @@ class GatePassRepository {
     cursorMode = false,
     search = "",
     status = "",
+    viewerActor = null,
   } = {}) {
     const safePage = Math.max(1, Number(page) || 1);
     const safeLimit = normalizeLimit(limit, 20, 100);
@@ -245,6 +276,10 @@ class GatePassRepository {
     const where = {};
     const normalizedStatus = String(status || "").trim();
     if (normalizedStatus) where.status = normalizedStatus;
+    const locationWhere = buildLocationScopeWhere(viewerActor || {});
+    if (locationWhere) {
+      Object.assign(where, locationWhere);
+    }
 
     const q = String(search || "").trim();
     if (q) {
@@ -340,12 +375,23 @@ class GatePassRepository {
     assets = [],
     notes = null,
     createdBy = null,
+    actor = null,
     transaction,
   }) {
     const safeAssets = Array.isArray(assets) ? assets : [];
     if (!safeAssets.length) {
       throw new Error("Cannot create gate pass without assets");
     }
+
+    const locationScope = this._resolveSingleLocationScope(
+      safeAssets,
+      "Repair-out assets",
+    );
+    assertActorCanAccessLocation(
+      actor || {},
+      locationScope,
+      "create gate passes for this location",
+    );
 
     const issuedAt = new Date();
     const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -361,6 +407,7 @@ class GatePassRepository {
         issued_at: issuedAt,
         notes: notes || null,
         created_by: createdBy || null,
+        location_scope: locationScope,
       },
       { transaction },
     );
@@ -394,7 +441,7 @@ class GatePassRepository {
 
     await GatePassItem.bulkCreate(rows, { transaction });
 
-    return this.getById(pass.id, transaction);
+    return this.getById(pass.id, transaction, actor);
   }
 
   async createEWasteOutPass({
@@ -407,6 +454,7 @@ class GatePassRepository {
     issuedSignatoryName = null,
     issuedSignatoryDesignation = null,
     issuedSignatoryDivision = null,
+    actor = null,
   }) {
     const normalizedAssetIds = this._sanitizeAssetIds(assetIds);
     if (!normalizedAssetIds.length) {
@@ -447,6 +495,16 @@ class GatePassRepository {
         );
       }
 
+      const locationScope = this._resolveSingleLocationScope(
+        assets,
+        "E-Waste assets",
+      );
+      assertActorCanAccessLocation(
+        actor || {},
+        locationScope,
+        "create gate passes for this location",
+      );
+
       const issuedAt = new Date();
       const seed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const tempNo = `TMP-${seed}`;
@@ -467,6 +525,7 @@ class GatePassRepository {
           issued_signatory_division: normalizeText(issuedSignatoryDivision),
           vendor_signatory_name: normalizeText(vendorSignatoryName),
           vendor_signatory_address: normalizeText(vendorSignatoryAddress),
+          location_scope: locationScope,
         },
         { transaction: t },
       );
@@ -497,7 +556,7 @@ class GatePassRepository {
 
       await GatePassItem.bulkCreate(rows, { transaction: t });
 
-      const gatePass = await this.getById(pass.id, t);
+      const gatePass = await this.getById(pass.id, t, actor);
       await t.commit();
       return gatePass;
     } catch (error) {
@@ -506,17 +565,22 @@ class GatePassRepository {
     }
   }
 
-  async getById(id, transaction = null) {
+  async getById(id, transaction = null, actor = null) {
     const row = await GatePass.findByPk(id, {
       include: this._include(),
       order: [[{ model: GatePassItem, as: "items" }, "id", "ASC"]],
       transaction,
     });
     if (!row) return null;
+    assertActorCanAccessLocation(
+      actor || {},
+      row.location_scope,
+      "access gate passes for this location",
+    );
     return this._mapGatePass(row);
   }
 
-  async verifyByCode(securityCode) {
+  async verifyByCode(securityCode, actor = null) {
     const normalizedCode = String(securityCode || "")
       .trim()
       .toUpperCase();
@@ -539,6 +603,12 @@ class GatePassRepository {
         reason: "Invalid gate pass verification code",
       };
     }
+
+    assertActorCanAccessLocation(
+      actor || {},
+      row.location_scope,
+      "verify gate passes for this location",
+    );
 
     const expected = generateGatePassSecurityCode({
       passNo: row.pass_no,
@@ -564,6 +634,7 @@ class GatePassRepository {
     assetIds = [],
     direction = "out",
     verifiedBy = null,
+    actor = null,
   }) {
     const normalizedIds = this._sanitizeAssetIds(assetIds);
     const t = await sequelize.transaction();
@@ -581,6 +652,11 @@ class GatePassRepository {
       });
 
       if (!gatePass) throw new Error("Gate pass not found");
+      assertActorCanAccessLocation(
+        actor || {},
+        gatePass.location_scope,
+        "update gate pass verification for this location",
+      );
       const isOneWayPass = gatePass.purpose === "EWasteOut";
 
       const allItems = gatePass.items || [];
@@ -703,6 +779,7 @@ class GatePassRepository {
                 asset_id: asset.id,
                 event_type: "EWasteOut",
                 event_date: now,
+                location_scope: gatePass.location_scope || asset.location_scope || null,
                 notes: `E-Waste Gate Pass ${gatePass.pass_no}`,
               },
               { transaction: t },
@@ -714,7 +791,7 @@ class GatePassRepository {
       await t.commit();
       return {
         affected,
-        gatePass: await this.getById(gatePass.id),
+        gatePass: await this.getById(gatePass.id, null, actor),
       };
     } catch (error) {
       await t.rollback();
@@ -722,25 +799,27 @@ class GatePassRepository {
     }
   }
 
-  async verifyOut({ gatePassId, assetIds = [], verifiedBy = null }) {
+  async verifyOut({ gatePassId, assetIds = [], verifiedBy = null, actor = null }) {
     return this._verifyDirection({
       gatePassId,
       assetIds,
       direction: "out",
       verifiedBy,
+      actor,
     });
   }
 
-  async verifyIn({ gatePassId, assetIds = [], verifiedBy = null }) {
+  async verifyIn({ gatePassId, assetIds = [], verifiedBy = null, actor = null }) {
     return this._verifyDirection({
       gatePassId,
       assetIds,
       direction: "in",
       verifiedBy,
+      actor,
     });
   }
 
-  async updateSignatories({ gatePassId, payload = {} }) {
+  async updateSignatories({ gatePassId, payload = {}, actor = null }) {
     const t = await sequelize.transaction();
     try {
       const gatePass = await GatePass.findByPk(gatePassId, {
@@ -749,6 +828,11 @@ class GatePassRepository {
       });
 
       if (!gatePass) throw new Error("Gate pass not found");
+      assertActorCanAccessLocation(
+        actor || {},
+        gatePass.location_scope,
+        "update gate pass signatories for this location",
+      );
 
       const normalizeText = (value) => {
         if (value == null) return null;
@@ -776,7 +860,7 @@ class GatePassRepository {
 
       await gatePass.update(patch, { transaction: t });
       await t.commit();
-      return this.getById(gatePassId);
+      return this.getById(gatePassId, null, actor);
     } catch (error) {
       await t.rollback();
       throw error;

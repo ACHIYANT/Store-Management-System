@@ -93,6 +93,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      location_scope: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       metadata_json: {
         type: DataTypes.JSON,
         allowNull: true,

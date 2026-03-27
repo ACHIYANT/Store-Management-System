@@ -22,13 +22,16 @@ const createOne = async (req, res) => {
       });
     }
 
-    const data = await service.createOne({
-      daybook_item_id,
-      serial_number,
-      purchased_at,
-      warranty_expiry,
-      source,
-    });
+    const data = await service.createOne(
+      {
+        daybook_item_id,
+        serial_number,
+        purchased_at,
+        warranty_expiry,
+        source,
+      },
+      req.user || null,
+    );
 
     return res.status(201).json({
       data,
@@ -38,10 +41,10 @@ const createOne = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
-      message: "Failed to create serial",
+      message: error?.message || "Failed to create serial",
       err: error,
     });
   }
@@ -61,11 +64,17 @@ const bulkUpsert = async (req, res) => {
       });
     }
 
-    const data = await service.bulkUpsert(daybook_item_id, serials, {
-      purchased_at,
-      warranty_expiry,
-      source,
-    });
+    const data = await service.bulkUpsert(
+      daybook_item_id,
+      serials,
+      {
+        purchased_at,
+        warranty_expiry,
+        source,
+      },
+      undefined,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -74,10 +83,10 @@ const bulkUpsert = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
-      message: "Failed to upsert serials",
+      message: error?.message || "Failed to upsert serials",
       err: error,
     });
   }
@@ -86,7 +95,10 @@ const bulkUpsert = async (req, res) => {
 const getByDayBookItem = async (req, res) => {
   try {
     const { daybook_item_id } = req.params;
-    const data = await service.findByDayBookItem(daybook_item_id);
+    const data = await service.findByDayBookItem(
+      daybook_item_id,
+      req.user || null,
+    );
     return res.status(200).json({
       data,
       success: true,
@@ -95,10 +107,10 @@ const getByDayBookItem = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
-      message: "Failed to fetch serials",
+      message: error?.message || "Failed to fetch serials",
       err: error,
     });
   }
@@ -115,7 +127,7 @@ const markMigrated = async (req, res) => {
         err: {},
       });
     }
-    const [affected] = await service.markMigratedByIds(ids);
+    const [affected] = await service.markMigratedByIds(ids, req.user || null);
     return res.status(200).json({
       data: { affected },
       success: true,
@@ -124,10 +136,10 @@ const markMigrated = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
-      message: "Failed to mark migrated",
+      message: error?.message || "Failed to mark migrated",
       err: error,
     });
   }
@@ -136,7 +148,10 @@ const markMigrated = async (req, res) => {
 const deleteByDayBookItem = async (req, res) => {
   try {
     const { daybook_item_id } = req.params;
-    const affected = await service.deleteByDayBookItem(daybook_item_id);
+    const affected = await service.deleteByDayBookItem(
+      daybook_item_id,
+      req.user || null,
+    );
     return res.status(200).json({
       data: { affected },
       success: true,
@@ -145,10 +160,10 @@ const deleteByDayBookItem = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error?.statusCode || 500).json({
       data: {},
       success: false,
-      message: "Failed to delete serials",
+      message: error?.message || "Failed to delete serials",
       err: error,
     });
   }

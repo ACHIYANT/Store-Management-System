@@ -52,6 +52,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      location_scope: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+      },
       created_by: {
         type: DataTypes.STRING,
         allowNull: true,

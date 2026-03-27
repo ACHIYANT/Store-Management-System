@@ -17,6 +17,7 @@ async function logStockMovement(
     toEmployeeId = null,
     performedBy = null,
     remarks = null,
+    locationScope = null,
     metadata = null,
   },
   { transaction = null } = {},
@@ -48,6 +49,7 @@ async function logStockMovement(
         Number.isFinite(toEmpIdNum) && toEmpIdNum > 0 ? toEmpIdNum : null,
       performed_by: performedBy || null,
       remarks: remarks || null,
+      location_scope: locationScope || null,
       metadata_json: metadata || null,
     },
     { transaction },
@@ -84,6 +86,7 @@ async function logStockMovements(rows = [], { transaction = null } = {}) {
         Number.isFinite(toEmpIdNum) && toEmpIdNum > 0 ? toEmpIdNum : null,
       performed_by: row?.performedBy || null,
       remarks: row?.remarks || null,
+      location_scope: row?.locationScope || null,
       metadata_json: row?.metadata || null,
     });
   }
@@ -96,4 +99,3 @@ module.exports = {
   logStockMovement,
   logStockMovements,
 };
-

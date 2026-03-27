@@ -41,6 +41,7 @@ module.exports = (sequelize, DataTypes) => {
       requester_emp_id: { type: DataTypes.STRING(40), allowNull: true },
       requester_name: { type: DataTypes.STRING(255), allowNull: true },
       requester_division: { type: DataTypes.STRING(255), allowNull: true },
+      location_scope: { type: DataTypes.STRING(80), allowNull: true },
       purpose: { type: DataTypes.TEXT, allowNull: true },
       status: {
         type: DataTypes.ENUM(

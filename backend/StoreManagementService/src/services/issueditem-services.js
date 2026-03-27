@@ -3,10 +3,10 @@ const IssuedItemRepository = require("../repository/issueditem-repository");
 
 class IssuedItemService {
   // Non-serialized issuance: { stockId, employeeId, quantity }
-  async issueItem(payload) {
+  async issueItem(payload, actor = null) {
     try {
       const repo = new IssuedItemRepository();
-      return await repo.issueItem(payload);
+      return await repo.issueItem({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (issueItem).");
       throw { error };
@@ -15,10 +15,10 @@ class IssuedItemService {
 
   // ? Instead of the above function listAll() below i am creating the function search()
 
-  async search(filters) {
+  async search(filters, actor = null) {
     try {
       const repo = new IssuedItemRepository();
-      return await repo.search(filters);
+      return await repo.search({ ...filters, viewerActor: actor });
     } catch (error) {
       console.log("Something went wrong at service layer (issueSerialized).");
       throw { error };
@@ -26,10 +26,10 @@ class IssuedItemService {
   }
 
   // Serialized issuance: { stockId, employeeId, assetIds: [] }
-  async issueSerialized(payload) {
+  async issueSerialized(payload, actor = null) {
     try {
       const repo = new IssuedItemRepository();
-      return await repo.issueSerialized(payload);
+      return await repo.issueSerialized({ ...payload, actor });
     } catch (error) {
       console.log("Something went wrong at service layer (issueSerialized).");
       throw { error };

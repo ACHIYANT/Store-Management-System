@@ -15,6 +15,10 @@ const DayBookItemService = require("./daybookitem-service");
 const DayBookItemSerialService = require("./daybookitemserials-service");
 
 const { renameUploadedFiles } = require("../utils/rename-upload-files");
+const {
+  assertActorCanAccessLocation,
+  resolveActorLocationScope,
+} = require("../utils/location-scope");
 
 class DayBookService {
   constructor() {
@@ -32,11 +36,72 @@ class DayBookService {
       : [];
   }
 
+  getActorDaybookStageAccess(roles = []) {
+    const normalized = this.normalizeRoles(roles);
+    const isSuperAdmin = normalized.includes("SUPER_ADMIN");
+    const isStoreEntry = normalized.includes("STORE_ENTRY");
+
+    return {
+      normalized,
+      isSuperAdmin,
+      isStoreEntry,
+    };
+  }
+
   isPrivilegedViewer(roles = []) {
     const normalized = this.normalizeRoles(roles);
     return (
       normalized.includes("STORE_ENTRY") || normalized.includes("SUPER_ADMIN")
     );
+  }
+
+  async assertActorCanAdvanceDaybook(daybook, actor = null) {
+    const { normalized, isSuperAdmin, isStoreEntry } = this.getActorDaybookStageAccess(
+      actor?.roles || [],
+    );
+
+    if (isSuperAdmin) return;
+
+    const currentLevel = Number(daybook?.approval_level || 0);
+
+    if (isStoreEntry) {
+      if (currentLevel === 0) return;
+      const error = new Error("Only the current approver can move this daybook.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const roleStageOrders = await this.getRoleStageOrders(normalized);
+    if (roleStageOrders.includes(currentLevel)) {
+      return;
+    }
+
+    const error = new Error("Only the current approver can move this daybook.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  async assertActorCanRejectDaybook(daybook, actor = null) {
+    const { normalized, isSuperAdmin, isStoreEntry } = this.getActorDaybookStageAccess(
+      actor?.roles || [],
+    );
+
+    if (isSuperAdmin) return;
+    if (isStoreEntry) {
+      const error = new Error("Store entry cannot reject this daybook.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const currentLevel = Number(daybook?.approval_level || 0);
+    const roleStageOrders = await this.getRoleStageOrders(normalized);
+    if (roleStageOrders.includes(currentLevel)) {
+      return;
+    }
+
+    const error = new Error("Only the current approver can reject this daybook.");
+    error.statusCode = 403;
+    throw error;
   }
 
   async getRoleStageOrders(roles = []) {
@@ -76,13 +141,17 @@ class DayBookService {
     return [...new Set(orders)];
   }
 
-  async createDayBook(data, actorUserId = null) {
+  async createDayBook(data, actor = null) {
     try {
       const payload = { ...data };
-      const numericUserId = Number(actorUserId);
+      const numericUserId = Number(actor?.id);
       if (Number.isFinite(numericUserId)) {
         payload.created_by_user_id = numericUserId;
       }
+      payload.location_scope = resolveActorLocationScope(
+        actor || {},
+        payload.location_scope || payload.location,
+      );
       const daybook = await this.daybookRepository.createDayBook(payload);
       return daybook;
     } catch (error) {
@@ -91,7 +160,7 @@ class DayBookService {
     }
   }
 
-  async createFullDayBook(payload, actorUserId = null) {
+  async createFullDayBook(payload, actor = null) {
     const transaction = await sequelize.transaction();
     const entrySequenceService = new DayBookEntrySequenceService();
     const dayBookItemService = new DayBookItemService();
@@ -120,8 +189,12 @@ class DayBookService {
           entry_no: entryNo,
           entry_type,
           fin_year,
-          ...(Number.isFinite(Number(actorUserId))
-            ? { created_by_user_id: Number(actorUserId) }
+          location_scope: resolveActorLocationScope(
+            actor || {},
+            daybook?.location_scope || daybook?.location,
+          ),
+          ...(Number.isFinite(Number(actor?.id))
+            ? { created_by_user_id: Number(actor.id) }
             : {}),
         },
         transaction,
@@ -146,7 +219,6 @@ class DayBookService {
       }
 
       await transaction.commit();
-
 
       setImmediate(async () => {
         try {
@@ -209,8 +281,31 @@ class DayBookService {
     }
   }
 
-  async updateDayBookNew(daybookId, payload) {
+  async updateDayBookNew(daybookId, payload, actor = null) {
     try {
+      const existingDaybook = await this.daybookRepository.getDayBookById(
+        daybookId,
+      );
+      if (!existingDaybook) {
+        const error = new Error("DayBook not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      assertActorCanAccessLocation(
+        actor || {},
+        existingDaybook.location_scope,
+        "update this daybook",
+      );
+
+      if (existingDaybook.mrn_security_code) {
+        const error = new Error(
+          "MRN already generated. Please cancel MRN before updating the DayBook.",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
       const allowedFields = [
         "bill_no",
         "bill_date",
@@ -236,10 +331,16 @@ class DayBookService {
     }
   }
 
-
-  async getDayBookById(id) {
+  async getDayBookById(id, actor = null) {
     try {
       const dayBook = await this.daybookRepository.getDayBookById(id);
+      if (dayBook) {
+        assertActorCanAccessLocation(
+          actor || {},
+          dayBook.location_scope,
+          "access daybooks for this location",
+        );
+      }
       return dayBook;
     } catch (error) {
       console.log("Something went wrong at service layer.");
@@ -277,8 +378,6 @@ class DayBookService {
   async getAllDayBooksByLevel(filters) {
     try {
       const {
-        lvl,
-        isStoreEntryFlag,
         entryNo,
         finYear,
         status,
@@ -289,11 +388,11 @@ class DayBookService {
         cursorMode,
         viewerUserId = null,
         viewerRoles = [],
+        viewerAssignments = [],
+        viewerLocationScopes = [],
       } = filters;
       console.log(
         "service:level",
-        lvl,
-        isStoreEntryFlag,
         entryNo,
         finYear,
         status,
@@ -306,10 +405,11 @@ class DayBookService {
       const normalizedRoles = this.normalizeRoles(viewerRoles);
       const hasPrivilegedRole = this.isPrivilegedViewer(normalizedRoles);
       const numericViewerUserId = Number(viewerUserId);
+      console.log(numericViewerUserId);
       const roleStageOrders =
         !hasPrivilegedRole && normalizedRoles.length > 0
-        ? await this.getRoleStageOrders(normalizedRoles)
-        : [];
+          ? await this.getRoleStageOrders(normalizedRoles)
+          : [];
       const enforceStageInbox =
         !hasPrivilegedRole && roleStageOrders.length > 0;
       const applyOwnershipScope =
@@ -318,8 +418,8 @@ class DayBookService {
         normalizedRoles.length > 0 &&
         !hasPrivilegedRole;
 
-      const lvll = lvl == null ? null : Number(lvl);
-      const storeFlag = Boolean(isStoreEntryFlag) || hasPrivilegedRole;
+      const lvll = null;
+      const storeFlag = hasPrivilegedRole;
       // 🔐 Enforce permissions
       const allowedFilters = this.getAllowedFiltersByRole(lvll, storeFlag);
 
@@ -335,6 +435,12 @@ class DayBookService {
           ? numericViewerUserId
           : null,
         viewerRoleStageOrders: roleStageOrders,
+        viewerActor: {
+          id: Number.isFinite(numericViewerUserId) ? numericViewerUserId : null,
+          roles: normalizedRoles,
+          assignments: viewerAssignments,
+          location_scopes: viewerLocationScopes,
+        },
       };
 
       if (allowedFilters.finYear) safeFilters.finYear = finYear;
@@ -356,7 +462,6 @@ class DayBookService {
     }
   }
 
-
   async getDayBookForMrn(viewerContext = {}) {
     try {
       const normalizedRoles = this.normalizeRoles(viewerContext.viewerRoles);
@@ -376,6 +481,12 @@ class DayBookService {
           ? numericViewerUserId
           : null,
         viewerRoleStageOrders: roleStageOrders,
+        viewerActor: {
+          id: Number.isFinite(numericViewerUserId) ? numericViewerUserId : null,
+          roles: normalizedRoles,
+          assignments: viewerContext.viewerAssignments || [],
+          location_scopes: viewerContext.viewerLocationScopes || [],
+        },
       });
       return dayBooks;
     } catch (error) {
@@ -384,23 +495,17 @@ class DayBookService {
     }
   }
   // Search daybooks by entryNo with optional role-based filters
-  async searchDayBookByEntryNo(
-    entryNo = "",
-    level = null,
-    isStoreEntry = false,
-    viewerContext = {},
-  ) {
+  async searchDayBookByEntryNo(entryNo = "", viewerContext = {}) {
     try {
       // normalize inputs
       const q = entryNo == null ? "" : String(entryNo);
-      const lvl = level == null ? null : Number(level);
       const normalizedRoles = this.normalizeRoles(viewerContext.viewerRoles);
       const hasPrivilegedRole = this.isPrivilegedViewer(normalizedRoles);
       const numericViewerUserId = Number(viewerContext.viewerUserId);
       const roleStageOrders =
         !hasPrivilegedRole && normalizedRoles.length > 0
-        ? await this.getRoleStageOrders(normalizedRoles)
-        : [];
+          ? await this.getRoleStageOrders(normalizedRoles)
+          : [];
       const enforceStageInbox =
         !hasPrivilegedRole && roleStageOrders.length > 0;
       const applyOwnershipScope =
@@ -410,14 +515,20 @@ class DayBookService {
         !hasPrivilegedRole;
 
       const dayBooks = await this.daybookRepository.searchDayBookByEntryNo(q, {
-        level: lvl,
-        isStoreEntry: Boolean(isStoreEntry) || hasPrivilegedRole,
+        level: null,
+        isStoreEntry: hasPrivilegedRole,
         enforceStageInbox,
         applyOwnershipScope,
         viewerUserId: Number.isFinite(numericViewerUserId)
           ? numericViewerUserId
           : null,
         viewerRoleStageOrders: roleStageOrders,
+        viewerActor: {
+          id: Number.isFinite(numericViewerUserId) ? numericViewerUserId : null,
+          roles: normalizedRoles,
+          assignments: viewerContext.viewerAssignments || [],
+          location_scopes: viewerContext.viewerLocationScopes || [],
+        },
       });
       return dayBooks;
     } catch (error) {
@@ -441,16 +552,26 @@ class DayBookService {
     }
   }
 
-  async advanceApprovalUsingStages(id, actorUserId = null) {
+  async advanceApprovalUsingStages(id, actor = null) {
     const stockService = new StockService();
     const assetService = new AssetService();
     try {
       return await sequelize.transaction(async (t) => {
+        const existingDaybook = await this.daybookRepository.getDayBookById(id);
+        if (!existingDaybook) {
+          throw new Error("DayBook not found");
+        }
+        assertActorCanAccessLocation(
+          actor || {},
+          existingDaybook.location_scope,
+          "approve this daybook",
+        );
+        await this.assertActorCanAdvanceDaybook(existingDaybook, actor || {});
         // ? Step - 1 : Advance Approval - Sent daybook to next stage.
         const daybook = await this.daybookRepository.advanceApprovalUsingStages(
           id,
           t,
-          actorUserId,
+          actor?.id || null,
         );
 
         // ? Step - 2 : 🔐 Generate MRN security code ONLY on final approval
@@ -473,8 +594,16 @@ class DayBookService {
           console.log("i am going inside the stock a");
         }
         if (daybook.status === "Approved") {
-          await stockService.moveDayBookItemsToStock(daybook.id, t);
-          await assetService.finalizeApprovedDaybook(daybook.id, t);
+          await stockService.moveDayBookItemsToStock(
+            daybook.id,
+            t,
+            actor || null,
+          );
+          await assetService.finalizeApprovedDaybook(
+            daybook.id,
+            t,
+            actor || null,
+          );
         }
         return daybook;
       });
@@ -484,8 +613,18 @@ class DayBookService {
     }
   }
 
-  async rejectToStore(id, remarks = null) {
+  async rejectToStore(id, remarks = null, actor = null) {
     try {
+      const existingDaybook = await this.daybookRepository.getDayBookById(id);
+      if (!existingDaybook) {
+        throw new Error("DayBook not found");
+      }
+      assertActorCanAccessLocation(
+        actor || {},
+        existingDaybook.location_scope,
+        "reject this daybook",
+      );
+      await this.assertActorCanRejectDaybook(existingDaybook, actor || {});
       const record = await this.daybookRepository.rejectToStore(id, remarks);
       return record;
     } catch (error) {
@@ -494,9 +633,23 @@ class DayBookService {
     }
   }
 
-  async cancelMrn(daybookId, confirmedNonSerialized = false) {
+  async cancelMrn(daybookId, confirmedNonSerialized = false, actor = null) {
     const t = await sequelize.transaction();
     try {
+      const existingDaybook = await this.daybookRepository.getDayBookById(
+        daybookId,
+      );
+      if (!existingDaybook) {
+        const error = new Error("DayBook not found");
+        error.statusCode = 404;
+        throw error;
+      }
+      assertActorCanAccessLocation(
+        actor || {},
+        existingDaybook.location_scope,
+        "cancel MRN for this daybook",
+      );
+
       const daybook = await this.daybookRepository.getDayBookForMrnCancellation(
         daybookId,
         t,
@@ -574,8 +727,6 @@ class DayBookService {
         };
       }
 
-     
-
       /* -------------------------------------------------
         3️⃣ SOFT DELETE STOCK + ASSETS
       -------------------------------------------------- */
@@ -645,9 +796,16 @@ class DayBookService {
     }
   }
 
-  async getDayBookFullDetails(id) {
+  async getDayBookFullDetails(id, actor = null) {
     try {
       const dayBook = await this.daybookRepository.getDayBookFullDetails(id);
+      if (dayBook) {
+        assertActorCanAccessLocation(
+          actor || {},
+          dayBook.location_scope,
+          "access MRN details for this location",
+        );
+      }
       return dayBook;
     } catch (error) {
       console.log("Something went wrong at service layer.");
@@ -696,6 +854,8 @@ class DayBookService {
         cursorMode,
         viewerUserId = null,
         viewerRoles = [],
+        viewerAssignments = [],
+        viewerLocationScopes = [],
       } = filters;
 
       const normalizedRoles = this.normalizeRoles(viewerRoles);
@@ -724,6 +884,12 @@ class DayBookService {
           ? numericViewerUserId
           : null,
         viewerRoleStageOrders: roleStageOrders,
+        viewerActor: {
+          id: Number.isFinite(numericViewerUserId) ? numericViewerUserId : null,
+          roles: normalizedRoles,
+          assignments: viewerAssignments,
+          location_scopes: viewerLocationScopes,
+        },
       };
 
       return await this.daybookRepository.getMrnWithFilters(safeFilters);

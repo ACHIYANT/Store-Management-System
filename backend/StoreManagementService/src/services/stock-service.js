@@ -5,12 +5,13 @@ class StockService {
     this.stockRepository = new StockRepository();
   }
 
-  async moveDayBookItemsToStock(daybookId, transaction = null) {
+  async moveDayBookItemsToStock(daybookId, transaction = null, actor = null) {
     try {
       // Call repository method to move DayBookItems to Stock
       const createdStocks = await this.stockRepository.moveDayBookItemsToStock(
         daybookId,
         transaction,
+        actor,
       );
       console.log("create stock : ", createdStocks);
       return createdStocks;
@@ -20,10 +21,10 @@ class StockService {
     }
   }
 
-  async getAll() {
+  async getAll(actor = null) {
     try {
       const repo = new StockRepository();
-      return await repo.getAll();
+      return await repo.getAll(actor);
     } catch (error) {
       console.log("Something went wrong at service layer (getAll stocks).");
       throw error;
@@ -42,20 +43,26 @@ class StockService {
   //   }
   // }
 
-  async getAllStocksByCategory(filters) {
+  async getAllStocksByCategory(filters, actor = null) {
     try {
-      return await this.stockRepository.getAllStocksByCategory(filters);
+      return await this.stockRepository.getAllStocksByCategory({
+        ...filters,
+        viewerActor: actor,
+      });
     } catch (error) {
       console.log("Error in stock service:", error);
       throw error;
     }
   }
 
-  async getStocksByCategoryId(categoryId, filters = {}) {
+  async getStocksByCategoryId(categoryId, filters = {}, actor = null) {
     try {
       return await this.stockRepository.getStocksByCategoryId(
         categoryId,
-        filters,
+        {
+          ...filters,
+          viewerActor: actor,
+        },
       );
     } catch (error) {
       throw error;
