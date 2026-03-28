@@ -1,6 +1,8 @@
 "use strict";
 
 const { Employee, sequelize } = require("../models");
+const { normalizeLocationScope } = require("../utils/location-scope");
+const { buildMigrationActorLabel } = require("../utils/migration-api-utils");
 
 class EmployeeMigrationService {
   static normalizeKey(key) {
@@ -12,8 +14,27 @@ class EmployeeMigrationService {
 
   static toText(value) {
     if (value === undefined || value === null) return null;
-    const clean = String(value).trim();
+    const clean = String(value).trim().replace(/\s+/g, " ");
     return clean || null;
+  }
+
+  static normalizeLocationLabel(value) {
+    const clean = EmployeeMigrationService.toText(value);
+    if (!clean) return null;
+    return clean
+      .split(" ")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  static normalizeGender(value) {
+    const clean = EmployeeMigrationService.toText(value);
+    if (!clean) return null;
+    const normalized = clean.toLowerCase();
+    if (["male", "m"].includes(normalized)) return "Male";
+    if (["female", "f"].includes(normalized)) return "Female";
+    if (["other", "o"].includes(normalized)) return "Other";
+    return null;
   }
 
   static toInteger(value) {
@@ -63,7 +84,8 @@ class EmployeeMigrationService {
       designation: EmployeeMigrationService.toText(get("designation")),
       division: EmployeeMigrationService.toText(get("division")),
       group_head: EmployeeMigrationService.toText(get("group_head", "grouphead")),
-      office_location: EmployeeMigrationService.toText(
+      gender: EmployeeMigrationService.normalizeGender(get("gender", "sex")),
+      office_location: EmployeeMigrationService.normalizeLocationLabel(
         get("office_location", "office", "office_loc"),
       ),
     };
@@ -79,6 +101,7 @@ class EmployeeMigrationService {
       row.designation,
       row.division,
       row.group_head,
+      row.gender,
       row.office_location,
     ].some((value) => value !== undefined && value !== null && String(value).trim() !== "");
   }
@@ -118,7 +141,16 @@ class EmployeeMigrationService {
       designation: row.designation,
       division: row.division,
       group_head: row.group_head,
+      gender: row.gender,
       office_location: row.office_location,
+    };
+  }
+
+  _buildImportContext(context = {}) {
+    return {
+      performed_by:
+        context?.actorLabel ||
+        buildMigrationActorLabel(context?.actorMeta?.requested_by || context),
     };
   }
 
@@ -140,6 +172,7 @@ class EmployeeMigrationService {
     if (!row.designation) errors.push("designation is required");
     if (!row.division) errors.push("division is required");
     if (!row.group_head) errors.push("group_head is required");
+    if (!row.gender) errors.push("gender is required and must be Male, Female, or Other");
     if (!row.office_location) errors.push("office_location is required");
 
     return errors;
@@ -170,6 +203,7 @@ class EmployeeMigrationService {
       }
 
       const payload = this._buildPayload(row);
+      const normalizedLocationScope = normalizeLocationScope(row.office_location);
       let existingEmployee = null;
       let action = null;
 
@@ -213,6 +247,7 @@ class EmployeeMigrationService {
       plans.push({
         row,
         payload,
+        normalizedLocationScope,
         errors,
         existingEmployee,
         action,
@@ -225,7 +260,7 @@ class EmployeeMigrationService {
     };
   }
 
-  async validate({ rows = [] }) {
+  async validate({ rows = [] }, context = {}) {
     const { plans, normalizedRowsCount } = await this._preparePlans(rows);
 
     let readyRows = 0;
@@ -246,6 +281,9 @@ class EmployeeMigrationService {
         sheet: plan.row.sheet_name || "employees",
         row_no: plan.row.row_no,
         emp_id: plan.row.emp_id,
+        gender: plan.row.gender,
+        office_location: plan.row.office_location,
+        location_scope: plan.normalizedLocationScope,
         status: failed ? "failed" : "ok",
         action: failed ? null : plan.action,
         message: failed
@@ -257,6 +295,7 @@ class EmployeeMigrationService {
     return {
       success: failedRows === 0,
       mode: "validate",
+      import_context: this._buildImportContext(context),
       summary: {
         total_rows: normalizedRowsCount,
         ready_rows: readyRows,
@@ -264,11 +303,14 @@ class EmployeeMigrationService {
         create_candidates: createCandidates,
         update_candidates: updateCandidates,
       },
+      locations_in_file: [
+        ...new Set(plans.map((plan) => plan.normalizedLocationScope).filter(Boolean)),
+      ],
       details,
     };
   }
 
-  async execute({ rows = [] }) {
+  async execute({ rows = [] }, context = {}) {
     const { plans, normalizedRowsCount } = await this._preparePlans(rows);
 
     const precheckDetails = plans.map((plan) => {
@@ -277,6 +319,9 @@ class EmployeeMigrationService {
         sheet: plan.row.sheet_name || "employees",
         row_no: plan.row.row_no,
         emp_id: plan.row.emp_id,
+        gender: plan.row.gender,
+        office_location: plan.row.office_location,
+        location_scope: plan.normalizedLocationScope,
         status: failed ? "failed" : "ok",
         action: failed ? null : plan.action,
         message: failed ? plan.errors.join(" | ") : "Ready to import",
@@ -288,12 +333,16 @@ class EmployeeMigrationService {
       return {
         success: false,
         mode: "execute",
+        import_context: this._buildImportContext(context),
         summary: {
           total_rows: normalizedRowsCount,
           created_rows: 0,
           updated_rows: 0,
           failed_rows: precheckFailed,
         },
+        locations_in_file: [
+          ...new Set(plans.map((plan) => plan.normalizedLocationScope).filter(Boolean)),
+        ],
         details: precheckDetails,
       };
     }
@@ -313,6 +362,9 @@ class EmployeeMigrationService {
           sheet: plan.row.sheet_name || "employees",
           row_no: plan.row.row_no,
           emp_id: plan.row.emp_id,
+          gender: plan.row.gender,
+          office_location: plan.row.office_location,
+          location_scope: plan.normalizedLocationScope,
           status: "imported",
           action: plan.action,
           message: "Employee created",
@@ -323,12 +375,16 @@ class EmployeeMigrationService {
       return {
         success: true,
         mode: "execute",
+        import_context: this._buildImportContext(context),
         summary: {
           total_rows: normalizedRowsCount,
           created_rows: details.length,
           updated_rows: 0,
           failed_rows: 0,
         },
+        locations_in_file: [
+          ...new Set(plans.map((plan) => plan.normalizedLocationScope).filter(Boolean)),
+        ],
         details,
       };
     } catch (error) {
@@ -338,16 +394,23 @@ class EmployeeMigrationService {
       return {
         success: false,
         mode: "execute",
+        import_context: this._buildImportContext(context),
         summary: {
           total_rows: normalizedRowsCount,
           created_rows: 0,
           updated_rows: 0,
           failed_rows: normalizedRowsCount,
         },
+        locations_in_file: [
+          ...new Set(plans.map((plan) => plan.normalizedLocationScope).filter(Boolean)),
+        ],
         details: plans.map((plan) => ({
           sheet: plan.row.sheet_name || "employees",
           row_no: plan.row.row_no,
           emp_id: plan.row.emp_id,
+          gender: plan.row.gender,
+          office_location: plan.row.office_location,
+          location_scope: plan.normalizedLocationScope,
           status: "failed",
           action: plan.action || null,
           message: `Batch rolled back: ${error?.message || "Execution failed"}`,

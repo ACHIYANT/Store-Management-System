@@ -63,6 +63,7 @@ export default function Employee() {
     },
     { key: "division", label: "Division" },
     { key: "group_head", label: "Reporting Officer" },
+    { key: "gender", label: "Gender" },
     { key: "office_location", label: "Office Location" },
     { key: "mobile_no", label: "Contact Number" },
   ];

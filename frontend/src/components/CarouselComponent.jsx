@@ -1,52 +1,53 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import "../../src/Carousel.css";
 
-const CarouselComponent = ({ children }) => {
+const CarouselComponent = ({ children, intervalTime = 3500 }) => {
   const [counter, setCounter] = useState(1);
   const [pause, setPause] = useState(false);
-  const content = children;
 
-  const handleNext = () => {
-    if (counter !== content.length) {
-      setCounter(counter + 1);
-    } else {
-      setCounter(1);
-    }
-  };
+  // ✅ Memoized children array
+  const content = useMemo(() => {
+    return React.Children.toArray(children);
+  }, [children]);
 
-  const handlePre = () => {
-    if (counter !== 1) {
-      setCounter(counter - 1);
-    } else {
-      setCounter(content.length);
-    }
-  };
+  // ✅ Stable next handler
+  const handleNext = useCallback(() => {
+    setCounter((prev) => (prev !== content.length ? prev + 1 : 1));
+  }, [content.length]);
+
+  const handlePre = useCallback(() => {
+    setCounter((prev) => (prev !== 1 ? prev - 1 : content.length));
+  }, [content.length]);
 
   const handlePage = (page) => {
     setCounter(page);
   };
 
-  const handleMouse = () => {
-    setPause(!pause);
-  };
+  const handleMouseEnter = () => setPause(true);
+  const handleMouseLeave = () => setPause(false);
 
+  // ✅ Dynamic interval per slide
   useEffect(() => {
-    let interval = setInterval(() => {
-      if (!pause) {
-        handleNext();
-      } else {
-        clearInterval(interval);
-      }
-    }, 3500);
+    if (pause || content.length === 0) return;
+
+    const currentItem = content[counter - 1];
+
+    const customInterval =
+      currentItem?.props?.["data-interval"] || intervalTime;
+
+    const interval = setInterval(() => {
+      handleNext();
+    }, customInterval);
+
     return () => clearInterval(interval);
-  });
+  }, [pause, counter, intervalTime, content, handleNext]);
 
   return (
     <div className="App-cr">
       <div
         className="slide-cr"
-        onMouseEnter={handleMouse}
-        onMouseLeave={handleMouse}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         {content.map((item, index) => (
           <div
