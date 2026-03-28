@@ -6,6 +6,25 @@ const {
 
 const vendorService = new VendorService();
 
+const resolveVendorError = (error, fallbackMessage) => {
+  const root = error?.error?.error || error?.error || error;
+  const validationMessages = Array.isArray(root?.errors)
+    ? root.errors.map((item) => item?.message).filter(Boolean)
+    : [];
+  const message =
+    validationMessages.length > 0
+      ? validationMessages.join(" | ")
+      : root?.message || fallbackMessage;
+  const statusCode =
+    root?.statusCode ||
+    root?.name === "SequelizeValidationError" ||
+    root?.name === "SequelizeUniqueConstraintError"
+      ? 400
+      : 500;
+
+  return { statusCode, message, err: root || error };
+};
+
 const create = async (req, res) => {
   console.log("I m inside create function");
   try {
@@ -19,11 +38,12 @@ const create = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    const parsedError = resolveVendorError(error, "Not able to create a vendor");
+    return res.status(parsedError.statusCode).json({
       data: {},
       success: false,
-      message: "Not able to create a vendor",
-      err: error,
+      message: parsedError.message,
+      err: parsedError.err,
     });
   }
 };
@@ -99,11 +119,12 @@ const update = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({
+    const parsedError = resolveVendorError(error, "Not able to update a vendor");
+    return res.status(parsedError.statusCode).json({
       data: {},
       success: false,
-      message: "Not able to update a vendor",
-      err: error,
+      message: parsedError.message,
+      err: parsedError.err,
     });
   }
 };

@@ -1,6 +1,9 @@
 "use strict";
 const { Model } = require("sequelize");
 const { VENDOR_TABLE } = require("../constants/table-names");
+
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
 module.exports = (sequelize, DataTypes) => {
   class Vendors extends Model {
     /**
@@ -58,9 +61,9 @@ module.exports = (sequelize, DataTypes) => {
             }
 
             const normalized = String(value).trim().toUpperCase();
-            if (!/^[A-Z0-9]{15}$/.test(normalized)) {
+            if (!GST_REGEX.test(normalized)) {
               throw new Error(
-                "Only capital letters and digits are allowed and GST must be exactly 15 characters.",
+                "Invalid GST format. Use: 2 digits + PAN(10 chars) + entity code + Z + checksum. Example: 06ABCDE1234F1Z5.",
               );
             }
           },
@@ -69,14 +72,17 @@ module.exports = (sequelize, DataTypes) => {
       mobile_no: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: false,
+        allowNull: true,
         validate: {
-          notEmpty: true,
-          isNumeric: true,
-          len: [10, 10], // Exactly 10 digits
-          is: {
-            args: /^[6-9]\d{9}$/, // Optional: Only Indian-style mobile numbers
-            msg: "Mobile number must be 10 digits and start with 6-9",
+          isValidMobileNo(value) {
+            if (value === null || value === undefined || String(value).trim() === "") {
+              return;
+            }
+
+            const normalized = String(value).trim();
+            if (!/^[6-9]\d{9}$/.test(normalized)) {
+              throw new Error("Mobile number must be 10 digits and start with 6-9");
+            }
           },
         },
       },
