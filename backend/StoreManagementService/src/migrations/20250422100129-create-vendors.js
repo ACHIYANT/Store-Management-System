@@ -1,6 +1,7 @@
 "use strict";
 
 const { sequelize } = require("../models");
+const VENDOR_NAME_REGEX = /^[A-Za-z0-9&.,'()/\-]+(?: [A-Za-z0-9&.,'()/\-]+)*$/;
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
@@ -19,8 +20,8 @@ module.exports = {
           notEmpty: true,
           len: [3, 200],
           is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
+            args: VENDOR_NAME_REGEX,
+            msg: "Vendor name can contain letters, numbers, spaces, and common symbols (& . , ' ( ) / -). Use single spaces only.",
           },
         },
       },

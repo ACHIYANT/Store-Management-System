@@ -16,6 +16,12 @@ class VendorMigrationService {
     return clean || null;
   }
 
+  static toVendorName(value) {
+    const text = VendorMigrationService.toText(value);
+    if (!text) return null;
+    return text.replace(/\s+/g, " ");
+  }
+
   static toMobile(value) {
     if (value === undefined || value === null || value === "") return null;
     if (typeof value === "number") {
@@ -43,7 +49,7 @@ class VendorMigrationService {
     return {
       row_no: Number(get("row_no", "rowno")) || rowNo,
       sheet_name: VendorMigrationService.toText(get("sheet_name", "sheet")),
-      name: VendorMigrationService.toText(get("name", "vendor_name")),
+      name: VendorMigrationService.toVendorName(get("name", "vendor_name")),
       address: VendorMigrationService.toText(get("address", "vendor_address")),
       gst_no: VendorMigrationService.toText(get("gst_no", "gst", "gstno")),
       mobile_no: VendorMigrationService.toMobile(
@@ -86,7 +92,10 @@ class VendorMigrationService {
 
   _buildPayload(row) {
     return {
-      name: row.name,
+      name:
+        row.name === null || row.name === undefined || String(row.name).trim() === ""
+          ? null
+          : String(row.name).trim().replace(/\s+/g, " "),
       address: row.address,
       gst_no:
         row.gst_no === null || row.gst_no === undefined || String(row.gst_no).trim() === ""

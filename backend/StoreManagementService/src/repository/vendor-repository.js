@@ -25,7 +25,9 @@ class VendorRepository {
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, "name")) {
-      payload.name = String(payload.name || "").trim();
+      payload.name = String(payload.name || "")
+        .trim()
+        .replace(/\s+/g, " ");
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, "address")) {
