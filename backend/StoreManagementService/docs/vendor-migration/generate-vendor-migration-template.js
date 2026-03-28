@@ -40,6 +40,9 @@ async function generateTemplate() {
     text: "Required columns: name, address. gst_no and mobile_no are optional.",
   });
   instructions.addRow({
+    text: "name can include letters, numbers, spaces, and symbols (& . , ' ( ) / -). Multiple spaces are normalized automatically.",
+  });
+  instructions.addRow({
     text: "If provided, gst_no format: 2 digits + 5 letters + 4 digits + 1 letter + 1 entity code (1-9/A-Z) + Z + 1 checksum (0-9/A-Z). Example: 06ABCDE1234F1Z5.",
   });
   instructions.addRow({

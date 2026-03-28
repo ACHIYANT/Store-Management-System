@@ -3,6 +3,7 @@ const { Model } = require("sequelize");
 const { VENDOR_TABLE } = require("../constants/table-names");
 
 const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const VENDOR_NAME_REGEX = /^[A-Za-z0-9&.,'()/\-]+(?: [A-Za-z0-9&.,'()/\-]+)*$/;
 
 module.exports = (sequelize, DataTypes) => {
   class Vendors extends Model {
@@ -33,8 +34,8 @@ module.exports = (sequelize, DataTypes) => {
           notEmpty: true,
           len: [3, 200],
           is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
+            args: VENDOR_NAME_REGEX,
+            msg: "Vendor name can contain letters, numbers, spaces, and common symbols (& . , ' ( ) / -). Use single spaces only.",
           },
         },
       },
