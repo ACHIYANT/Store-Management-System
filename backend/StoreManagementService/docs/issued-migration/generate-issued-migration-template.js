@@ -13,6 +13,7 @@ try {
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const OUT_FILE = path.resolve(__dirname, "issued_items_migration_template.xlsx");
+const FALLBACK_CATEGORY_NAMES = ["Laptop", "Stationery", "Printer", "Furniture"];
 
 async function readCategoryNamesFromDb() {
   const { ItemCategory, sequelize } = require(path.resolve(ROOT, "src", "models"));
@@ -116,6 +117,10 @@ function buildWorkbook(categoryNames) {
     {
       Field: "employee_emp_id",
       Rule: "Required. Issued migration currently supports employee-based issuance only. Keep employee fields blank for continuation rows of the same employee.",
+    },
+    {
+      Field: "Location routing",
+      Rule: "Location is resolved from the employee office_location already saved in Employee master. Stock and employee must belong to the same location. Cross-location issued migration is blocked.",
     },
     {
       Field: "Current scope",
@@ -321,13 +326,17 @@ function buildWorkbook(categoryNames) {
 }
 
 async function resolveCategoryNames() {
-  const liveNames = await readCategoryNamesFromDb();
-  if (!liveNames.length) {
-    throw new Error(
-      "No categories found in ItemCategories table. Seed/create categories first.",
-    );
+  try {
+    const liveNames = await readCategoryNamesFromDb();
+    if (!liveNames.length) {
+      throw new Error(
+        "No categories found in ItemCategories table. Seed/create categories first.",
+      );
+    }
+    return { names: liveNames, source: "database" };
+  } catch (_error) {
+    return { names: FALLBACK_CATEGORY_NAMES, source: "fallback" };
   }
-  return { names: liveNames, source: "database" };
 }
 
 async function main() {

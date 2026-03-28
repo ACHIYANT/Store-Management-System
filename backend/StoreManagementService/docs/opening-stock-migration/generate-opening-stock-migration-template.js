@@ -17,6 +17,7 @@ const OUT_FILE = path.resolve(
   "opening_stock_migration_template.xlsx",
 );
 const { SKU_UNITS } = require(path.resolve(ROOT, "src", "utils", "sku-units"));
+const FALLBACK_CATEGORY_NAMES = ["Laptop", "Stationery", "Printer", "Furniture"];
 
 async function readCategoryNamesFromDb() {
   const { ItemCategory, sequelize } = require(path.resolve(ROOT, "src", "models"));
@@ -134,6 +135,10 @@ function buildWorkbook(categoryNames = []) {
       Field: "Date rule",
       Rule: "warranty_expiry cannot be before purchased_at.",
     },
+    {
+      Field: "location_scope",
+      Rule: "Optional only when your system has exactly one active location. In multi-location setups, give the location explicitly and use the same names used in Access Control, for example PANCHKULA.",
+    },
   ];
 
   const openingHeaders = [
@@ -144,6 +149,7 @@ function buildWorkbook(categoryNames = []) {
     "serial_number",
     "purchased_at",
     "warranty_expiry",
+    "location_scope",
   ];
 
   const sampleRows = [
@@ -155,6 +161,7 @@ function buildWorkbook(categoryNames = []) {
       serial_number: "HP-OPEN-0001",
       purchased_at: "2024-04-01",
       warranty_expiry: "2027-03-31",
+      location_scope: "PANCHKULA",
     },
     {
       item_name: "A4 Paper Ream",
@@ -164,6 +171,7 @@ function buildWorkbook(categoryNames = []) {
       serial_number: "",
       purchased_at: "2025-01-15",
       warranty_expiry: "2025-12-31",
+      location_scope: "PANCHKULA",
     },
   ];
 
@@ -185,8 +193,8 @@ function buildWorkbook(categoryNames = []) {
   openingSheet.addRow(openingHeaders);
   setHeaderStyle(openingSheet.getRow(1));
   addRowsFromObjects(openingSheet, openingHeaders, sampleRows);
-  addAutoFilter(openingSheet, 1, 7, sampleRows.length + 1);
-  setColumnWidths(openingSheet, [38, 28, 12, 12, 26, 16, 18]);
+  addAutoFilter(openingSheet, 1, 8, sampleRows.length + 1);
+  setColumnWidths(openingSheet, [38, 28, 12, 12, 26, 16, 18, 18]);
   openingSheet.views = [{ state: "frozen", ySplit: 1 }];
   applyDropdownValidations({ worksheet: openingSheet });
 
@@ -225,13 +233,17 @@ function buildWorkbook(categoryNames = []) {
 }
 
 async function resolveCategoryNames() {
-  const liveNames = await readCategoryNamesFromDb();
-  if (!liveNames.length) {
-    throw new Error(
-      "No categories found in ItemCategories table. Seed/create categories first.",
-    );
+  try {
+    const liveNames = await readCategoryNamesFromDb();
+    if (!liveNames.length) {
+      throw new Error(
+        "No categories found in ItemCategories table. Seed/create categories first.",
+      );
+    }
+    return { names: liveNames, source: "database" };
+  } catch (_error) {
+    return { names: FALLBACK_CATEGORY_NAMES, source: "fallback" };
   }
-  return { names: liveNames, source: "database" };
 }
 
 async function main() {

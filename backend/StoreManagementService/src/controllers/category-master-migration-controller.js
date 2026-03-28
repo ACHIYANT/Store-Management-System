@@ -5,6 +5,10 @@ const XLSX = require("xlsx");
 const {
   CategoryMasterMigrationService,
 } = require("../services/category-master-migration-service");
+const {
+  buildMigrationMeta,
+  resolveMigrationErrorStatus,
+} = require("../utils/migration-api-utils");
 
 const service = new CategoryMasterMigrationService();
 
@@ -117,13 +121,13 @@ async function validateUpload(req, res) {
       message: "Category master migration validation completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Category master migration validation error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Category master migration validation failed",
       data: {},
@@ -164,13 +168,13 @@ async function executeUpload(req, res) {
       message: "Category master migration execution completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Category master migration execute error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Category master migration execution failed",
       data: {},
@@ -185,4 +189,3 @@ module.exports = {
   validateUpload,
   executeUpload,
 };
-
