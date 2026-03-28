@@ -169,6 +169,27 @@ const EmployeesForm = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium">Gender</label>
+                <select
+                  {...register("gender", {
+                    required: "Gender is required",
+                  })}
+                  className="w-full p-2 border rounded-md bg-white"
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Select gender
+                  </option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+                {errors.gender && (
+                  <p className="text-red-500 text-sm">{errors.gender.message}</p>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium">
                   Office Location
                 </label>

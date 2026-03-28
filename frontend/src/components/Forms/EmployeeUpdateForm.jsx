@@ -35,6 +35,7 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
       setValue("email_id", selectedEmployee.email_id);
       setValue("designation", selectedEmployee.designation);
       setValue("group_head", selectedEmployee.group_head);
+      setValue("gender", selectedEmployee.gender || "Other");
       setValue("office_location", selectedEmployee.office_location);
       setValue("mobile_no", selectedEmployee.mobile_no);
       if (!division) {
@@ -55,6 +56,7 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
       body.append("designation", data.designation);
       body.append("division", division);
       body.append("group_head", data.group_head);
+      body.append("gender", data.gender);
       body.append("office_location", data.office_location);
       body.append("mobile_no", data.mobile_no);
 
@@ -196,6 +198,27 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
                   <p className="text-red-500 text-sm">
                     {errors.group_head.message}
                   </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium">Gender</label>
+                <select
+                  {...register("gender", {
+                    required: "Gender is required",
+                  })}
+                  className="w-full p-2 border rounded-md bg-white"
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Select gender
+                  </option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+                {errors.gender && (
+                  <p className="text-red-500 text-sm">{errors.gender.message}</p>
                 )}
               </div>
 

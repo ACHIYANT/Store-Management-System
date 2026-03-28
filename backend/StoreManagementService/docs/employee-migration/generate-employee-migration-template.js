@@ -13,6 +13,7 @@ const HEADERS = [
   "designation",
   "division",
   "group_head",
+  "gender",
   "office_location",
 ];
 
@@ -38,6 +39,7 @@ async function generateTemplate() {
     designation: "Assistant Manager",
     division: "Procurement",
     group_head: "Rohit Sharma",
+    gender: "Male",
     office_location: "Panchkula",
   });
 
@@ -50,6 +52,7 @@ async function generateTemplate() {
     designation: "Executive",
     division: "Admin",
     group_head: "Anil Gupta",
+    gender: "Female",
     office_location: "Chandigarh",
   });
 
@@ -59,10 +62,16 @@ async function generateTemplate() {
     text: "Fill data in 'employees' sheet only. Do not change header names.",
   });
   instructions.addRow({
-    text: "Required columns: emp_id, name, father_name, email_id, mobile_no, designation, division, group_head, office_location.",
+    text: "Required columns: emp_id, name, father_name, email_id, mobile_no, designation, division, group_head, gender, office_location.",
+  });
+  instructions.addRow({
+    text: "Allowed values for gender: Male, Female, Other.",
   });
   instructions.addRow({
     text: "emp_id must be a positive integer. mobile_no must be 10 digits and start with 6-9.",
+  });
+  instructions.addRow({
+    text: "office_location drives location-aware access, requisitions, stock issue, and migration routing. Use the exact location names used in Access Control, for example Panchkula.",
   });
   instructions.addRow({
     text: "Use validate API first, then execute API.",
@@ -94,4 +103,3 @@ module.exports = {
   generateTemplate,
   HEADERS,
 };
-
