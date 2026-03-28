@@ -27,7 +27,7 @@ async function generateTemplate() {
   sheet.addRow({
     name: "PQR Enterprises",
     address: "Industrial Area Panchkula",
-    gst_no: "03PQRSX6789K2Z7",
+    gst_no: null,
     mobile_no: null,
   });
 
@@ -37,10 +37,10 @@ async function generateTemplate() {
     text: "Fill data in 'vendors' sheet only. Do not change header names.",
   });
   instructions.addRow({
-    text: "Required columns: name, address, gst_no. mobile_no is optional.",
+    text: "Required columns: name, address. gst_no and mobile_no are optional.",
   });
   instructions.addRow({
-    text: "gst_no format: 2 digits + 5 letters + 4 digits + 1 letter + 1 entity code (1-9/A-Z) + Z + 1 checksum (0-9/A-Z). Example: 06ABCDE1234F1Z5.",
+    text: "If provided, gst_no format: 2 digits + 5 letters + 4 digits + 1 letter + 1 entity code (1-9/A-Z) + Z + 1 checksum (0-9/A-Z). Example: 06ABCDE1234F1Z5.",
   });
   instructions.addRow({
     text: "This migration is insert-only. Existing gst_no or mobile_no will fail.",
