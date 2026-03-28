@@ -14,6 +14,7 @@ const { normalizeSkuUnit } = require("../utils/sku-units");
 const { ensureItemMaster } = require("./item-master-service");
 const { logStockMovement } = require("./stock-movement-service");
 const { normalizeLocationScope } = require("../utils/location-scope");
+const { buildMigrationActorLabel } = require("../utils/migration-api-utils");
 
 const MIGRATION_DAYBOOK_ID = 107; // <-- replace with yours
 const OPENING_VENDOR_ID = 55; // replace with your actual Opening Vendor ID
@@ -180,6 +181,80 @@ class MigrationService {
       : [...BASE_AFFECTED_TABLES];
   }
 
+  buildImportContext(context = {}) {
+    return {
+      performed_by:
+        context?.actorLabel ||
+        buildMigrationActorLabel(context?.actorMeta?.requested_by || context),
+    };
+  }
+
+  async buildLocationSummary(rows = [], transaction = null) {
+    const grouped = {};
+
+    for (const row of rows || []) {
+      const itemName = String(row?.item_name || "").trim();
+      const categoryName = String(row?.category_name || "").trim();
+      const skuUnit = this.resolveSkuUnit(row?.sku_unit ?? row?.unit ?? row?.uom);
+      if (!itemName || !categoryName) continue;
+      const key = `${itemName}__${categoryName}__${skuUnit}`;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(row);
+    }
+
+    const summaries = [];
+    for (const key of Object.keys(grouped)) {
+      const records = grouped[key];
+      const sample = records[0] || {};
+      const skuUnit = this.resolveSkuUnit(sample.sku_unit ?? sample.unit ?? sample.uom);
+      const sourceRows = Array.from(
+        new Set(records.map((entry) => this.getRowNo(entry, 0)).filter((n) => n > 0)),
+      ).sort((a, b) => a - b);
+
+      const stock = await Stock.findOne({
+        where: {
+          item_name: String(sample.item_name || "").trim(),
+          sku_unit: skuUnit,
+          is_active: true,
+        },
+        attributes: ["id", "location_scope"],
+        transaction: transaction || undefined,
+      });
+
+      try {
+        const locationScope = await this.resolveGroupLocationScope(
+          records,
+          stock,
+          transaction,
+        );
+        summaries.push({
+          group_key: key,
+          item_name: sample.item_name,
+          category_name: sample.category_name,
+          sku_unit: skuUnit,
+          stock_id: stock?.id || null,
+          source_rows: sourceRows,
+          location_scope: locationScope,
+          status: "ok",
+        });
+      } catch (error) {
+        summaries.push({
+          group_key: key,
+          item_name: sample.item_name,
+          category_name: sample.category_name,
+          sku_unit: skuUnit,
+          stock_id: stock?.id || null,
+          source_rows: sourceRows,
+          location_scope: null,
+          status: "failed",
+          message: error?.message || "Location resolution failed",
+        });
+      }
+    }
+
+    return summaries;
+  }
+
   initAffectedAccumulator() {
     return {
       itemMasters: new Set(),
@@ -235,7 +310,7 @@ class MigrationService {
     };
   }
 
-  async validate(rows = []) {
+  async validate(rows = [], context = {}) {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Excel file is empty");
     }
@@ -371,6 +446,7 @@ class MigrationService {
       }
     }
 
+    const locationSummary = await this.buildLocationSummary(rows);
     return {
       success: failedRows === 0,
       mode: "validate",
@@ -379,16 +455,25 @@ class MigrationService {
         ready_rows: readyRows,
         failed_rows: failedRows,
       },
+      import_context: this.buildImportContext(context),
+      location_summary: locationSummary,
+      resolved_locations: [
+        ...new Set(
+          locationSummary
+            .map((entry) => normalizeLocationScope(entry?.location_scope || null))
+            .filter(Boolean),
+        ),
+      ],
       affected_tables: Array.from(wouldAffectTableSet),
       details,
     };
   }
 
-  async execute(rows = []) {
-    return this.migrate(rows);
+  async execute(rows = [], context = {}) {
+    return this.migrate(rows, context);
   }
 
-  async migrate(rows) {
+  async migrate(rows, context = {}) {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Excel file is empty");
     }
@@ -427,6 +512,8 @@ class MigrationService {
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(row);
     }
+
+    const actorLabel = this.buildImportContext(context).performed_by;
 
     return sequelize.transaction(async (transaction) => {
       for (const key of Object.keys(grouped)) {
@@ -590,6 +677,7 @@ class MigrationService {
           quantity_before: stockQtyBefore,
           quantity_after: stockQtyAfter,
         };
+        groupDetail.location_scope = locationScope;
 
         const stockMovement = await logStockMovement(
           {
@@ -601,7 +689,7 @@ class MigrationService {
             movementAt: new Date(),
             referenceType: "OpeningMigration",
             referenceId: stock.id,
-            performedBy: "System Migration",
+            performedBy: actorLabel,
             remarks: "Opening stock migration import",
             locationScope,
           },
@@ -723,7 +811,7 @@ class MigrationService {
                 daybook_item_id: daybookItem.id, // ✅ add
                 location_scope: locationScope,
                 notes: "MIGRATED_OPENING_STOCK", // ✅ uniform
-                performed_by: "System Migration",
+                performed_by: actorLabel,
               },
               { transaction },
             );
@@ -769,12 +857,20 @@ class MigrationService {
       return {
         success: true,
         mode: "execute",
+        import_context: this.buildImportContext(context),
         summary: {
           total_rows: rows.length,
           grouped_items: Object.keys(grouped).length,
           serialized_groups: serializedGroups,
           non_serialized_groups: nonSerializedGroups,
         },
+        resolved_locations: [
+          ...new Set(
+            details
+              .map((entry) => normalizeLocationScope(entry?.location_scope || null))
+              .filter(Boolean),
+          ),
+        ],
         affected_tables: this.buildAffectedTablesPayload(affected),
         details,
       };

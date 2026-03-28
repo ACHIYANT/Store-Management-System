@@ -3,6 +3,11 @@
 const fs = require("fs");
 const XLSX = require("xlsx");
 const { IssuedMigrationService } = require("../services/issued-migration-service");
+const {
+  buildMigrationMeta,
+  buildMigrationOperationContext,
+  resolveMigrationErrorStatus,
+} = require("../utils/migration-api-utils");
 
 const service = new IssuedMigrationService();
 
@@ -283,19 +288,20 @@ async function validateUpload(req, res) {
       });
     }
 
-    const result = await service.validate(payload);
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.validate(payload, operationContext);
     return res.status(200).json({
       success: true,
       message: "Issued migration validation completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Issued migration validation error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Issued migration validation failed",
       data: {},
@@ -330,19 +336,20 @@ async function executeUpload(req, res) {
       });
     }
 
-    const result = await service.execute(payload);
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.execute(payload, operationContext);
     return res.status(200).json({
       success: true,
       message: "Issued migration execution completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Issued migration execution error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Issued migration execution failed",
       data: {},
