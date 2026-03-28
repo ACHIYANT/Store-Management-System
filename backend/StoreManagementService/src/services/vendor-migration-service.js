@@ -89,7 +89,10 @@ class VendorMigrationService {
       name: row.name,
       address: row.address,
       gst_no: String(row.gst_no || "").trim().toUpperCase(),
-      mobile_no: row.mobile_no,
+      mobile_no:
+        row.mobile_no === null || row.mobile_no === undefined || String(row.mobile_no).trim() === ""
+          ? null
+          : String(row.mobile_no).trim(),
     };
   }
 
@@ -104,7 +107,6 @@ class VendorMigrationService {
     if (!row.name) errors.push("name is required");
     if (!row.address) errors.push("address is required");
     if (!row.gst_no) errors.push("gst_no is required");
-    if (!row.mobile_no) errors.push("mobile_no is required");
 
     return errors;
   }
@@ -129,7 +131,7 @@ class VendorMigrationService {
       if (duplicateGstRows.has(row.row_no)) {
         errors.push(`Duplicate gst_no in file: ${payload.gst_no}`);
       }
-      if (duplicateMobileRows.has(row.row_no)) {
+      if (payload.mobile_no && duplicateMobileRows.has(row.row_no)) {
         errors.push(`Duplicate mobile_no in file: ${payload.mobile_no}`);
       }
 
@@ -156,12 +158,14 @@ class VendorMigrationService {
           errors.push(`gst_no '${payload.gst_no}' already exists`);
         }
 
-        const existingByMobile = await Vendors.findOne({
-          where: { mobile_no: payload.mobile_no },
-          attributes: ["id", "mobile_no"],
-        });
-        if (existingByMobile) {
-          errors.push(`mobile_no '${payload.mobile_no}' already exists`);
+        if (payload.mobile_no) {
+          const existingByMobile = await Vendors.findOne({
+            where: { mobile_no: payload.mobile_no },
+            attributes: ["id", "mobile_no"],
+          });
+          if (existingByMobile) {
+            errors.push(`mobile_no '${payload.mobile_no}' already exists`);
+          }
         }
       }
 

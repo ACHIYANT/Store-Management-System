@@ -33,7 +33,12 @@ class VendorRepository {
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, "mobile_no")) {
-      payload.mobile_no = String(payload.mobile_no || "").trim();
+      const raw = payload.mobile_no;
+      if (raw === null || raw === undefined || String(raw).trim() === "") {
+        payload.mobile_no = null;
+      } else {
+        payload.mobile_no = String(raw).trim();
+      }
     }
 
     return payload;
