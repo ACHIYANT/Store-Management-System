@@ -24,6 +24,7 @@ const {
   getLocationScopeFromResolvedCustodian,
   normalizeLocationScope,
 } = require("../utils/location-scope");
+const { buildMigrationActorLabel } = require("../utils/migration-api-utils");
 
 const SOURCE_FLAG = "MIGRATION_ISSUED";
 const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
@@ -31,6 +32,24 @@ const HISTORICAL_NO_SERIAL_NOTE =
   "Migrated asset without serial number";
 
 class IssuedMigrationService {
+  _buildImportContext(context = {}) {
+    return {
+      performed_by:
+        context?.actorLabel ||
+        buildMigrationActorLabel(context?.actorMeta?.requested_by || context),
+    };
+  }
+
+  _collectResolvedLocations(details = []) {
+    return [
+      ...new Set(
+        (details || [])
+          .map((entry) => normalizeLocationScope(entry?.location_scope || null))
+          .filter(Boolean),
+      ),
+    ];
+  }
+
   static normalizeKey(key) {
     return String(key || "")
       .trim()
@@ -628,6 +647,7 @@ class IssuedMigrationService {
     options,
     dryRun = false,
     transaction = null,
+    actorLabel = "System Migration",
   }) {
     const serial = this._normalizeSerial(row.serial_number);
     const assetTag = this._normalizeText(row.asset_tag);
@@ -671,6 +691,7 @@ class IssuedMigrationService {
           item_master_id: resolved.item_master_id || null,
           employee_emp_id: resolvedEmployeeId,
           quantity,
+          location_scope: locationScope,
           will_create_stock: !!resolved.willCreateStock,
           will_create_asset: true,
           will_generate_asset_tag: true,
@@ -731,7 +752,7 @@ class IssuedMigrationService {
             referenceType: "IssuedItem",
             referenceId: issued.id,
             toEmployeeId: resolvedEmployeeId,
-            performedBy: "System Migration",
+            performedBy: actorLabel,
             remarks: "Issued migration (asset without serial number)",
             locationScope,
             metadata: {
@@ -791,7 +812,7 @@ class IssuedMigrationService {
             daybook_item_id: null,
             location_scope: locationScope,
             notes: eventNotes,
-            performed_by: "System Migration",
+            performed_by: actorLabel,
           },
           { transaction },
         );
@@ -806,6 +827,7 @@ class IssuedMigrationService {
         item_master_id: resolved.item_master_id || null,
         employee_emp_id: resolvedEmployeeId,
         quantity,
+        location_scope: locationScope,
         asset_count: quantity,
         asset_ids: createdAssetIds,
         issued_item_id: issued.id,
@@ -853,6 +875,7 @@ class IssuedMigrationService {
           item_master_id: resolved.item_master_id || null,
           employee_emp_id: resolvedEmployeeId,
           asset_id: asset.id,
+          location_scope: locationScope,
         };
       }
 
@@ -872,6 +895,7 @@ class IssuedMigrationService {
         stock_id: resolved.stock?.id || null,
         item_master_id: resolved.item_master_id || null,
         employee_emp_id: resolvedEmployeeId,
+        location_scope: locationScope,
         will_create_stock: !!resolved.willCreateStock,
         will_create_asset: !asset,
         will_generate_asset_tag: !asset && !assetTag,
@@ -973,7 +997,7 @@ class IssuedMigrationService {
           referenceType: "IssuedItem",
           referenceId: issued.id,
           toEmployeeId: resolvedEmployeeId,
-          performedBy: "System Migration",
+          performedBy: actorLabel,
           remarks: "Issued migration (asset)",
           locationScope,
           metadata: {
@@ -1000,7 +1024,7 @@ class IssuedMigrationService {
         daybook_item_id: null,
         location_scope: locationScope,
         notes: eventNotes,
-        performed_by: "System Migration",
+        performed_by: actorLabel,
       },
       { transaction },
     );
@@ -1013,6 +1037,7 @@ class IssuedMigrationService {
       employee_emp_id: resolvedEmployeeId,
       asset_id: asset.id,
       issued_item_id: issued.id,
+      location_scope: locationScope,
     };
   }
 
@@ -1021,6 +1046,7 @@ class IssuedMigrationService {
     options,
     dryRun = false,
     transaction = null,
+    actorLabel = "System Migration",
   }) {
     const quantity = IssuedMigrationService.toInteger(row.quantity);
     if (!quantity || quantity <= 0) {
@@ -1050,6 +1076,7 @@ class IssuedMigrationService {
         item_master_id: resolved.item_master_id || null,
         employee_emp_id: resolvedEmployeeId,
         quantity,
+        location_scope: locationScope,
         will_create_stock: !!resolved.willCreateStock,
       };
     }
@@ -1101,7 +1128,7 @@ class IssuedMigrationService {
           referenceType: "IssuedItem",
           referenceId: issued.id,
           toEmployeeId: resolvedEmployeeId,
-          performedBy: "System Migration",
+          performedBy: actorLabel,
           remarks: "Issued migration (consumable)",
           locationScope,
           metadata: {
@@ -1122,6 +1149,7 @@ class IssuedMigrationService {
       employee_emp_id: resolvedEmployeeId,
       quantity,
       issued_item_id: issued.id,
+      location_scope: locationScope,
     };
   }
 
@@ -1132,6 +1160,7 @@ class IssuedMigrationService {
     dryRun,
     sheetName = null,
     transaction = null,
+    actorLabel = "System Migration",
   }) {
     const details = [];
     let imported = 0;
@@ -1147,12 +1176,14 @@ class IssuedMigrationService {
               options,
               dryRun,
               transaction,
+              actorLabel,
             })
             : await this._processConsumableRow({
               row,
               options,
               dryRun,
               transaction,
+              actorLabel,
             });
 
         if (data.status === "imported") imported += 1;
@@ -1190,7 +1221,8 @@ class IssuedMigrationService {
     consumableRows = [],
     options = {},
     sheetLabels = {},
-  }) {
+  }, context = {}) {
+    const importContext = this._buildImportContext(context);
     const normalizedAssets = this._buildSheetRows(assetsRows);
     const normalizedConsumables = this._buildSheetRows(consumableRows);
 
@@ -1200,6 +1232,7 @@ class IssuedMigrationService {
       options,
       dryRun: true,
       sheetName: sheetLabels.serialized || null,
+      actorLabel: importContext.performed_by,
     });
     const consumableResult = await this._processRows({
       rows: normalizedConsumables,
@@ -1207,6 +1240,7 @@ class IssuedMigrationService {
       options,
       dryRun: true,
       sheetName: sheetLabels.consumable || null,
+      actorLabel: importContext.performed_by,
     });
 
     const allDetails = [...serializedResult.details, ...consumableResult.details];
@@ -1215,6 +1249,7 @@ class IssuedMigrationService {
     return {
       success: failed === 0,
       mode: "validate",
+      import_context: importContext,
       summary: {
         total_rows: normalizedAssets.length + normalizedConsumables.length,
         assets_rows: normalizedAssets.length,
@@ -1224,6 +1259,7 @@ class IssuedMigrationService {
           consumableResult.details.filter((d) => d.status === "ok").length,
         failed_rows: failed,
       },
+      resolved_locations: this._collectResolvedLocations(allDetails),
       details: allDetails,
     };
   }
@@ -1233,7 +1269,8 @@ class IssuedMigrationService {
     consumableRows = [],
     options = {},
     sheetLabels = {},
-  }) {
+  }, context = {}) {
+    const importContext = this._buildImportContext(context);
     const normalizedAssets = this._buildSheetRows(assetsRows);
     const normalizedConsumables = this._buildSheetRows(consumableRows);
 
@@ -1243,6 +1280,7 @@ class IssuedMigrationService {
       options,
       dryRun: true,
       sheetName: sheetLabels.serialized || null,
+      actorLabel: importContext.performed_by,
     });
     const precheckConsumable = await this._processRows({
       rows: normalizedConsumables,
@@ -1250,6 +1288,7 @@ class IssuedMigrationService {
       options,
       dryRun: true,
       sheetName: sheetLabels.consumable || null,
+      actorLabel: importContext.performed_by,
     });
 
     const precheckDetails = [
@@ -1263,6 +1302,7 @@ class IssuedMigrationService {
       return {
         success: false,
         mode: "execute",
+        import_context: importContext,
         summary: {
           total_rows: totalRows,
           assets_rows: normalizedAssets.length,
@@ -1271,6 +1311,7 @@ class IssuedMigrationService {
           skipped_rows: 0,
           failed_rows: precheckFailed,
         },
+        resolved_locations: this._collectResolvedLocations(precheckDetails),
         details: precheckDetails,
       };
     }
@@ -1284,6 +1325,7 @@ class IssuedMigrationService {
         dryRun: false,
         sheetName: sheetLabels.serialized || null,
         transaction,
+        actorLabel: importContext.performed_by,
       });
       const consumableResult = await this._processRows({
         rows: normalizedConsumables,
@@ -1292,6 +1334,7 @@ class IssuedMigrationService {
         dryRun: false,
         sheetName: sheetLabels.consumable || null,
         transaction,
+        actorLabel: importContext.performed_by,
       });
 
       const allDetails = [...serializedResult.details, ...consumableResult.details];
@@ -1304,6 +1347,7 @@ class IssuedMigrationService {
         return {
           success: false,
           mode: "execute",
+          import_context: importContext,
           summary: {
             total_rows: totalRows,
             assets_rows: normalizedAssets.length,
@@ -1312,6 +1356,7 @@ class IssuedMigrationService {
             skipped_rows: skipped,
             failed_rows: failed,
           },
+          resolved_locations: this._collectResolvedLocations(allDetails),
           details: allDetails.map((row) =>
             row.status === "imported"
               ? {
@@ -1329,6 +1374,7 @@ class IssuedMigrationService {
       return {
         success: true,
         mode: "execute",
+        import_context: importContext,
         summary: {
           total_rows: totalRows,
           assets_rows: normalizedAssets.length,
@@ -1337,6 +1383,7 @@ class IssuedMigrationService {
           skipped_rows: skipped,
           failed_rows: 0,
         },
+        resolved_locations: this._collectResolvedLocations(allDetails),
         details: allDetails,
       };
     } catch (error) {

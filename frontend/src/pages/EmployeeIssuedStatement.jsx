@@ -373,6 +373,9 @@ export default function EmployeeIssuedStatement() {
                 <strong>Designation:</strong> {safe(employee?.designation)}
               </div>
               <div>
+                <strong>Gender:</strong> {safe(employee?.gender)}
+              </div>
+              <div>
                 <strong>Division:</strong> {safe(employee?.division)}
               </div>
               <div>

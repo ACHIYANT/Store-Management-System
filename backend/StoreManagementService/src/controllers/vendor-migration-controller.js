@@ -3,6 +3,10 @@
 const fs = require("fs");
 const XLSX = require("xlsx");
 const { VendorMigrationService } = require("../services/vendor-migration-service");
+const {
+  buildMigrationMeta,
+  resolveMigrationErrorStatus,
+} = require("../utils/migration-api-utils");
 
 const service = new VendorMigrationService();
 
@@ -112,13 +116,13 @@ async function validateUpload(req, res) {
       message: "Vendor migration validation completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Vendor migration validation error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Vendor migration validation failed",
       data: {},
@@ -160,13 +164,13 @@ async function executeUpload(req, res) {
       message: "Vendor migration executed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Vendor migration execute error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Vendor migration execution failed",
       data: {},
@@ -181,4 +185,3 @@ module.exports = {
   validateUpload,
   executeUpload,
 };
-

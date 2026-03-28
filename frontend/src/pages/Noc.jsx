@@ -39,6 +39,7 @@ export default function Noc() {
         name: r.name ?? `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim(),
         division: r.division ?? r.department ?? r.unit ?? "-",
         designation: r.designation ?? r.title ?? "-",
+        gender: r.gender ?? "-",
         office_location: r.office_location ?? "-",
         ...r,
       }));
@@ -71,6 +72,7 @@ export default function Noc() {
     { key: "name", label: "Name" },
     { key: "division", label: "Division" },
     { key: "designation", label: "Designation" },
+    { key: "gender", label: "Gender" },
     { key: "office_location", label: "Office Location" },
   ];
 

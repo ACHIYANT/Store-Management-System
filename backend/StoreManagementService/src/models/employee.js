@@ -92,6 +92,17 @@ module.exports = (sequelize, DataTypes) => {
           },
         },
       },
+      gender: {
+        type: DataTypes.ENUM("Male", "Female", "Other"),
+        allowNull: false,
+        defaultValue: "Other",
+        validate: {
+          isIn: {
+            args: [["Male", "Female", "Other"]],
+            msg: "Gender must be one of: Male, Female, Other.",
+          },
+        },
+      },
       office_location: {
         type: DataTypes.STRING,
         allowNull: false,
