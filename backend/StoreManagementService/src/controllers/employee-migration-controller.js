@@ -3,6 +3,11 @@
 const fs = require("fs");
 const XLSX = require("xlsx");
 const { EmployeeMigrationService } = require("../services/employee-migration-service");
+const {
+  buildMigrationMeta,
+  buildMigrationOperationContext,
+  resolveMigrationErrorStatus,
+} = require("../utils/migration-api-utils");
 
 const service = new EmployeeMigrationService();
 
@@ -105,20 +110,21 @@ async function validateUpload(req, res) {
       });
     }
 
-    const result = await service.validate({ rows: payload.rows });
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.validate({ rows: payload.rows }, operationContext);
 
     return res.status(200).json({
       success: true,
       message: "Employee migration validation completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Employee migration validation error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Employee migration validation failed",
       data: {},
@@ -153,20 +159,21 @@ async function executeUpload(req, res) {
       });
     }
 
-    const result = await service.execute({ rows: payload.rows });
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.execute({ rows: payload.rows }, operationContext);
 
     return res.status(200).json({
       success: true,
       message: "Employee migration executed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (error) {
     console.error("Employee migration execute error:", error);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
       message: "Employee migration execution failed",
       data: {},
@@ -181,4 +188,3 @@ module.exports = {
   validateUpload,
   executeUpload,
 };
-

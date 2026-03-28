@@ -1,6 +1,11 @@
 const XLSX = require("xlsx");
 const fs = require("fs");
 const { MigrationService } = require("../services/migration-service");
+const {
+  buildMigrationMeta,
+  buildMigrationOperationContext,
+  resolveMigrationErrorStatus,
+} = require("../utils/migration-api-utils");
 
 const service = new MigrationService();
 
@@ -164,19 +169,20 @@ const validateMigrationFile = async (req, res) => {
       });
     }
 
-    const result = await service.validate(payload.rows);
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.validate(payload.rows, operationContext);
     return res.status(200).json({
       success: true,
       message: "Opening stock migration validation completed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (err) {
     console.error("Opening stock migration validation error:", err);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(err)).json({
       success: false,
       message: "Opening stock migration validation failed",
       data: {},
@@ -211,19 +217,20 @@ const executeMigrationFile = async (req, res) => {
       });
     }
 
-    const result = await service.execute(payload.rows);
+    const operationContext = buildMigrationOperationContext(req.user || {});
+    const result = await service.execute(payload.rows, operationContext);
     return res.status(200).json({
       success: true,
       message: "Opening stock migration executed",
       data: {
         ...result,
-        meta: payload.meta,
+        meta: buildMigrationMeta(payload.meta, req.user || {}),
       },
       err: {},
     });
   } catch (err) {
     console.error("Opening stock migration execute error:", err);
-    return res.status(500).json({
+    return res.status(resolveMigrationErrorStatus(err)).json({
       success: false,
       message: "Opening stock migration execution failed",
       data: {},
