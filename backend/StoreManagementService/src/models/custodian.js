@@ -53,6 +53,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      scope_key: {
+        type: DataTypes.STRING(512),
+        allowNull: true,
+        unique: true,
+      },
       employee_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

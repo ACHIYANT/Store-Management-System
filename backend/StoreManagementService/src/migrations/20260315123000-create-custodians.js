@@ -16,6 +16,10 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
       },
+      scope_key: {
+        type: Sequelize.STRING(512),
+        allowNull: true,
+      },
       employee_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
@@ -38,6 +42,10 @@ module.exports = {
     await queryInterface.addIndex("Custodians", ["custodian_type"]);
     await queryInterface.addIndex("Custodians", ["employee_id"], {
       unique: true,
+    });
+    await queryInterface.addIndex("Custodians", ["scope_key"], {
+      unique: true,
+      name: "uq_custodians_scope_key",
     });
 
     await queryInterface.sequelize.query(`
