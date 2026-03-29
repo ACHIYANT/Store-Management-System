@@ -90,6 +90,7 @@ const ensureCustodian = async (resolved, { transaction } = {}) => {
         custodian_type: "EMPLOYEE",
         display_name: employee.name,
         location: employee.office_location || null,
+        scope_key: null,
         employee_id: employee.emp_id,
         is_active: true,
       },
