@@ -13,6 +13,7 @@ const parseBoolean = (value, fallback = null) => {
 
 const getCreateStatusCode = (error, message) => {
   if (error?.name === "SequelizeUniqueConstraintError") return 409;
+  if (/already exists|duplicate/i.test(message || "")) return 409;
   if (/required|invalid|mismatch|not found/i.test(message || "")) return 400;
   return 500;
 };
