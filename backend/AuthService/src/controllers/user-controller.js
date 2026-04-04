@@ -8,12 +8,37 @@ const {
   parseCookies,
   setSessionCookies,
 } = require("../utils/cookie-utils");
+const {
+  buildSessionSnapshot,
+  buildSuccessPayload,
+  sendError,
+} = require("../utils/auth-response-utils");
 
 const userService = new UserService();
-const extractToken = (req) =>
-  req.headers["x-access-token"] ||
-  (req.headers.authorization || "").replace(/^Bearer\s+/i, "") ||
-  parseCookies(req.headers.cookie || "")[AUTH_COOKIE_NAME];
+const extractTokenDetails = (req) => {
+  const explicitToken =
+    req.headers["x-access-token"] ||
+    (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (String(explicitToken || "").trim()) {
+    return {
+      token: String(explicitToken).trim(),
+      source: req.headers["x-access-token"] ? "x-access-token" : "authorization",
+    };
+  }
+
+  const cookieToken = parseCookies(req.headers.cookie || "")[AUTH_COOKIE_NAME];
+  if (String(cookieToken || "").trim()) {
+    return {
+      token: String(cookieToken).trim(),
+      source: "cookie",
+    };
+  }
+
+  return {
+    token: "",
+    source: null,
+  };
+};
 
 const create = async (req, res) => {
   try {
@@ -77,40 +102,32 @@ const signIn = async (req, res) => {
     const csrfToken = generateCsrfToken();
     setSessionCookies(res, response.newJWT, csrfToken);
 
-    return res.status(200).json({
-      success: true,
-      message: "Successfully Signed in",
-      data: {
-        fullName: response.fullName,
-        roles: response.roles || [],
-        csrfToken,
-      },
-      err: {},
-    });
+    return res.status(200).json(buildSuccessPayload(req, res, {
+      fullName: response.fullName,
+      roles: response.roles || [],
+      csrfToken,
+      session: buildSessionSnapshot(userService.verifyToken(response.newJWT), {
+        authMode: "cookie",
+        tokenSource: "cookie",
+      }),
+    }, {
+      message: "Successfully signed in.",
+    }));
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      message:
-        Number(error?.statusCode || 500) >= 500
-          ? "Sign-in failed"
-          : error?.message || "Invalid credentials",
-      data: {},
-      success: false,
-      err:
-        Number(error?.statusCode || 500) >= 500
-          ? {}
-          : { message: error?.explanation || error?.message },
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "SIGNIN_FAILED",
+      message: "Sign-in failed.",
+      hint: "Please try again in a moment.",
     });
   }
 };
 
-const signOut = async (_req, res) => {
+const signOut = async (req, res) => {
   clearSessionCookies(res);
-  return res.status(200).json({
-    success: true,
-    message: "Signed out successfully",
-    data: {},
-    err: {},
-  });
+  return res.status(200).json(buildSuccessPayload(req, res, {}, {
+    message: "Signed out successfully.",
+  }));
 };
 
 const getCsrfToken = async (req, res) => {
@@ -129,31 +146,94 @@ const getCsrfToken = async (req, res) => {
     );
   }
 
-  return res.status(200).json({
-    success: true,
-    message: "CSRF token ready",
-    data: { csrfToken: token },
-    err: {},
-  });
+  return res.status(200).json(buildSuccessPayload(req, res, { csrfToken: token }, {
+    message: "CSRF token ready.",
+  }));
 };
 
 const isAuthenticated = async (req, res) => {
   try {
-    const token = extractToken(req);
+    const { token, source } = extractTokenDetails(req);
     const response = await userService.isAuthenticated(token);
-    return res.status(200).json({
-      success: true,
+    return res.status(200).json(buildSuccessPayload(req, res, {
+      ...response,
+      session: buildSessionSnapshot(response?.session?.token_payload || {}, {
+        authMode: "cookie",
+        tokenSource: source,
+      }),
+    }, {
       message: "User is authenticated and token is valid.",
-      data: response,
-      err: {},
+    }));
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 401,
+      code: "UNAUTHORIZED",
+      message: "Unauthorized.",
+      hint: "Please log in again to continue.",
     });
-  } catch {
-    return res.status(401).json({
-      message: "Unauthorized",
-      data: {},
-      success: false,
-      err: {},
-    });
+  }
+};
+
+const getSessionStatus = async (req, res) => {
+  const { token, source } = extractTokenDetails(req);
+  if (!token) {
+    return res.status(200).json(buildSuccessPayload(req, res, {
+      authenticated: false,
+      reason: {
+        code: "TOKEN_MISSING",
+        message: "Authentication token is missing.",
+        hint: "Please log in again to continue.",
+      },
+      user: null,
+      session: null,
+    }, {
+      message: "Session status resolved.",
+    }));
+  }
+
+  try {
+    const response = await userService.isAuthenticated(token);
+    return res.status(200).json(buildSuccessPayload(req, res, {
+      authenticated: true,
+      reason: null,
+      user: {
+        id: response.id,
+        empcode: response.empcode,
+        fullname: response.fullname,
+        mobileno: response.mobileno,
+        designation: response.designation,
+        division: response.division,
+        roles: response.roles || [],
+        location_scopes: response.location_scopes || [],
+        location_scope_source: response.location_scope_source || null,
+        assignments: response.assignments || [],
+      },
+      session: buildSessionSnapshot(response?.session?.token_payload || {}, {
+        authMode: "cookie",
+        tokenSource: source,
+      }),
+    }, {
+      message: "Session status resolved.",
+    }));
+  } catch (error) {
+    const statusCode = Number(error?.statusCode || 401);
+    return res
+      .status(statusCode === 503 ? 503 : 200)
+      .json(buildSuccessPayload(req, res, {
+        authenticated: false,
+        reason: {
+          code: String(error?.code || "UNAUTHORIZED").trim() || "UNAUTHORIZED",
+          message: String(error?.message || "").trim() || "Unauthorized.",
+          hint:
+            String(error?.hint || error?.explanation || "").trim() ||
+            "Please log in again to continue.",
+        },
+        user: null,
+        session: null,
+      }, {
+        statusCode: statusCode === 503 ? 503 : 200,
+        message: "Session status resolved.",
+      }));
   }
 };
 const isAdmin = async (req, res) => {
@@ -376,6 +456,7 @@ module.exports = {
   signIn,
   signOut,
   isAuthenticated,
+  getSessionStatus,
   isAdmin,
   getRoles,
   getLocationScopes,

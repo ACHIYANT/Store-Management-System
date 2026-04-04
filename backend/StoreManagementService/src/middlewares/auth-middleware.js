@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { AUTH_BASE_URL } = require("../config/serverConfig");
 const { AUTH_COOKIE_NAME, parseCookies } = require("../utils/cookie-utils");
+const { sendAuthError } = require("../utils/auth-response-utils");
 const {
   collectActorLocationScopes,
   normalizeLocationScope,
@@ -80,9 +81,12 @@ async function withFallbackLocationScopes(user = {}) {
   };
 }
 
-async function fetchCurrentUser(token) {
+async function fetchCurrentUser(token, requestId) {
   const r = await axios.get(`${AUTH_BASE_URL}/users/isAuthenticated`, {
-    headers: { "x-access-token": token },
+    headers: {
+      "x-access-token": token,
+      "x-request-id": String(requestId || "").trim() || undefined,
+    },
     timeout: Number(process.env.AUTH_REQUEST_TIMEOUT_MS || 5000),
   });
 
@@ -101,16 +105,62 @@ async function fetchCurrentUser(token) {
   });
 }
 
+function mapAuthServiceError(error) {
+  const statusCode = Number(error?.response?.status || 0);
+  const payload = error?.response?.data || {};
+  const upstreamRequestId =
+    error?.response?.headers?.["x-request-id"] || payload?.requestId || null;
+
+  if (statusCode === 401 || statusCode === 403) {
+    return {
+      statusCode,
+      code:
+        String(payload?.code || payload?.err?.code || "").trim() ||
+        (statusCode === 403 ? "ROLE_FORBIDDEN" : "UNAUTHORIZED"),
+      message:
+        String(payload?.message || payload?.err?.message || "").trim() ||
+        (statusCode === 403
+          ? "You do not have permission for this action."
+          : "Unauthorized."),
+      hint: String(payload?.hint || "").trim() || "",
+      upstreamRequestId,
+    };
+  }
+
+  if (error?.code === "ECONNABORTED") {
+    return {
+      statusCode: 503,
+      code: "AUTH_SERVICE_TIMEOUT",
+      message: "Authentication check timed out.",
+      hint: "Please try again in a moment.",
+      upstreamRequestId,
+    };
+  }
+
+  return {
+    statusCode: 503,
+    code: "AUTH_SERVICE_UNREACHABLE",
+    message: "Authentication check could not be completed.",
+    hint: "Please try again in a moment.",
+    upstreamRequestId,
+  };
+}
+
 async function ensureAuth(req, res, next) {
   try {
     const token = extractToken(req);
     if (!token)
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendAuthError(req, res, {
+        statusCode: 401,
+        code: "TOKEN_MISSING",
+        message: "Authentication token is missing.",
+        hint: "Please log in again to continue.",
+      });
 
-    req.user = await fetchCurrentUser(token);
+    req.user = await fetchCurrentUser(token, req.requestId);
     next();
-  } catch (_error) {
-    res.status(401).json({ success: false, message: "Unauthorized" });
+  } catch (error) {
+    return sendAuthError(req, res, mapAuthServiceError(error));
   }
 }
 
@@ -138,15 +188,21 @@ function hasAnyRole(userRoles = [], allowedRoles = []) {
 function requireAnyRole(allowedRoles = []) {
   return (req, res, next) => {
     if (!req.user?.id) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Unauthorized user." });
+      return sendAuthError(req, res, {
+        statusCode: 401,
+        code: "UNAUTHORIZED",
+        message: "Unauthorized user.",
+        hint: "Please log in again to continue.",
+      });
     }
 
     if (!hasAnyRole(req.user.roles, allowedRoles)) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Forbidden: insufficient role." });
+      return sendAuthError(req, res, {
+        statusCode: 403,
+        code: "ROLE_FORBIDDEN",
+        message: "You do not have permission for this action.",
+        hint: "Please use an account with the required role.",
+      });
     }
 
     return next();

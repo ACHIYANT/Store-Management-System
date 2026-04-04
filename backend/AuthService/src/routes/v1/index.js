@@ -40,6 +40,7 @@ router.post(
 router.post("/signout", UserController.signOut);
 router.get("/csrf-token", UserController.getCsrfToken);
 router.get("/isAuthenticated", UserController.isAuthenticated);
+router.get("/session/status", UserController.getSessionStatus);
 
 router.get(
   "/isAdmin",
