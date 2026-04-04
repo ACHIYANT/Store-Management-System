@@ -154,21 +154,6 @@ const EmployeesForm = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium">Group Head</label>
-                <Input
-                  {...register("group_head", {
-                    required: "Group Head is required",
-                  })}
-                  placeholder="Enter Group Head Name"
-                />
-                {errors.group_head && (
-                  <p className="text-red-500 text-sm">
-                    {errors.group_head.message}
-                  </p>
-                )}
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium">Gender</label>
                 <select
                   {...register("gender", {
