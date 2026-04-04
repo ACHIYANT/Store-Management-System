@@ -6,6 +6,22 @@ const { isAssignmentManagedRole } = require("../constants/org-assignments");
 
 const DEFAULT_SIGNUP_ROLE = "USER";
 
+const buildAuthError = ({
+  statusCode = 401,
+  code = "UNAUTHORIZED",
+  message = "Unauthorized.",
+  explanation = "",
+  hint = "",
+  details = [],
+} = {}) => ({
+  statusCode,
+  code,
+  message,
+  explanation,
+  hint,
+  details,
+});
+
 const serializeLocationScopes = (locationScopes = []) => {
   if (!Array.isArray(locationScopes)) return [];
 
@@ -99,16 +115,78 @@ const withTimeout = (promise, timeoutMs, errorFactory) => {
 
 const invalidCredentialsError = () => ({
   statusCode: 401,
+  code: "INVALID_CREDENTIALS",
   message: "Invalid credentials",
   explanation: "Mobile number or password is incorrect.",
+  hint: "Please check your mobile number and password and try again.",
 });
 
 const authTimeoutError = () => ({
   statusCode: 503,
+  code: "AUTH_SERVICE_TIMEOUT",
   message: "Authentication service timeout",
   explanation:
     "Unable to complete authentication right now. Please try again in a moment.",
+  hint: "Please try again in a moment.",
 });
+
+const tokenMissingError = () =>
+  buildAuthError({
+    statusCode: 401,
+    code: "TOKEN_MISSING",
+    message: "Authentication token is missing.",
+    explanation: "The request did not include a valid login session.",
+    hint: "Please log in again to continue.",
+  });
+
+const userNotFoundForTokenError = () =>
+  buildAuthError({
+    statusCode: 401,
+    code: "USER_NOT_FOUND",
+    message: "No active account was found for this session.",
+    explanation: "The user linked to this session could not be loaded.",
+    hint: "Please log in again. If the issue continues, contact a super admin.",
+  });
+
+const mapTokenVerificationError = (error) => {
+  if (!error) {
+    return buildAuthError({
+      statusCode: 401,
+      code: "TOKEN_INVALID",
+      message: "Authentication token is invalid.",
+      explanation: "The login token could not be verified.",
+      hint: "Please log in again.",
+    });
+  }
+
+  if (error.name === "TokenExpiredError") {
+    return buildAuthError({
+      statusCode: 401,
+      code: "SESSION_EXPIRED",
+      message: "Your session has expired.",
+      explanation: "The login session is no longer valid.",
+      hint: "Please log in again.",
+    });
+  }
+
+  if (error.name === "NotBeforeError") {
+    return buildAuthError({
+      statusCode: 401,
+      code: "TOKEN_NOT_ACTIVE",
+      message: "Your session is not active yet.",
+      explanation: "The login token cannot be used yet.",
+      hint: "Please wait a moment and try again.",
+    });
+  }
+
+  return buildAuthError({
+    statusCode: 401,
+    code: "TOKEN_INVALID",
+    message: "Authentication token is invalid.",
+    explanation: error.message || "The login token could not be verified.",
+    hint: "Please log in again.",
+  });
+};
 
 class UserService {
   constructor() {
@@ -185,37 +263,47 @@ class UserService {
   }
 
   async isAuthenticated(token) {
-    try {
-      const response = this.verifyToken(token);
-      if (!response) {
-        throw { error: "Invalid Token" };
-      }
-      const user = await withTimeout(
-        this.UserRepository.getById(response.id),
-        Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
-        authTimeoutError,
-      );
-      if (!user) {
-        throw { error: "No user with the corresponding token exists." };
-      }
-      const locationScopeKeys = serializeLocationScopeKeys(
-        user.userLocationScopes,
-      );
-      return {
-        id: user.id,
-        empcode: user.empcode,
-        fullname: user.fullname,
-        mobileno: user.mobileno,
-        designation: user.designation,
-        division: user.division,
-        roles: serializeRoles(user.roles).map((role) => role.name),
-        location_scopes: locationScopeKeys,
-        location_scope_source: locationScopeKeys.length ? "explicit" : null,
-        assignments: serializeAssignments(user.orgAssignments),
-      };
-    } catch (error) {
-      throw error;
+    if (!String(token || "").trim()) {
+      throw tokenMissingError();
     }
+
+    let decodedToken;
+    try {
+      decodedToken = this.verifyToken(token);
+    } catch (error) {
+      throw mapTokenVerificationError(error);
+    }
+
+    const user = await withTimeout(
+      this.UserRepository.getById(decodedToken.id),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+    if (!user) {
+      throw userNotFoundForTokenError();
+    }
+
+    const locationScopeKeys = serializeLocationScopeKeys(
+      user.userLocationScopes,
+    );
+    return {
+      id: user.id,
+      empcode: user.empcode,
+      fullname: user.fullname,
+      mobileno: user.mobileno,
+      designation: user.designation,
+      division: user.division,
+      roles: serializeRoles(user.roles).map((role) => role.name),
+      location_scopes: locationScopeKeys,
+      location_scope_source: locationScopeKeys.length ? "explicit" : null,
+      assignments: serializeAssignments(user.orgAssignments),
+      session: {
+        token_payload: {
+          iat: Number(decodedToken?.iat) || null,
+          exp: Number(decodedToken?.exp) || null,
+        },
+      },
+    };
   }
   createToken(user) {
     try {

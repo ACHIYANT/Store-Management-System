@@ -10,6 +10,7 @@ export default function Layout() {
     open: false,
     message: "",
     moveTo: "",
+    diagnostic: null,
   });
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export default function Layout() {
         open: true,
         message,
         moveTo: shouldForceLogout ? redirectTo : "",
+        diagnostic: event?.detail?.diagnostic || null,
       });
     };
 
@@ -64,7 +66,10 @@ export default function Layout() {
         type="error"
         message={apiError.message}
         moveTo={apiError.moveTo}
-        onClose={() => setApiError({ open: false, message: "", moveTo: "" })}
+        diagnostic={apiError.diagnostic}
+        onClose={() =>
+          setApiError({ open: false, message: "", moveTo: "", diagnostic: null })
+        }
       />
     </div>
   );
