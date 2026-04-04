@@ -8,6 +8,7 @@ const DEFAULT_ALLOWED_HEADERS = [
   "x-csrf-token",
   "X-Requested-With",
 ];
+const DEFAULT_EXPOSED_HEADERS = ["x-request-id", "retry-after"];
 
 const toPosInt = (value, fallback) => {
   const num = Number(value);
@@ -25,6 +26,7 @@ function buildCorsOptions() {
   const allowedOrigins = parseCsv(process.env.CORS_ALLOWED_ORIGINS);
   const allowedMethods = parseCsv(process.env.CORS_ALLOWED_METHODS);
   const allowedHeaders = parseCsv(process.env.CORS_ALLOWED_HEADERS);
+  const exposedHeaders = parseCsv(process.env.CORS_EXPOSED_HEADERS);
   const isProduction =
     String(process.env.NODE_ENV || "").toLowerCase() === "production";
   const allowAnyInDev =
@@ -44,6 +46,7 @@ function buildCorsOptions() {
     credentials: true,
     methods: allowedMethods.length ? allowedMethods : DEFAULT_ALLOWED_METHODS,
     allowedHeaders: allowedHeaders.length ? allowedHeaders : DEFAULT_ALLOWED_HEADERS,
+    exposedHeaders: exposedHeaders.length ? exposedHeaders : DEFAULT_EXPOSED_HEADERS,
     maxAge: toPosInt(process.env.CORS_MAX_AGE_SECONDS, 86400),
   };
 }

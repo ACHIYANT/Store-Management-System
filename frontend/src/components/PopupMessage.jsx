@@ -12,6 +12,8 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Info,
   Sparkles,
 } from "lucide-react";
@@ -77,8 +79,11 @@ const closeWithDelay = (fn) => {
   }, 220);
 };
 
-const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
+const PopupMessage = ({ open, onClose, type, message, moveTo, diagnostic }) => {
   const [localOpen, setLocalOpen] = useState(open);
+  const [showDiagnostics, setShowDiagnostics] = useState(
+    Boolean(diagnostic?.defaultExpanded),
+  );
   const navigate = useNavigate();
   const normalizedType = String(type || "info").toLowerCase();
   const visual = VARIANT_BY_TYPE[normalizedType] || VARIANT_BY_TYPE.info;
@@ -87,6 +92,10 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
   useEffect(() => {
     setLocalOpen(open);
   }, [open]);
+
+  useEffect(() => {
+    setShowDiagnostics(Boolean(diagnostic?.defaultExpanded));
+  }, [diagnostic, open]);
 
   const handleClose = () => {
     setLocalOpen(false);
@@ -115,7 +124,7 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <DialogContent className="max-w-[30rem] overflow-hidden border border-slate-200/90 bg-white p-0 shadow-[0_28px_80px_-28px_rgba(15,23,42,0.55)]">
+            <DialogContent className="max-w-[32rem] overflow-hidden border border-slate-200/90 bg-white p-0 shadow-[0_28px_80px_-28px_rgba(15,23,42,0.55)]">
               <div className={`relative overflow-hidden px-6 pb-5 pt-6 sm:px-7 ${visual.headerBg}`}>
                 <div className="pointer-events-none absolute -right-14 -top-16 h-40 w-40 rounded-full bg-white/50 blur-2xl" />
                 <div className="pointer-events-none absolute -left-10 bottom-0 h-24 w-24 rounded-full bg-white/40 blur-xl" />
@@ -141,7 +150,7 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
                       <DialogDescription className="sr-only">
                         {resolvedMessage}
                       </DialogDescription>
-                      <p className={`mt-2 text-sm leading-6 ${visual.messageClass}`}>
+                      <p className={`mt-2 whitespace-pre-line break-words text-sm leading-6 ${visual.messageClass}`}>
                         {resolvedMessage}
                       </p>
                     </div>
@@ -150,6 +159,33 @@ const PopupMessage = ({ open, onClose, type, message, moveTo }) => {
               </div>
 
               <div className="bg-gradient-to-b from-white to-slate-50/70 px-6 pb-6 pt-4 sm:px-7">
+                {diagnostic?.rows?.length ? (
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowDiagnostics((current) => !current)}
+                      className="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-slate-700"
+                    >
+                      <span>{diagnostic.title || "Diagnostics"}</span>
+                      {showDiagnostics ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </button>
+                    {showDiagnostics ? (
+                      <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-xs text-slate-600">
+                        {diagnostic.rows.map((row) => (
+                          <div key={`${row.label}:${row.value}`} className="grid grid-cols-[7rem,1fr] gap-2">
+                            <span className="font-semibold text-slate-700">{row.label}</span>
+                            <span className="break-words">{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"

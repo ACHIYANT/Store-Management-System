@@ -6,25 +6,38 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import PopupMessage from "@/components/PopupMessage";
 import { toAuthApiUrl } from "@/lib/api-config";
+import { buildDiagnosticPresentation, buildDisplayMessage } from "@/lib/network";
 
 import logo from "/logo.svg";
 import govt from "/govt.svg";
 
-const parseApiMessage = async (response, fallbackMessage) => {
+const parseApiFeedback = async (response, fallbackMessage) => {
   try {
     const payload = await response.clone().json();
-    return (
-      payload?.message ||
-      payload?.err?.message ||
-      payload?.data?.message ||
-      fallbackMessage
+    return buildDiagnosticPresentation(
+      {
+        status: Number(response?.status || 0),
+        url: toAuthApiUrl("/signin"),
+        code: payload?.code || payload?.err?.code,
+        message: payload?.message || payload?.err?.message || payload?.data?.message,
+        hint: payload?.hint,
+        requestId: payload?.requestId || response.headers.get("x-request-id"),
+        details: payload?.details,
+      },
+      fallbackMessage,
     );
   } catch {
     try {
       const text = await response.text();
-      return text || fallbackMessage;
+      return {
+        message: text || fallbackMessage,
+        diagnostic: null,
+      };
     } catch {
-      return fallbackMessage;
+      return {
+        message: fallbackMessage,
+        diagnostic: null,
+      };
     }
   }
 };
@@ -38,10 +51,11 @@ export default function Login() {
     type: "info",
     message: "",
     moveTo: "",
+    diagnostic: null,
   });
 
-  const showPopup = ({ type = "info", message = "", moveTo = "" }) => {
-    setPopup({ open: true, type, message, moveTo });
+  const showPopup = ({ type = "info", message = "", moveTo = "", diagnostic = null }) => {
+    setPopup({ open: true, type, message, moveTo, diagnostic });
   };
 
   const handleLogin = async () => {
@@ -73,13 +87,14 @@ export default function Login() {
       });
 
       if (!response.ok) {
-        const message = await parseApiMessage(
+        const feedback = await parseApiFeedback(
           response,
           "Login failed. Please check your credentials.",
         );
         showPopup({
           type: "error",
-          message,
+          message: feedback.message,
+          diagnostic: feedback.diagnostic,
         });
         return;
       }
@@ -114,9 +129,21 @@ export default function Login() {
       });
     } catch (error) {
       console.error("Login Error:", error);
+      const fallbackDetail = buildDiagnosticPresentation(
+        {
+          status: 0,
+          url: toAuthApiUrl("/signin"),
+          message: buildDisplayMessage(
+            { status: 0, url: toAuthApiUrl("/signin") },
+            "Something went wrong. Please try again.",
+          ),
+        },
+        "Something went wrong. Please try again.",
+      );
       showPopup({
         type: "error",
-        message: "Something went wrong. Please try again.",
+        message: fallbackDetail.message,
+        diagnostic: fallbackDetail.diagnostic,
       });
     } finally {
       setLoading(false);
@@ -183,8 +210,15 @@ export default function Login() {
         type={popup.type}
         message={popup.message}
         moveTo={popup.moveTo}
+        diagnostic={popup.diagnostic}
         onClose={() =>
-          setPopup({ open: false, type: "info", message: "", moveTo: "" })
+          setPopup({
+            open: false,
+            type: "info",
+            message: "",
+            moveTo: "",
+            diagnostic: null,
+          })
         }
       />
     </div>

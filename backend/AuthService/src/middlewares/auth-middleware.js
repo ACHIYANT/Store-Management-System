@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const UserRepository = require("../repository/user-repository");
 const { JWT_KEY } = require("../config/serverConfig");
 const { AUTH_COOKIE_NAME, parseCookies } = require("../utils/cookie-utils");
+const { sendError } = require("../utils/auth-response-utils");
 
 const userRepository = new UserRepository();
 
@@ -18,17 +19,60 @@ const extractToken = (req) =>
   (req.headers.authorization || "").replace(/^Bearer\s+/i, "") ||
   extractTokenFromCookie(req.headers.cookie);
 
+const mapTokenError = (error) => {
+  if (error?.name === "TokenExpiredError") {
+    return {
+      statusCode: 401,
+      code: "SESSION_EXPIRED",
+      message: "Your session has expired.",
+      hint: "Please log in again.",
+    };
+  }
+
+  if (error?.name === "NotBeforeError") {
+    return {
+      statusCode: 401,
+      code: "TOKEN_NOT_ACTIVE",
+      message: "Your session is not active yet.",
+      hint: "Please wait a moment and try again.",
+    };
+  }
+
+  return {
+    statusCode: 401,
+    code: "TOKEN_INVALID",
+    message: "Authentication token is invalid.",
+    hint: "Please log in again.",
+  };
+};
+
 async function ensureAuth(req, res, next) {
   try {
     const token = extractToken(req);
     if (!token) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendError(req, res, {
+        statusCode: 401,
+        code: "TOKEN_MISSING",
+        message: "Authentication token is missing.",
+        hint: "Please log in again to continue.",
+      });
     }
 
-    const decoded = jwt.verify(token, JWT_KEY);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_KEY);
+    } catch (error) {
+      return sendError(req, res, mapTokenError(error));
+    }
+
     const user = await userRepository.getById(decoded.id);
     if (!user) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendError(req, res, {
+        statusCode: 401,
+        code: "USER_NOT_FOUND",
+        message: "No active account was found for this session.",
+        hint: "Please log in again. If the issue continues, contact a super admin.",
+      });
     }
 
     req.user = {
@@ -40,7 +84,12 @@ async function ensureAuth(req, res, next) {
     };
     return next();
   } catch (_error) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
+    return sendError(req, res, {
+      statusCode: 401,
+      code: "UNAUTHORIZED",
+      message: "Unauthorized.",
+      hint: "Please log in again to continue.",
+    });
   }
 }
 
@@ -50,9 +99,12 @@ function requireAnyRole(allowedRoles = []) {
     const userRoles = normalizeRoles(req.user?.roles);
     const allowed = normalizedAllowed.some((role) => userRoles.includes(role));
     if (!allowed) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Forbidden: insufficient role." });
+      return sendError(req, res, {
+        statusCode: 403,
+        code: "ROLE_FORBIDDEN",
+        message: "You do not have permission for this action.",
+        hint: "Please use an account with the required role.",
+      });
     }
     return next();
   };

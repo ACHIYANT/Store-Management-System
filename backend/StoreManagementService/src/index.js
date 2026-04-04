@@ -60,8 +60,11 @@ const setUpAndStartServer = async () => {
       return res.status(403).json({
         success: false,
         message: "CORS origin not allowed.",
+        code: "CORS_NOT_ALLOWED",
+        hint: "Please use an allowed origin for this application.",
+        requestId: res.getHeader("x-request-id") || null,
         data: {},
-        err: {},
+        err: { code: "CORS_NOT_ALLOWED", message: "CORS origin not allowed." },
       });
     }
     return next(error);
@@ -73,8 +76,11 @@ const setUpAndStartServer = async () => {
     return res.status(500).json({
       success: false,
       message: "Internal server error",
+      code: "INTERNAL_SERVER_ERROR",
+      hint: "Please try again in a moment.",
+      requestId: res.getHeader("x-request-id") || null,
       data: {},
-      err: {},
+      err: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
     });
   });
 
