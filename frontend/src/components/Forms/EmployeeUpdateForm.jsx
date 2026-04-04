@@ -34,7 +34,6 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
       setValue("father_name", selectedEmployee.father_name);
       setValue("email_id", selectedEmployee.email_id);
       setValue("designation", selectedEmployee.designation);
-      setValue("group_head", selectedEmployee.group_head);
       setValue("gender", selectedEmployee.gender || "Other");
       setValue("office_location", selectedEmployee.office_location);
       setValue("mobile_no", selectedEmployee.mobile_no);
@@ -55,7 +54,6 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
       body.append("email_id", data.email_id);
       body.append("designation", data.designation);
       body.append("division", division);
-      body.append("group_head", data.group_head);
       body.append("gender", data.gender);
       body.append("office_location", data.office_location);
       body.append("mobile_no", data.mobile_no);
@@ -184,21 +182,6 @@ const EmployeeUpdateForm = ({ onUpdateSuccess }) => {
                   division={division}
                   setDivision={setDivision}
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium">Group Head</label>
-                <Input
-                  {...register("group_head", {
-                    required: "Group Head is required",
-                  })}
-                  placeholder="Enter Group Head Name"
-                />
-                {errors.group_head && (
-                  <p className="text-red-500 text-sm">
-                    {errors.group_head.message}
-                  </p>
-                )}
               </div>
 
               <div>

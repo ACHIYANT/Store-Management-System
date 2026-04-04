@@ -83,7 +83,6 @@ class EmployeeMigrationService {
       ),
       designation: EmployeeMigrationService.toText(get("designation")),
       division: EmployeeMigrationService.toText(get("division")),
-      group_head: EmployeeMigrationService.toText(get("group_head", "grouphead")),
       gender: EmployeeMigrationService.normalizeGender(get("gender", "sex")),
       office_location: EmployeeMigrationService.normalizeLocationLabel(
         get("office_location", "office", "office_loc"),
@@ -100,7 +99,6 @@ class EmployeeMigrationService {
       row.mobile_no,
       row.designation,
       row.division,
-      row.group_head,
       row.gender,
       row.office_location,
     ].some((value) => value !== undefined && value !== null && String(value).trim() !== "");
@@ -140,7 +138,6 @@ class EmployeeMigrationService {
       mobile_no: row.mobile_no,
       designation: row.designation,
       division: row.division,
-      group_head: row.group_head,
       gender: row.gender,
       office_location: row.office_location,
     };
@@ -171,7 +168,6 @@ class EmployeeMigrationService {
     if (!row.mobile_no) errors.push("mobile_no is required");
     if (!row.designation) errors.push("designation is required");
     if (!row.division) errors.push("division is required");
-    if (!row.group_head) errors.push("group_head is required");
     if (!row.gender) errors.push("gender is required and must be Male, Female, or Other");
     if (!row.office_location) errors.push("office_location is required");
 

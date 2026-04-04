@@ -116,7 +116,6 @@ class EmployeeRepository {
           { email_id: { [Op.like]: like } },
           { designation: { [Op.like]: like } },
           { division: { [Op.like]: like } },
-          { group_head: { [Op.like]: like } },
           { gender: { [Op.like]: like } },
           { office_location: { [Op.like]: like } },
           { mobile_no: { [Op.like]: like } },

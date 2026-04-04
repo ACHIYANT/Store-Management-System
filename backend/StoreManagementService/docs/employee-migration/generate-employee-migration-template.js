@@ -12,7 +12,6 @@ const HEADERS = [
   "mobile_no",
   "designation",
   "division",
-  "group_head",
   "gender",
   "office_location",
 ];
@@ -38,7 +37,6 @@ async function generateTemplate() {
     mobile_no: "9876543210",
     designation: "Assistant Manager",
     division: "Procurement",
-    group_head: "Rohit Sharma",
     gender: "Male",
     office_location: "Panchkula",
   });
@@ -51,7 +49,6 @@ async function generateTemplate() {
     mobile_no: "9123456789",
     designation: "Executive",
     division: "Admin",
-    group_head: "Anil Gupta",
     gender: "Female",
     office_location: "Chandigarh",
   });
@@ -62,7 +59,7 @@ async function generateTemplate() {
     text: "Fill data in 'employees' sheet only. Do not change header names.",
   });
   instructions.addRow({
-    text: "Required columns: emp_id, name, father_name, email_id, mobile_no, designation, division, group_head, gender, office_location.",
+    text: "Required columns: emp_id, name, father_name, email_id, mobile_no, designation, division, gender, office_location.",
   });
   instructions.addRow({
     text: "Allowed values for gender: Male, Female, Other.",
