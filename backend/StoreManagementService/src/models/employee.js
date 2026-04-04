@@ -80,18 +80,6 @@ module.exports = (sequelize, DataTypes) => {
           // },
         },
       },
-      group_head: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: true,
-          len: [3, 20],
-          is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
-          },
-        },
-      },
       gender: {
         type: DataTypes.ENUM("Male", "Female", "Other"),
         allowNull: false,

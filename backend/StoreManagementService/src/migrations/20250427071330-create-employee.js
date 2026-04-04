@@ -69,18 +69,6 @@ module.exports = {
           // },
         },
       },
-      group_head: {
-        type: Sequelize.STRING,
-        allowNull: false,
-        validate: {
-          notEmpty: true,
-          len: [3, 20],
-          is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
-          },
-        },
-      },
       office_location: {
         type: Sequelize.STRING,
         allowNull: false,

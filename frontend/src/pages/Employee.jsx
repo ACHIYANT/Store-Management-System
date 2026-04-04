@@ -62,7 +62,6 @@ export default function Employee() {
       //   render: (val) => <span className="text-blue-600">{val}</span>,
     },
     { key: "division", label: "Division" },
-    { key: "group_head", label: "Reporting Officer" },
     { key: "gender", label: "Gender" },
     { key: "office_location", label: "Office Location" },
     { key: "mobile_no", label: "Contact Number" },
