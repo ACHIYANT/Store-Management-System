@@ -68,6 +68,51 @@ const create = async (req, res) => {
   }
 };
 
+const validateProvisionFromEmployee = async (req, res) => {
+  try {
+    const response = await userService.previewProvisionFromEmployee(req.body || {}, {
+      serviceName: req.internalService?.serviceName || null,
+    });
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 200,
+        message: "Employee provisioning request validated successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "PROVISION_VALIDATE_FAILED",
+      message: "Unable to validate employee provisioning request.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
+const executeProvisionFromEmployee = async (req, res) => {
+  try {
+    const response = await userService.provisionFromEmployee(req.body || {}, {
+      serviceName: req.internalService?.serviceName || null,
+    });
+    const created = response?.action === "created";
+    return res.status(created ? 201 : 200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: created ? 201 : 200,
+        message: created
+          ? "User provisioned from employee successfully."
+          : "User already exists for this employee.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "PROVISION_EXECUTE_FAILED",
+      message: "Unable to provision user from employee.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
 const listUsers = async (req, res) => {
   try {
     const response = await userService.listUsers(req.query || {});
@@ -451,6 +496,8 @@ const listRoles = async (_req, res) => {
 
 module.exports = {
   create,
+  validateProvisionFromEmployee,
+  executeProvisionFromEmployee,
   listUsers,
   getCsrfToken,
   signIn,

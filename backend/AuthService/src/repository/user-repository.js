@@ -148,6 +148,38 @@ class UserRepository {
     }
   }
 
+  async findByEmpcode(empcode) {
+    return User.findOne({
+      where: {
+        empcode: Number(empcode),
+      },
+      attributes: [
+        "id",
+        "empcode",
+        "fullname",
+        "mobileno",
+        "designation",
+        "division",
+      ],
+    });
+  }
+
+  async findByMobileNoOptional(userMobileNo) {
+    return User.findOne({
+      where: {
+        mobileno: String(userMobileNo || "").trim(),
+      },
+      attributes: [
+        "id",
+        "empcode",
+        "fullname",
+        "mobileno",
+        "designation",
+        "division",
+      ],
+    });
+  }
+
   async isAdmin(userId) {
     try {
       const user = await User.findByPk(userId);

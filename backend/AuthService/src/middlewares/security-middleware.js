@@ -6,6 +6,8 @@ const DEFAULT_ALLOWED_HEADERS = [
   "Authorization",
   "x-access-token",
   "x-csrf-token",
+  "x-internal-service-key",
+  "x-internal-service-name",
   "X-Requested-With",
 ];
 const DEFAULT_EXPOSED_HEADERS = ["x-request-id", "retry-after"];
@@ -129,6 +131,22 @@ const authSignInRateLimiter = createInMemoryRateLimiter({
   message: "Too many sign-in attempts. Please try again after some time.",
 });
 
+const authInternalProvisionRateLimiter = createInMemoryRateLimiter({
+  windowMs: toPosInt(
+    process.env.INTERNAL_PROVISION_RATE_LIMIT_WINDOW_MS,
+    60_000,
+  ),
+  maxRequests: toPosInt(
+    process.env.INTERNAL_PROVISION_RATE_LIMIT_MAX,
+    120,
+  ),
+  keyGenerator: (req) => {
+    const serviceName = String(req.headers["x-internal-service-name"] || "").trim();
+    return `${serviceName || "unknown-service"}|${req.ip || "unknown-ip"}`;
+  },
+  message: "Too many internal provisioning requests. Please try again later.",
+});
+
 function sanitizeJsonErrorResponses(_req, res, next) {
   const originalJson = res.json.bind(res);
   res.json = (payload) => {
@@ -171,6 +189,7 @@ function sanitizeJsonErrorResponses(_req, res, next) {
 module.exports = {
   apiRateLimiter,
   authSignInRateLimiter,
+  authInternalProvisionRateLimiter,
   buildCorsOptions,
   sanitizeJsonErrorResponses,
   securityHeaders,

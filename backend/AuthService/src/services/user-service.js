@@ -1,6 +1,9 @@
 const UserRepository = require("../repository/user-repository");
 const jwt = require("jsonwebtoken");
-const { JWT_KEY } = require("../config/serverConfig");
+const {
+  EMPLOYEE_PROVISION_DEFAULT_PASSWORD,
+  JWT_KEY,
+} = require("../config/serverConfig");
 const bcrypt = require("bcrypt");
 const { isAssignmentManagedRole } = require("../constants/org-assignments");
 
@@ -98,6 +101,14 @@ const serializeUserSummary = (user) => ({
   location_scopes: serializeLocationScopes(user.userLocationScopes),
   assignments: serializeAssignments(user.orgAssignments),
 });
+
+const normalizeText = (value) => {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  return text || "";
+};
+
+const eqText = (a, b) =>
+  normalizeText(a).toLowerCase() === normalizeText(b).toLowerCase();
 
 const withTimeout = (promise, timeoutMs, errorFactory) => {
   if (!Number.isFinite(Number(timeoutMs)) || Number(timeoutMs) <= 0) {
@@ -215,6 +226,225 @@ class UserService {
         message: "Unable to create user",
         explanation: "Something went wrong while creating user.",
       };
+    }
+  }
+
+  async provisionFromEmployee(data = {}, context = {}) {
+    const empcode = Number(data?.empcode ?? data?.emp_id);
+    const payload = {
+      empcode,
+      fullname: normalizeText(data?.fullname ?? data?.name),
+      mobileno: normalizeText(data?.mobileno ?? data?.mobile_no),
+      designation: normalizeText(data?.designation),
+      division: normalizeText(data?.division),
+      password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
+    };
+
+    const validationErrors = [];
+    if (!Number.isInteger(payload.empcode) || payload.empcode <= 0) {
+      validationErrors.push("empcode must be a positive integer.");
+    }
+    if (!payload.fullname) validationErrors.push("fullname is required.");
+    if (!payload.mobileno) validationErrors.push("mobileno is required.");
+    if (!payload.designation) validationErrors.push("designation is required.");
+    if (!payload.division) validationErrors.push("division is required.");
+    if (!payload.password) {
+      validationErrors.push("Default provisioning password is not configured.");
+    }
+
+    if (validationErrors.length) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "INVALID_PROVISION_PAYLOAD",
+        message: "Employee provisioning payload is invalid.",
+        hint: "Send complete employee details and ensure the default provisioning password is configured.",
+        details: validationErrors,
+      });
+    }
+
+    return this._provisionFromEmployeePayload(payload, context);
+  }
+
+  async previewProvisionFromEmployee(data = {}, context = {}) {
+    const empcode = Number(data?.empcode ?? data?.emp_id);
+    const payload = {
+      empcode,
+      fullname: normalizeText(data?.fullname ?? data?.name),
+      mobileno: normalizeText(data?.mobileno ?? data?.mobile_no),
+      designation: normalizeText(data?.designation),
+      division: normalizeText(data?.division),
+      password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
+    };
+
+    const validationErrors = [];
+    if (!Number.isInteger(payload.empcode) || payload.empcode <= 0) {
+      validationErrors.push("empcode must be a positive integer.");
+    }
+    if (!payload.fullname) validationErrors.push("fullname is required.");
+    if (!payload.mobileno) validationErrors.push("mobileno is required.");
+    if (!payload.designation) validationErrors.push("designation is required.");
+    if (!payload.division) validationErrors.push("division is required.");
+    if (!payload.password) {
+      validationErrors.push("Default provisioning password is not configured.");
+    }
+
+    if (validationErrors.length) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "INVALID_PROVISION_PAYLOAD",
+        message: "Employee provisioning payload is invalid.",
+        hint: "Send complete employee details and ensure the default provisioning password is configured.",
+        details: validationErrors,
+      });
+    }
+
+    const existingByEmpcode = await withTimeout(
+      this.UserRepository.findByEmpcode(payload.empcode),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (existingByEmpcode) {
+      const mismatchDetails = [];
+      if (!eqText(existingByEmpcode.fullname, payload.fullname)) {
+        mismatchDetails.push(
+          `fullname mismatch: Auth has '${existingByEmpcode.fullname}', provisioning requested '${payload.fullname}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.mobileno, payload.mobileno)) {
+        mismatchDetails.push(
+          `mobileno mismatch: Auth has '${existingByEmpcode.mobileno}', provisioning requested '${payload.mobileno}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.designation, payload.designation)) {
+        mismatchDetails.push(
+          `designation mismatch: Auth has '${existingByEmpcode.designation}', provisioning requested '${payload.designation}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.division, payload.division)) {
+        mismatchDetails.push(
+          `division mismatch: Auth has '${existingByEmpcode.division}', provisioning requested '${payload.division}'.`,
+        );
+      }
+
+      if (mismatchDetails.length) {
+        throw buildAuthError({
+          statusCode: 409,
+          code: "USER_ALREADY_EXISTS_CONFLICT",
+          message: `User already exists for empcode ${payload.empcode} with different details.`,
+          hint: "Review the existing Auth account before retrying provisioning.",
+          details: mismatchDetails,
+        });
+      }
+
+      return {
+        action: "already_exists",
+        source_service: normalizeText(context?.serviceName) || null,
+        user: {
+          id: existingByEmpcode.id,
+          empcode: existingByEmpcode.empcode,
+          fullname: existingByEmpcode.fullname,
+          mobileno: existingByEmpcode.mobileno,
+          designation: existingByEmpcode.designation,
+          division: existingByEmpcode.division,
+        },
+      };
+    }
+
+    const existingByMobile = await withTimeout(
+      this.UserRepository.findByMobileNoOptional(payload.mobileno),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (
+      existingByMobile &&
+      Number(existingByMobile.empcode) !== Number(payload.empcode)
+    ) {
+      throw buildAuthError({
+        statusCode: 409,
+        code: "MOBILE_ALREADY_IN_USE",
+        message: `Mobile number ${payload.mobileno} already belongs to another user.`,
+        hint: "Use a different mobile number or fix the existing Auth account before retrying provisioning.",
+      });
+    }
+
+    return {
+      action: "create",
+      source_service: normalizeText(context?.serviceName) || null,
+      user: {
+        id: null,
+        empcode: payload.empcode,
+        fullname: payload.fullname,
+        mobileno: payload.mobileno,
+        designation: payload.designation,
+        division: payload.division,
+      },
+    };
+  }
+
+  async _provisionFromEmployeePayload(payload = {}, context = {}) {
+    const preview = await this.previewProvisionFromEmployee(payload, context);
+    if (preview.action === "already_exists") {
+      return preview;
+    }
+
+    try {
+      const createdUser = await this.UserRepository.create(payload);
+      return {
+        action: "created",
+        source_service: normalizeText(context?.serviceName) || null,
+        user: {
+          id: createdUser.id,
+          empcode: createdUser.empcode,
+          fullname: createdUser.fullname,
+          mobileno: createdUser.mobileno,
+          designation: createdUser.designation,
+          division: createdUser.division,
+        },
+      };
+    } catch (error) {
+      if (error?.statusCode) {
+        if (Number(error.statusCode) === 400 && !error.code) {
+          throw buildAuthError({
+            statusCode: 400,
+            code: "INVALID_PROVISION_PAYLOAD",
+            message: "Employee provisioning payload is invalid.",
+            hint: "Correct the employee details and try again.",
+            details: Array.isArray(error?.explanation) ? error.explanation : [],
+          });
+        }
+        throw error;
+      }
+      if (error?.name === "SequelizeUniqueConstraintError") {
+        throw buildAuthError({
+          statusCode: 409,
+          code: "USER_ALREADY_EXISTS_CONFLICT",
+          message: "A matching Auth account already exists.",
+          hint: "Review the existing Auth account before retrying provisioning.",
+          details: Array.isArray(error?.errors)
+            ? error.errors
+                .map((entry) => String(entry?.message || "").trim())
+                .filter(Boolean)
+            : [],
+        });
+      }
+      if (error?.name === "SequelizeValidationError") {
+        throw buildAuthError({
+          statusCode: 400,
+          code: "INVALID_PROVISION_PAYLOAD",
+          message: "Employee provisioning payload is invalid.",
+          hint: "Correct the employee details and try again.",
+          details: Array.isArray(error?.explanation) ? error.explanation : [],
+        });
+      }
+      throw buildAuthError({
+        statusCode: 500,
+        code: "PROVISION_FAILED",
+        message: "Unable to provision user from employee.",
+        explanation: "Something went wrong while creating the Auth account.",
+        hint: "Please try again in a moment.",
+      });
     }
   }
 

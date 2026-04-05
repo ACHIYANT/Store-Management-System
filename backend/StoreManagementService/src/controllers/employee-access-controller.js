@@ -2,14 +2,14 @@
 
 const fs = require("fs");
 const XLSX = require("xlsx");
-const { EmployeeMigrationService } = require("../services/employee-migration-service");
+const { EmployeeAccessService } = require("../services/employee-access-service");
 const {
   buildMigrationMeta,
   buildMigrationOperationContext,
   resolveMigrationErrorStatus,
 } = require("../utils/migration-api-utils");
 
-const service = new EmployeeMigrationService();
+const service = new EmployeeAccessService();
 
 const removeFileSafe = (filePath) => {
   try {
@@ -118,7 +118,7 @@ async function validateUpload(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: "Employee migration validation completed",
+      message: "Employee access validation completed",
       data: {
         ...result,
         meta: buildMigrationMeta(payload.meta, req.user || {}),
@@ -126,10 +126,10 @@ async function validateUpload(req, res) {
       err: {},
     });
   } catch (error) {
-    console.error("Employee migration validation error:", error);
+    console.error("Employee access validation error:", error);
     return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
-      message: "Employee migration validation failed",
+      message: "Employee access validation failed",
       data: {},
       err: { message: error.message || "Unknown error" },
     });
@@ -170,7 +170,7 @@ async function executeUpload(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: "Employee migration executed",
+      message: "Employee access execution completed",
       data: {
         ...result,
         meta: buildMigrationMeta(payload.meta, req.user || {}),
@@ -178,10 +178,10 @@ async function executeUpload(req, res) {
       err: {},
     });
   } catch (error) {
-    console.error("Employee migration execute error:", error);
+    console.error("Employee access execution error:", error);
     return res.status(resolveMigrationErrorStatus(error)).json({
       success: false,
-      message: "Employee migration execution failed",
+      message: "Employee access execution failed",
       data: {},
       err: { message: error.message || "Unknown error" },
     });
