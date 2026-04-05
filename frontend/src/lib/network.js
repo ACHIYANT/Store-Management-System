@@ -412,6 +412,7 @@ function isAuthPublicEndpoint(inputUrl) {
     return (
       path.endsWith("/api/v1/signin") ||
       path.endsWith("/api/v1/signup") ||
+      path.endsWith("/api/v1/password/first-login/change") ||
       path.endsWith("/api/v1/csrf-token")
     );
   } catch {

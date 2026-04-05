@@ -16,6 +16,7 @@ const {
 const {
   authSignInRateLimiter,
   authInternalProvisionRateLimiter,
+  authPasswordChangeRateLimiter,
 } = require("../../middlewares/security-middleware");
 
 const router = express.Router();
@@ -52,6 +53,19 @@ router.post(
   authSignInRateLimiter,
   AuthRequestValidator.validateUserAuth,
   UserController.signIn
+);
+router.post(
+  "/password/first-login/change",
+  authPasswordChangeRateLimiter,
+  AuthRequestValidator.validateFirstLoginPasswordChange,
+  UserController.completeFirstLoginPasswordChange,
+);
+router.post(
+  "/password/change",
+  ensureAuth,
+  authPasswordChangeRateLimiter,
+  AuthRequestValidator.validateAuthenticatedPasswordChange,
+  UserController.changePassword,
 );
 router.post("/signout", UserController.signOut);
 router.get("/csrf-token", UserController.getCsrfToken);

@@ -147,6 +147,17 @@ const authInternalProvisionRateLimiter = createInMemoryRateLimiter({
   message: "Too many internal provisioning requests. Please try again later.",
 });
 
+const authPasswordChangeRateLimiter = createInMemoryRateLimiter({
+  windowMs: toPosInt(process.env.PASSWORD_CHANGE_RATE_LIMIT_WINDOW_MS, 15 * 60_000),
+  maxRequests: toPosInt(process.env.PASSWORD_CHANGE_RATE_LIMIT_MAX, 20),
+  keyGenerator: (req) => {
+    const changeToken = String(req.body?.passwordChangeToken || "").trim();
+    const userId = String(req.user?.id || "").trim();
+    return `${req.ip || "unknown-ip"}|${userId || changeToken || "password-change"}`;
+  },
+  message: "Too many password change attempts. Please try again after some time.",
+});
+
 function sanitizeJsonErrorResponses(_req, res, next) {
   const originalJson = res.json.bind(res);
   res.json = (payload) => {
@@ -190,6 +201,7 @@ module.exports = {
   apiRateLimiter,
   authSignInRateLimiter,
   authInternalProvisionRateLimiter,
+  authPasswordChangeRateLimiter,
   buildCorsOptions,
   sanitizeJsonErrorResponses,
   securityHeaders,

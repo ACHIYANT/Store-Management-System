@@ -7,12 +7,24 @@ const DEFAULT_ERROR_HINTS = {
   SESSION_EXPIRED: "Please log in again.",
   TOKEN_INVALID: "Please log in again.",
   TOKEN_NOT_ACTIVE: "Please wait a moment and try again.",
+  SESSION_REVOKED: "Please log in again.",
   USER_NOT_FOUND: "Please contact a super admin if the issue continues.",
   AUTH_SERVICE_TIMEOUT: "Please try again in a moment.",
   AUTH_SERVICE_UNREACHABLE: "Please try again in a moment.",
   ROLE_FORBIDDEN: "Please use an account with the required role.",
   LOCATION_SCOPE_MISSING:
     "Please ask a super admin to assign a location to your account.",
+  PASSWORD_CHANGE_REQUIRED:
+    "Change your password before continuing.",
+  PASSWORD_CHANGE_TOKEN_INVALID:
+    "Start the sign-in process again to get a fresh password change link.",
+  PASSWORD_CHANGE_TOKEN_EXPIRED:
+    "Start the sign-in process again to continue.",
+  CURRENT_PASSWORD_INCORRECT: "Please enter your current password correctly.",
+  PASSWORD_CONFIRMATION_MISMATCH:
+    "Enter the same new password in both fields.",
+  PASSWORD_REUSE_FORBIDDEN:
+    "Choose a new password that is different from your current or default password.",
   CSRF_MISMATCH: "Refresh the page and try again.",
   INTERNAL_SERVER_ERROR: "Please try again in a moment.",
 };
@@ -46,6 +58,12 @@ const buildErrorPayload = (req, res, error = {}, fallback = {}) => {
     "";
   const details = normalizeDetails(error?.details || fallback?.details);
   const requestId = getRequestId(req, res);
+  const responseData =
+    error?.data && typeof error.data === "object" && !Array.isArray(error.data)
+      ? error.data
+      : fallback?.data && typeof fallback.data === "object" && !Array.isArray(fallback.data)
+        ? fallback.data
+        : {};
 
   return {
     success: false,
@@ -54,7 +72,7 @@ const buildErrorPayload = (req, res, error = {}, fallback = {}) => {
     message,
     hint,
     requestId,
-    data: {},
+    data: responseData,
     details: details.length ? details : undefined,
     err: {
       code,
