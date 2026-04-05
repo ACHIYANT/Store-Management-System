@@ -15,6 +15,32 @@ const {
 } = require("../utils/auth-response-utils");
 
 const userService = new UserService();
+const respondWithSession = (req, res, response, message) => {
+  const csrfToken = generateCsrfToken();
+  setSessionCookies(res, response.newJWT, csrfToken);
+
+  return res.status(200).json(
+    buildSuccessPayload(
+      req,
+      res,
+      {
+        fullName: response.fullName,
+        roles: response.roles || [],
+        csrfToken,
+        mustChangePassword: Boolean(response.mustChangePassword),
+        passwordChangedAt: response.passwordChangedAt || null,
+        session: buildSessionSnapshot(userService.verifyToken(response.newJWT), {
+          authMode: "cookie",
+          tokenSource: "cookie",
+        }),
+      },
+      {
+        message,
+      },
+    ),
+  );
+};
+
 const extractTokenDetails = (req) => {
   const explicitToken =
     req.headers["x-access-token"] ||
@@ -144,25 +170,60 @@ const signIn = async (req, res) => {
       req.body.mobileno,
       req.body.password
     );
-    const csrfToken = generateCsrfToken();
-    setSessionCookies(res, response.newJWT, csrfToken);
-
-    return res.status(200).json(buildSuccessPayload(req, res, {
-      fullName: response.fullName,
-      roles: response.roles || [],
-      csrfToken,
-      session: buildSessionSnapshot(userService.verifyToken(response.newJWT), {
-        authMode: "cookie",
-        tokenSource: "cookie",
-      }),
-    }, {
-      message: "Successfully signed in.",
-    }));
+    return respondWithSession(req, res, response, "Successfully signed in.");
   } catch (error) {
     return sendError(req, res, error, {
       statusCode: 500,
       code: "SIGNIN_FAILED",
       message: "Sign-in failed.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
+const completeFirstLoginPasswordChange = async (req, res) => {
+  try {
+    const response = await userService.completeFirstLoginPasswordChange(
+      req.body.passwordChangeToken,
+      {
+        newPassword: req.body.newPassword,
+        confirmPassword: req.body.confirmPassword,
+      },
+    );
+    clearSessionCookies(res);
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        message: "Password changed successfully. Please sign in with your new password.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "PASSWORD_CHANGE_FAILED",
+      message: "Unable to change password.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const response = await userService.updatePasswordForUser(req.user?.id, {
+      currentPassword: req.body.currentPassword,
+      newPassword: req.body.newPassword,
+      confirmPassword: req.body.confirmPassword,
+    });
+    return respondWithSession(
+      req,
+      res,
+      response,
+      "Password updated successfully.",
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "PASSWORD_CHANGE_FAILED",
+      message: "Unable to update password.",
       hint: "Please try again in a moment.",
     });
   }
@@ -249,6 +310,8 @@ const getSessionStatus = async (req, res) => {
         designation: response.designation,
         division: response.division,
         roles: response.roles || [],
+        must_change_password: Boolean(response.must_change_password),
+        password_changed_at: response.password_changed_at || null,
         location_scopes: response.location_scopes || [],
         location_scope_source: response.location_scope_source || null,
         assignments: response.assignments || [],
@@ -501,6 +564,8 @@ module.exports = {
   listUsers,
   getCsrfToken,
   signIn,
+  completeFirstLoginPasswordChange,
+  changePassword,
   signOut,
   isAuthenticated,
   getSessionStatus,

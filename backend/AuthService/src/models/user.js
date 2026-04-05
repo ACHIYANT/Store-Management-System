@@ -3,6 +3,10 @@ const { Model } = require("sequelize");
 const bcrypt = require("bcrypt");
 const { SALT_ROUNDS } = require("../config/serverConfig");
 const { USER_ROLE_TABLE, USER_TABLE } = require("../constants/table-names");
+const {
+  PASSWORD_POLICY_MESSAGE,
+  PASSWORD_POLICY_REGEX,
+} = require("../utils/password-policy");
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     /**
@@ -73,8 +77,8 @@ module.exports = (sequelize, DataTypes) => {
             msg: "Password must be at least 8 characters long",
           },
           is: {
-            args: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/,
-            msg: "Password must contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character",
+            args: PASSWORD_POLICY_REGEX,
+            msg: PASSWORD_POLICY_MESSAGE,
           },
         },
       },
@@ -92,6 +96,23 @@ module.exports = (sequelize, DataTypes) => {
           notEmpty: true,
         },
       },
+      must_change_password: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      password_version: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: {
+          min: 0,
+        },
+      },
+      password_changed_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
@@ -99,7 +120,10 @@ module.exports = (sequelize, DataTypes) => {
       tableName: USER_TABLE,
     }
   );
-  User.beforeCreate((user) => {
+  User.beforeSave((user) => {
+    if (!user.changed("password")) {
+      return;
+    }
     const rounds = Number.isFinite(Number(SALT_ROUNDS))
       ? Number(SALT_ROUNDS)
       : 12;

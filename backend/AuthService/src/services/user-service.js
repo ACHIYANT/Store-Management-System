@@ -3,9 +3,16 @@ const jwt = require("jsonwebtoken");
 const {
   EMPLOYEE_PROVISION_DEFAULT_PASSWORD,
   JWT_KEY,
+  PASSWORD_CHANGE_JWT_KEY,
+  PASSWORD_CHANGE_TOKEN_TTL,
 } = require("../config/serverConfig");
 const bcrypt = require("bcrypt");
 const { isAssignmentManagedRole } = require("../constants/org-assignments");
+const {
+  PASSWORD_POLICY_HINT,
+  PASSWORD_POLICY_MESSAGE,
+  isPasswordPolicyCompliant,
+} = require("../utils/password-policy");
 
 const DEFAULT_SIGNUP_ROLE = "USER";
 
@@ -16,6 +23,7 @@ const buildAuthError = ({
   explanation = "",
   hint = "",
   details = [],
+  data = {},
 } = {}) => ({
   statusCode,
   code,
@@ -23,6 +31,7 @@ const buildAuthError = ({
   explanation,
   hint,
   details,
+  data,
 });
 
 const serializeLocationScopes = (locationScopes = []) => {
@@ -97,6 +106,8 @@ const serializeUserSummary = (user) => ({
   mobileno: user.mobileno,
   designation: user.designation,
   division: user.division,
+  must_change_password: Boolean(user.must_change_password),
+  password_changed_at: user.password_changed_at || null,
   roles: serializeRoles(user.roles),
   location_scopes: serializeLocationScopes(user.userLocationScopes),
   assignments: serializeAssignments(user.orgAssignments),
@@ -140,6 +151,63 @@ const authTimeoutError = () => ({
     "Unable to complete authentication right now. Please try again in a moment.",
   hint: "Please try again in a moment.",
 });
+
+const PASSWORD_CHANGE_TOKEN_PURPOSE = "PASSWORD_CHANGE";
+
+const sessionRevokedError = () =>
+  buildAuthError({
+    statusCode: 401,
+    code: "SESSION_REVOKED",
+    message: "Your session is no longer valid.",
+    explanation: "The account password has changed since this session was created.",
+    hint: "Please log in again.",
+  });
+
+const passwordChangeRequiredError = (data = {}) =>
+  buildAuthError({
+    statusCode: 403,
+    code: "PASSWORD_CHANGE_REQUIRED",
+    message: "Password change required before continuing.",
+    explanation: "This account must set a new password before a normal session can be used.",
+    hint: "Change your password to activate the account.",
+    data,
+  });
+
+const passwordChangeTokenError = (code, message, hint) =>
+  buildAuthError({
+    statusCode: 401,
+    code,
+    message,
+    hint,
+  });
+
+const passwordValidationError = ({
+  code,
+  message,
+  hint,
+  details = [],
+  statusCode = 400,
+}) =>
+  buildAuthError({
+    statusCode,
+    code,
+    message,
+    hint,
+    details,
+  });
+
+const getRoleNames = (user) =>
+  Array.isArray(user?.roles) ? user.roles.map((role) => role.name) : [];
+
+const getDecodedTokenLifetime = (token) => {
+  const decoded = jwt.decode(token) || {};
+  const issuedAt = Number(decoded?.iat || 0);
+  const expiresAt = Number(decoded?.exp || 0);
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || expiresAt <= issuedAt) {
+    return null;
+  }
+  return expiresAt - issuedAt;
+};
 
 const tokenMissingError = () =>
   buildAuthError({
@@ -204,6 +272,313 @@ class UserService {
     this.UserRepository = new UserRepository();
   }
 
+  buildSessionPayload(user) {
+    const roles = getRoleNames(user);
+    return {
+      newJWT: this.createToken({
+        mobileno: user.mobileno,
+        id: user.id,
+        roles,
+        passwordVersion: Number(user.password_version || 0),
+      }),
+      fullName: user.fullname,
+      roles,
+      mustChangePassword: Boolean(user.must_change_password),
+    };
+  }
+
+  createPasswordChangeToken(user) {
+    const signingKey = String(PASSWORD_CHANGE_JWT_KEY || JWT_KEY || "").trim();
+    if (!signingKey || signingKey.length < 32) {
+      throw new Error("PASSWORD_CHANGE_JWT_KEY or JWT_KEY is missing or too weak.");
+    }
+
+    return jwt.sign(
+      {
+        id: user.id,
+        empcode: user.empcode,
+        purpose: PASSWORD_CHANGE_TOKEN_PURPOSE,
+        passwordVersion: Number(user.password_version || 0),
+      },
+      signingKey,
+      {
+        expiresIn: PASSWORD_CHANGE_TOKEN_TTL,
+        subject: String(user.id),
+      },
+    );
+  }
+
+  verifyPasswordChangeToken(token) {
+    const normalizedToken = String(token || "").trim();
+    if (!normalizedToken) {
+      throw passwordChangeTokenError(
+        "PASSWORD_CHANGE_TOKEN_INVALID",
+        "Password change token is invalid.",
+        "Start the sign-in process again to get a fresh password change link.",
+      );
+    }
+
+    try {
+      const decoded = jwt.verify(
+        normalizedToken,
+        String(PASSWORD_CHANGE_JWT_KEY || JWT_KEY || "").trim(),
+      );
+      if (decoded?.purpose !== PASSWORD_CHANGE_TOKEN_PURPOSE) {
+        throw passwordChangeTokenError(
+          "PASSWORD_CHANGE_TOKEN_INVALID",
+          "Password change token is invalid.",
+          "Start the sign-in process again to get a fresh password change link.",
+        );
+      }
+      return decoded;
+    } catch (error) {
+      if (error?.statusCode) {
+        throw error;
+      }
+      if (error?.name === "TokenExpiredError") {
+        throw passwordChangeTokenError(
+          "PASSWORD_CHANGE_TOKEN_EXPIRED",
+          "Password change token has expired.",
+          "Sign in again with your current password to continue.",
+        );
+      }
+      throw passwordChangeTokenError(
+        "PASSWORD_CHANGE_TOKEN_INVALID",
+        "Password change token is invalid.",
+        "Start the sign-in process again to get a fresh password change link.",
+      );
+    }
+  }
+
+  buildPasswordChangeRequiredPayload(user) {
+    const passwordChangeToken = this.createPasswordChangeToken(user);
+    return {
+      fullName: user.fullname,
+      empcode: user.empcode,
+      passwordChangeToken,
+      expiresInSeconds: getDecodedTokenLifetime(passwordChangeToken),
+    };
+  }
+
+  ensureSessionStillValidForPasswordVersion(user, decodedToken = {}) {
+    const tokenPasswordVersion = decodedToken?.passwordVersion;
+    const currentPasswordVersion = Number(user?.password_version || 0);
+    if (!Number.isFinite(Number(tokenPasswordVersion))) {
+      if (currentPasswordVersion > 0) {
+        throw sessionRevokedError();
+      }
+      return;
+    }
+
+    if (Number(tokenPasswordVersion) !== currentPasswordVersion) {
+      throw sessionRevokedError();
+    }
+  }
+
+  validateNewPasswordInput(user, { currentPassword = "", newPassword = "", confirmPassword = "" } = {}) {
+    if (!String(newPassword || "")) {
+      throw passwordValidationError({
+        code: "NEW_PASSWORD_REQUIRED",
+        message: "New password is required.",
+        hint: "Enter a strong new password to continue.",
+      });
+    }
+
+    if (!String(confirmPassword || "")) {
+      throw passwordValidationError({
+        code: "PASSWORD_CONFIRMATION_REQUIRED",
+        message: "Confirm password is required.",
+        hint: "Re-enter the new password to continue.",
+      });
+    }
+
+    if (String(newPassword) !== String(confirmPassword)) {
+      throw passwordValidationError({
+        code: "PASSWORD_CONFIRMATION_MISMATCH",
+        message: "New password and confirm password do not match.",
+        hint: "Enter the same new password in both fields.",
+      });
+    }
+
+    const defaultPassword = String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim();
+    if (defaultPassword && String(newPassword) === defaultPassword) {
+      throw passwordValidationError({
+        code: "PASSWORD_REUSE_FORBIDDEN",
+        message: "You cannot continue with the default provisioning password.",
+        hint: "Choose a different password to activate the account.",
+      });
+    }
+
+    if (user?.password && this.checkPassword(String(newPassword), user.password)) {
+      throw passwordValidationError({
+        code: "PASSWORD_REUSE_FORBIDDEN",
+        message: "New password must be different from the current password.",
+        hint: "Choose a different password to continue.",
+      });
+    }
+
+    if (
+      String(currentPassword || "") &&
+      user?.password &&
+      String(currentPassword) === String(newPassword)
+    ) {
+      throw passwordValidationError({
+        code: "PASSWORD_REUSE_FORBIDDEN",
+        message: "New password must be different from the current password.",
+        hint: "Choose a different password to continue.",
+      });
+    }
+
+    if (!isPasswordPolicyCompliant(newPassword)) {
+      throw passwordValidationError({
+        code: "INVALID_NEW_PASSWORD",
+        message: "New password does not meet the required policy.",
+        hint: PASSWORD_POLICY_HINT,
+        details: [PASSWORD_POLICY_MESSAGE],
+      });
+    }
+  }
+
+  async updatePasswordForUser(userId, { currentPassword = "", newPassword = "", confirmPassword = "" } = {}) {
+    const user = await withTimeout(
+      this.UserRepository.getPasswordManagedUserById(userId),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (!user) {
+      throw buildAuthError({
+        statusCode: 404,
+        code: "USER_NOT_FOUND",
+        message: "User not found.",
+        hint: "Please sign in again and retry.",
+      });
+    }
+
+    if (!this.checkPassword(String(currentPassword || ""), user.password)) {
+      throw passwordValidationError({
+        code: "CURRENT_PASSWORD_INCORRECT",
+        message: "Current password is incorrect.",
+        hint: "Please enter your current password correctly.",
+      });
+    }
+
+    this.validateNewPasswordInput(user, {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    });
+
+    try {
+      const updatedUser = await withTimeout(
+        this.UserRepository.updatePasswordForUser(user.id, {
+          newPassword,
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
+          incrementPasswordVersion: true,
+        }),
+        Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+        authTimeoutError,
+      );
+
+      return {
+        ...this.buildSessionPayload(updatedUser),
+        passwordChangedAt: updatedUser.password_changed_at,
+      };
+    } catch (error) {
+      if (error?.statusCode) throw error;
+      if (error?.name === "SequelizeValidationError") {
+        throw passwordValidationError({
+          code: "INVALID_NEW_PASSWORD",
+          message: "New password does not meet the required policy.",
+          hint: "Use at least 8 characters with uppercase, lowercase, number, and special character.",
+          details: Array.isArray(error?.errors)
+            ? error.errors
+                .map((entry) => String(entry?.message || "").trim())
+                .filter(Boolean)
+            : [],
+        });
+      }
+      throw buildAuthError({
+        statusCode: 500,
+        code: "PASSWORD_UPDATE_FAILED",
+        message: "Unable to update password.",
+        hint: "Please try again in a moment.",
+      });
+    }
+  }
+
+  async completeFirstLoginPasswordChange(passwordChangeToken, { newPassword = "", confirmPassword = "" } = {}) {
+    const decoded = this.verifyPasswordChangeToken(passwordChangeToken);
+    const user = await withTimeout(
+      this.UserRepository.getPasswordManagedUserById(decoded?.id),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (!user) {
+      throw userNotFoundForTokenError();
+    }
+
+    if (!user.must_change_password) {
+      throw buildAuthError({
+        statusCode: 409,
+        code: "PASSWORD_CHANGE_NOT_REQUIRED",
+        message: "Password change is no longer required for this account.",
+        hint: "Please sign in with your updated password.",
+      });
+    }
+
+    if (Number(decoded?.passwordVersion) !== Number(user.password_version || 0)) {
+      throw passwordChangeTokenError(
+        "PASSWORD_CHANGE_TOKEN_INVALID",
+        "Password change token is no longer valid.",
+        "Sign in again with your current password to continue.",
+      );
+    }
+
+    this.validateNewPasswordInput(user, { newPassword, confirmPassword });
+
+    try {
+      const updatedUser = await withTimeout(
+        this.UserRepository.updatePasswordForUser(user.id, {
+          newPassword,
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
+          incrementPasswordVersion: true,
+        }),
+        Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+        authTimeoutError,
+      );
+
+      return {
+        fullName: updatedUser.fullname,
+        mustChangePassword: Boolean(updatedUser.must_change_password),
+        passwordChangedAt: updatedUser.password_changed_at,
+      };
+    } catch (error) {
+      if (error?.statusCode) throw error;
+      if (error?.name === "SequelizeValidationError") {
+        throw passwordValidationError({
+          code: "INVALID_NEW_PASSWORD",
+          message: "New password does not meet the required policy.",
+          hint: "Use at least 8 characters with uppercase, lowercase, number, and special character.",
+          details: Array.isArray(error?.errors)
+            ? error.errors
+                .map((entry) => String(entry?.message || "").trim())
+                .filter(Boolean)
+            : [],
+        });
+      }
+      throw buildAuthError({
+        statusCode: 500,
+        code: "PASSWORD_UPDATE_FAILED",
+        message: "Unable to update password.",
+        hint: "Please try again in a moment.",
+      });
+    }
+  }
+
   async create(data) {
     try {
       const user = await this.UserRepository.create(data);
@@ -238,6 +613,7 @@ class UserService {
       designation: normalizeText(data?.designation),
       division: normalizeText(data?.division),
       password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
+      must_change_password: true,
     };
 
     const validationErrors = [];
@@ -274,6 +650,7 @@ class UserService {
       designation: normalizeText(data?.designation),
       division: normalizeText(data?.division),
       password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
+      must_change_password: true,
     };
 
     const validationErrors = [];
@@ -347,6 +724,7 @@ class UserService {
           mobileno: existingByEmpcode.mobileno,
           designation: existingByEmpcode.designation,
           division: existingByEmpcode.division,
+          must_change_password: Boolean(existingByEmpcode.must_change_password),
         },
       };
     }
@@ -379,6 +757,7 @@ class UserService {
         mobileno: payload.mobileno,
         designation: payload.designation,
         division: payload.division,
+        must_change_password: true,
       },
     };
   }
@@ -401,6 +780,7 @@ class UserService {
           mobileno: createdUser.mobileno,
           designation: createdUser.designation,
           division: createdUser.division,
+          must_change_password: Boolean(createdUser.must_change_password),
         },
       };
     } catch (error) {
@@ -465,21 +845,20 @@ class UserService {
         throw invalidCredentialsError();
       }
 
-      const roles = user.roles ? user.roles.map((r) => r.name) : [];
-      const newJWT = this.createToken({
-        mobileno: user.mobileno,
-        id: user.id,
-        roles,
-      });
-      const fullName = user.fullname;
-      return {
-        newJWT,
-        fullName,
-        roles,
-      };
+      if (user.must_change_password) {
+        throw passwordChangeRequiredError(this.buildPasswordChangeRequiredPayload(user));
+      }
+
+      return this.buildSessionPayload(user);
     } catch (error) {
-      if (error?.statusCode === 401 || error?.name === "AttributeNotFound") {
+      if (
+        error?.statusCode === 401 ||
+        error?.name === "AttributeNotFound"
+      ) {
         throw invalidCredentialsError();
+      }
+      if (error?.code === "PASSWORD_CHANGE_REQUIRED") {
+        throw error;
       }
       if (error?.statusCode === 503) {
         throw error;
@@ -513,6 +892,12 @@ class UserService {
       throw userNotFoundForTokenError();
     }
 
+    this.ensureSessionStillValidForPasswordVersion(user, decodedToken);
+
+    if (user.must_change_password) {
+      throw passwordChangeRequiredError();
+    }
+
     const locationScopeKeys = serializeLocationScopeKeys(
       user.userLocationScopes,
     );
@@ -524,6 +909,8 @@ class UserService {
       designation: user.designation,
       division: user.division,
       roles: serializeRoles(user.roles).map((role) => role.name),
+      must_change_password: Boolean(user.must_change_password),
+      password_changed_at: user.password_changed_at || null,
       location_scopes: locationScopeKeys,
       location_scope_source: locationScopeKeys.length ? "explicit" : null,
       assignments: serializeAssignments(user.orgAssignments),
