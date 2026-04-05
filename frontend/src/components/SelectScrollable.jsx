@@ -30,6 +30,7 @@ const DIVISIONS = [
   },
   { value: "Consultancy", label: "Consultancy" },
   { value: "Deployment", label: "Deployment" },
+  { value: "E Office", label: "E Office" },
   { value: "Estate Management", label: "Estate Management (EM)" },
   { value: "Finance & Accounts", label: "Finance & Accounts (F&A)" },
   {
