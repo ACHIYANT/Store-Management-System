@@ -37,6 +37,10 @@ const DIVISIONS = [
     value: "Information & Communication Technology - I",
     label: "Information & Communication Technology (ICT) - I",
   },
+  {
+    value: "Information & Communication Technology - Examination",
+    label: "Information & Communication Technology (ICT-ET)",
+  },
   { value: "JMD Camp Office", label: "JMD Camp Office" },
   { value: "JMD Office", label: "JMD Office" },
   { value: "Legal Secretarial & CSR", label: "Legal Secretarial & CSR" },
