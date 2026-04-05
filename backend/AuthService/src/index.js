@@ -94,6 +94,8 @@ const prepareAndStartServer = async () => {
         "/v1/csrf-token",
         "/v1/isAuthenticated",
         "/v1/users/isAuthenticated",
+        "/v1/internal/users/provision-from-employee/validate",
+        "/v1/internal/users/provision-from-employee/execute",
       ],
     }),
   );

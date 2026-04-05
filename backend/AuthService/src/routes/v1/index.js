@@ -11,7 +11,11 @@ const {
   requireAdminOperations,
 } = require("../../middlewares/auth-middleware");
 const {
+  ensureInternalService,
+} = require("../../middlewares/internal-service-middleware");
+const {
   authSignInRateLimiter,
+  authInternalProvisionRateLimiter,
 } = require("../../middlewares/security-middleware");
 
 const router = express.Router();
@@ -25,6 +29,18 @@ router.get("/healthz", (_req, res) =>
   }),
 );
 
+router.post(
+  "/internal/users/provision-from-employee/validate",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.validateProvisionFromEmployee,
+);
+router.post(
+  "/internal/users/provision-from-employee/execute",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.executeProvisionFromEmployee,
+);
 router.post(
   "/signup",
   authSignInRateLimiter,
