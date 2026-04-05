@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import PopupMessage from "@/components/PopupMessage";
 import { toAuthApiUrl } from "@/lib/api-config";
+import {
+  clearFirstLoginPasswordChangeContext,
+  saveFirstLoginPasswordChangeContext,
+} from "@/lib/auth-password-change";
 import { buildDiagnosticPresentation, buildDisplayMessage } from "@/lib/network";
 
 import logo from "/logo.svg";
@@ -14,19 +19,19 @@ import govt from "/govt.svg";
 const parseApiFeedback = async (response, fallbackMessage) => {
   try {
     const payload = await response.clone().json();
-    return buildDiagnosticPresentation(
-      {
-        status: Number(response?.status || 0),
-        url: toAuthApiUrl("/signin"),
-        code: payload?.code || payload?.err?.code,
+      return buildDiagnosticPresentation(
+        {
+          status: Number(response?.status || 0),
+          url: toAuthApiUrl("/signin"),
+          code: payload?.code || payload?.err?.code,
         message: payload?.message || payload?.err?.message || payload?.data?.message,
         hint: payload?.hint,
         requestId: payload?.requestId || response.headers.get("x-request-id"),
         details: payload?.details,
       },
-      fallbackMessage,
-    );
-  } catch {
+        fallbackMessage,
+      );
+    } catch {
     try {
       const text = await response.text();
       return {
@@ -43,6 +48,7 @@ const parseApiFeedback = async (response, fallbackMessage) => {
 };
 
 export default function Login() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [mobileno, setMobileNo] = useState("");
   const [password, setPassword] = useState("");
@@ -91,6 +97,30 @@ export default function Login() {
           response,
           "Login failed. Please check your credentials.",
         );
+        const payload = await response.clone().json().catch(() => ({}));
+        const responseCode =
+          payload?.code ||
+          payload?.err?.code ||
+          feedback?.detail?.code ||
+          "";
+        const responseData = payload?.data && typeof payload.data === "object" ? payload.data : {};
+
+        if (
+          String(responseCode).trim().toUpperCase() === "PASSWORD_CHANGE_REQUIRED" &&
+          String(responseData?.passwordChangeToken || "").trim()
+        ) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("fullname");
+          localStorage.removeItem("roles");
+          localStorage.removeItem("me");
+          saveFirstLoginPasswordChangeContext({
+            ...responseData,
+            mobileno: mobileValue,
+          });
+          navigate("/reset-pwd", { replace: true });
+          return;
+        }
+
         showPopup({
           type: "error",
           message: feedback.message,
@@ -103,6 +133,7 @@ export default function Login() {
 
       if (data.success && data.data) {
         const roles = Array.isArray(data?.data?.roles) ? data.data.roles : [];
+        clearFirstLoginPasswordChangeContext();
 
         localStorage.removeItem("token");
         localStorage.setItem("fullname", data.data.fullName || "");

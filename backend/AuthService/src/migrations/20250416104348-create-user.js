@@ -21,10 +21,10 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
         validate: {
-          len: [3, 20],
+          len: [3, 100],
           is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
+            args: /^[A-Za-z]+(?:\.?[A-Za-z]+)*\.?(?: [A-Za-z]+(?:\.?[A-Za-z]+)*\.?)*$/,
+            msg: "Only letters, periods, and single spaces are allowed. No leading/trailing/multiple spaces.",
           },
         },
       },
@@ -64,6 +64,20 @@ module.exports = {
       division: {
         type: Sequelize.STRING,
         allowNull: false,
+      },
+      must_change_password: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      password_version: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      password_changed_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
       },
       
       createdAt: {

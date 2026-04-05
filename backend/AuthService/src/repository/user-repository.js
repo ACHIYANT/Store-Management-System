@@ -73,6 +73,9 @@ class UserRepository {
           "mobileno",
           "designation",
           "division",
+          "must_change_password",
+          "password_version",
+          "password_changed_at",
         ],
         include: [
           {
@@ -148,6 +151,41 @@ class UserRepository {
     }
   }
 
+  async findByEmpcode(empcode) {
+    return User.findOne({
+      where: {
+        empcode: Number(empcode),
+      },
+      attributes: [
+        "id",
+        "empcode",
+        "fullname",
+        "mobileno",
+        "designation",
+        "division",
+        "must_change_password",
+        "password_changed_at",
+      ],
+    });
+  }
+
+  async findByMobileNoOptional(userMobileNo) {
+    return User.findOne({
+      where: {
+        mobileno: String(userMobileNo || "").trim(),
+      },
+      attributes: [
+        "id",
+        "empcode",
+        "fullname",
+        "mobileno",
+        "designation",
+        "division",
+        "must_change_password",
+      ],
+    });
+  }
+
   async isAdmin(userId) {
     try {
       const user = await User.findByPk(userId);
@@ -183,6 +221,75 @@ class UserRepository {
         },
       ],
     });
+  }
+
+  async getPasswordManagedUserById(userId, transaction = null) {
+    return User.findByPk(userId, {
+      transaction: transaction || undefined,
+      lock: transaction?.LOCK?.UPDATE,
+      include: [
+        {
+          model: Role,
+          as: "roles",
+          through: { attributes: [] },
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+  }
+
+  async updatePasswordForUser(
+    userId,
+    {
+      newPassword,
+      mustChangePassword = false,
+      passwordChangedAt = new Date(),
+      incrementPasswordVersion = true,
+    } = {},
+    transaction = null,
+  ) {
+    if (!transaction) {
+      return sequelize.transaction((managedTransaction) =>
+        this.updatePasswordForUser(
+          userId,
+          {
+            newPassword,
+            mustChangePassword,
+            passwordChangedAt,
+            incrementPasswordVersion,
+          },
+          managedTransaction,
+        ),
+      );
+    }
+
+    const user = await this.getPasswordManagedUserById(userId, transaction);
+    if (!user) {
+      const error = new Error("User not found.");
+      error.statusCode = StatusCodes.NOT_FOUND;
+      throw error;
+    }
+
+    user.password = String(newPassword || "");
+    user.must_change_password = Boolean(mustChangePassword);
+    user.password_changed_at = passwordChangedAt || null;
+    if (incrementPasswordVersion) {
+      user.password_version = Number(user.password_version || 0) + 1;
+    }
+
+    await user.save({
+      transaction,
+      hooks: true,
+      validate: false,
+      fields: [
+        "password",
+        "must_change_password",
+        "password_changed_at",
+        "password_version",
+        "updatedAt",
+      ],
+    });
+    return user;
   }
 
   async findRoleByName(roleName, transaction = null) {
@@ -259,6 +366,7 @@ class UserRepository {
         "mobileno",
         "designation",
         "division",
+        "must_change_password",
       ],
       include: [
         {

@@ -75,9 +75,34 @@ async function ensureAuth(req, res, next) {
       });
     }
 
+    const tokenPasswordVersion = decoded?.passwordVersion;
+    const currentPasswordVersion = Number(user?.password_version || 0);
+    if (
+      (Number.isFinite(Number(tokenPasswordVersion)) &&
+        Number(tokenPasswordVersion) !== currentPasswordVersion) ||
+      (!Number.isFinite(Number(tokenPasswordVersion)) && currentPasswordVersion > 0)
+    ) {
+      return sendError(req, res, {
+        statusCode: 401,
+        code: "SESSION_REVOKED",
+        message: "Your session is no longer valid.",
+        hint: "Please log in again.",
+      });
+    }
+
+    if (user.must_change_password) {
+      return sendError(req, res, {
+        statusCode: 403,
+        code: "PASSWORD_CHANGE_REQUIRED",
+        message: "Password change required before continuing.",
+        hint: "Change your password before continuing.",
+      });
+    }
+
     req.user = {
       id: user.id,
       fullname: user.fullname,
+      must_change_password: Boolean(user.must_change_password),
       roles: normalizeRoles(
         Array.isArray(user.roles) ? user.roles.map((role) => role.name) : [],
       ),

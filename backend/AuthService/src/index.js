@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 
-const { JWT_KEY, PORT } = require("./config/serverConfig");
+const { JWT_KEY, PASSWORD_CHANGE_JWT_KEY, PORT } = require("./config/serverConfig");
 const apiRoutes = require("./routes/index");
 const db = require("./models");
 const {
@@ -30,6 +30,12 @@ const validateSecurityConfiguration = () => {
   if (!jwtKey || jwtKey.length < 32) {
     throw new Error(
       "JWT_KEY must be configured and at least 32 characters long.",
+    );
+  }
+  const passwordChangeKey = String(PASSWORD_CHANGE_JWT_KEY || JWT_KEY || "").trim();
+  if (!passwordChangeKey || passwordChangeKey.length < 32) {
+    throw new Error(
+      "PASSWORD_CHANGE_JWT_KEY must be configured (or fall back to JWT_KEY) and at least 32 characters long.",
     );
   }
 };
@@ -91,9 +97,12 @@ const prepareAndStartServer = async () => {
       skipPaths: [
         "/v1/signup",
         "/v1/signin",
+        "/v1/password/first-login/change",
         "/v1/csrf-token",
         "/v1/isAuthenticated",
         "/v1/users/isAuthenticated",
+        "/v1/internal/users/provision-from-employee/validate",
+        "/v1/internal/users/provision-from-employee/execute",
       ],
     }),
   );

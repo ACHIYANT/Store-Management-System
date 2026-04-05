@@ -27,6 +27,7 @@ const {
 } = require("../../controllers/migration-controller");
 const IssuedMigrationController = require("../../controllers/issued-migration-controller");
 const EmployeeMigrationController = require("../../controllers/employee-migration-controller");
+const EmployeeAccessController = require("../../controllers/employee-access-controller");
 const VendorMigrationController = require("../../controllers/vendor-migration-controller");
 const CategoryMasterMigrationController = require("../../controllers/category-master-migration-controller");
 
@@ -477,6 +478,18 @@ router.post(
   requireAdminOperations,
   uploadMigrationSpreadsheet,
   EmployeeMigrationController.executeUpload,
+);
+router.post(
+  "/migration/employee-access/validate",
+  requireAdminOperations,
+  uploadMigrationSpreadsheet,
+  EmployeeAccessController.validateUpload,
+);
+router.post(
+  "/migration/employee-access/execute",
+  requireAdminOperations,
+  uploadMigrationSpreadsheet,
+  EmployeeAccessController.executeUpload,
 );
 router.post(
   "/migration/vendors/validate",
