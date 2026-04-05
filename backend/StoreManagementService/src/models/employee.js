@@ -26,8 +26,8 @@ module.exports = (sequelize, DataTypes) => {
           notEmpty: true,
           len: [3, 30],
           is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
+            args: /^[A-Za-z]+(?:\.?[A-Za-z]+)*\.?(?: [A-Za-z]+(?:\.?[A-Za-z]+)*\.?)*$/,
+            msg: "Only letters, periods, and single spaces are allowed. No leading/trailing/multiple spaces.",
           },
         },
       },
@@ -38,8 +38,8 @@ module.exports = (sequelize, DataTypes) => {
           notEmpty: true,
           len: [3, 30],
           is: {
-            args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
-            msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
+            args: /^[A-Za-z]+(?:\.?[A-Za-z]+)*\.?(?: [A-Za-z]+(?:\.?[A-Za-z]+)*\.?)*$/,
+            msg: "Only letters, periods, and single spaces are allowed. No leading/trailing/multiple spaces.",
           },
         },
       },
@@ -61,7 +61,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: true,
-          len: [3, 30],
+          len: [3, 100],
           // is: {
           //   args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
           //   msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
@@ -73,7 +73,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: {
           notEmpty: true,
-          len: [3, 50],
+          len: [3, 100],
           // is: {
           //   args: /^[A-Za-z]+(?: [A-Za-z]+)*$/,
           //   msg: "Only letters and single spaces are allowed. No leading/trailing/multiple spaces.",
