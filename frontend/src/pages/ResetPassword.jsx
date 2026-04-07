@@ -20,6 +20,7 @@ import {
   clearFirstLoginPasswordChangeContext,
   readFirstLoginPasswordChangeContext,
 } from "@/lib/auth-password-change";
+import { getPasswordRuleStates } from "@/lib/password-policy";
 import {
   buildDiagnosticPresentation,
   buildDisplayMessage,
@@ -27,30 +28,6 @@ import {
 
 import logo from "/logo.svg";
 import govt from "/govt.svg";
-
-const PASSWORD_RULES = [
-  {
-    id: "length",
-    label: "At least 8 characters",
-    test: (value) => String(value || "").length >= 8,
-  },
-  {
-    id: "mixed-case",
-    label: "Uppercase and lowercase letters",
-    test: (value) =>
-      /[A-Z]/.test(String(value || "")) && /[a-z]/.test(String(value || "")),
-  },
-  {
-    id: "number",
-    label: "At least one number",
-    test: (value) => /\d/.test(String(value || "")),
-  },
-  {
-    id: "special",
-    label: "At least one special character",
-    test: (value) => /[@$!%*#?&]/.test(String(value || "")),
-  },
-];
 
 const TEMPORARY_PROVISIONING_PASSWORD = String(
   import.meta.env.VITE_EMPLOYEE_PROVISION_DEFAULT_PASSWORD,
@@ -114,11 +91,7 @@ export default function ResetPassword() {
 
   const hasToken = Boolean(String(context?.passwordChangeToken || "").trim());
   const ruleStates = useMemo(
-    () =>
-      PASSWORD_RULES.map((rule) => ({
-        ...rule,
-        passed: rule.test(newPassword),
-      })),
+    () => getPasswordRuleStates(newPassword),
     [newPassword],
   );
   const passwordsMatch =
@@ -307,7 +280,7 @@ export default function ResetPassword() {
                 </div>
                 <p className="mt-1 text-sm leading-5 text-slate-600">
                   Once your new password is saved, your account is activated and
-                  you’ll move straight into the application.
+                  you’ll be ready to sign in with your private password.
                 </p>
               </div>
             </div>

@@ -48,6 +48,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import IssueQtyForm from "./Forms/IssueQtyForm";
+import AccountProfilePopover from "@/components/profile/AccountProfilePopover";
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -500,38 +501,6 @@ export default function Sidebar() {
     </div>
   );
 
-  const UserSidebarTrigger = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <div className="p-4 cursor-pointer hover:bg-muted flex items-center gap-3 print:hidden">
-          <Avatar>
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>DS</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="text-sm font-medium">shadcn</p>
-            <p className="text-xs text-muted-foreground">m@example.com</p>
-          </div>
-        </div>
-      </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-64 print:hidden">
-        <Motion.div
-          initial={{ x: 20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 20, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="p-2 space-y-2 print:hidden"
-        >
-          <SubItem icon={Rocket} label="Upgrade to Pro" />
-          <SubItem icon={User} label="Account" />
-          <SubItem icon={CreditCard} label="Billing" />
-          <SubItem icon={Bell} label="Notifications" />
-          <SubItem icon={LogOut} label="Log out" />
-        </Motion.div>
-      </PopoverContent>
-    </Popover>
-  );
-
   const renderSidebarContent = () => (
     <div className="space-y-3 px-2.5 pb-4 pt-1 sm:px-3 print:hidden">
       {(canAccessDayBook ||
@@ -779,18 +748,29 @@ export default function Sidebar() {
     <div className="h-full min-h-0 overflow-hidden print:hidden">
       <div className="hidden h-full min-h-0 flex-col overflow-hidden print:hidden md:flex">
         <div className="px-3 pt-3 pb-2.5 lg:px-4 lg:pt-4 print:hidden">
-          <div className="flex items-center gap-2.5 rounded-xl bg-white/70 backdrop-blur-md ring-1 ring-slate-200/70 shadow-[0_10px_20px_rgba(15,23,42,0.08)] px-2.5 py-2">
-            <Avatar className="h-8 w-8 print:hidden">
-              <AvatarFallback className="bg-slate-900 text-white">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-slate-900 print:hidden">
-                {userName}
-              </p>
+          <AccountProfilePopover
+            fallbackName={userName}
+            fallbackInitials={initials}
+            onAction={null}
+          >
+            <div className="cursor-pointer rounded-xl bg-white/70 px-2.5 py-2 backdrop-blur-md ring-1 ring-slate-200/70 shadow-[0_10px_20px_rgba(15,23,42,0.08)] transition hover:bg-white/85 hover:shadow-[0_16px_26px_rgba(15,23,42,0.12)]">
+              <div className="flex items-center gap-2.5">
+                <Avatar className="h-8 w-8 print:hidden">
+                  <AvatarFallback className="bg-slate-900 text-white">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold text-slate-900 print:hidden">
+                    {userName}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-500">
+                    Open account hub
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          </AccountProfilePopover>
         </div>
         <ScrollArea className="h-full min-h-0 flex-1 print:hidden [&_[data-slot=scroll-area-scrollbar]]:hidden">
           {renderSidebarContent()}
@@ -817,25 +797,33 @@ export default function Sidebar() {
           >
             <div className="h-full flex flex-col print:hidden">
               <div className="px-3 pt-4 pb-3">
-                <div className="flex items-center gap-2.5 rounded-xl bg-white/70 backdrop-blur-md ring-1 ring-slate-200/70 px-2.5 py-2">
-                  <Avatar className="h-8 w-8 print:hidden">
-                    <AvatarFallback className="bg-slate-900 text-white">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-slate-900 print:hidden">
-                      {userName}
-                    </p>
+                <AccountProfilePopover
+                  fallbackName={userName}
+                  fallbackInitials={initials}
+                  onAction={() => setOpen(false)}
+                >
+                  <div className="cursor-pointer rounded-xl bg-white/70 px-2.5 py-2 backdrop-blur-md ring-1 ring-slate-200/70 transition hover:bg-white/85">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-8 w-8 print:hidden">
+                        <AvatarFallback className="bg-slate-900 text-white">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-slate-900 print:hidden">
+                          {userName}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          Open account hub
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </AccountProfilePopover>
               </div>
               <ScrollArea className="flex-1 [&_[data-slot=scroll-area-scrollbar]]:hidden">
                 {renderSidebarContent()}
               </ScrollArea>
-              <div className="mt-auto border-t border-slate-200 print:hidden">
-                <UserSidebarTrigger />
-              </div>
             </div>
           </SheetContent>
         </Sheet>
