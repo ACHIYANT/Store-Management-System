@@ -2,36 +2,29 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import {
-  BadgeCheck,
   Building2,
   CalendarClock,
-  Clock3,
   Fingerprint,
   Globe2,
-  IdCard,
   KeyRound,
   LaptopMinimal,
   LoaderCircle,
   LockKeyhole,
-  Mail,
-  MapPinned,
-  Phone,
   RefreshCcw,
   ShieldCheck,
   ShieldEllipsis,
   Sparkles,
   UserRound,
-  Workflow,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PopupMessage from "@/components/PopupMessage";
+import AccentIconBadge from "@/components/profile/AccentIconBadge";
 import ChangePasswordDialog from "@/components/profile/ChangePasswordDialog";
-import ReadOnlyField, {
-  DEFAULT_READ_ONLY_MESSAGE,
-} from "@/components/profile/ReadOnlyField";
+import ReadOnlyField from "@/components/profile/ReadOnlyField";
+import { DEFAULT_READ_ONLY_MESSAGE } from "@/components/profile/profile-constants";
 import { fetchMyProfile } from "@/lib/profile-api";
 import { cn } from "@/lib/utils";
 
@@ -132,18 +125,11 @@ function SectionShell({
   );
 }
 
-function HeroMetric({ icon: Icon, label, value, accentClass }) {
+function HeroMetric({ icon, label, value, tone = "slate" }) {
   return (
     <div className="rounded-[1.4rem] border border-white/70 bg-white/70 px-4 py-3 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur-sm">
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-        <span
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-900 text-white",
-            accentClass,
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
+        <AccentIconBadge icon={icon} tone={tone} />
         {label}
       </div>
       <p className="mt-3 text-base font-semibold text-slate-950">{value}</p>
@@ -381,7 +367,7 @@ export default function Profile() {
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <HeroMetric
-                icon={IdCard}
+                icon={UserRound}
                 label="Employee Code"
                 value={normalizeText(account.empcode)}
               />
@@ -389,21 +375,21 @@ export default function Profile() {
                 icon={Building2}
                 label="Division"
                 value={displayDivision}
-                accentClass="bg-sky-700"
+                tone="sky"
               />
               <HeroMetric
-                icon={MapPinned}
+                icon={Globe2}
                 label="Primary Scope"
                 value={formatDisplayLabel(
                   primaryLocation || employee.office_location,
                 )}
-                accentClass="bg-emerald-600"
+                tone="emerald"
               />
               <HeroMetric
-                icon={BadgeCheck}
+                icon={ShieldCheck}
                 label="Role Coverage"
                 value={`${roleNames.length || 0} active role${roleNames.length === 1 ? "" : "s"}`}
-                accentClass="bg-amber-500"
+                tone="amber"
               />
             </div>
           </div>
@@ -831,9 +817,7 @@ export default function Profile() {
               <div className="rounded-[1.4rem] border border-slate-200/80 bg-slate-50/85 p-4">
                 <div className="grid gap-3">
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
-                      <CalendarClock className="h-4 w-4" />
-                    </span>
+                    <AccentIconBadge icon={CalendarClock} tone="slate" />
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
                         Session lifetime
@@ -846,9 +830,7 @@ export default function Profile() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-                      <Globe2 className="h-4 w-4" />
-                    </span>
+                    <AccentIconBadge icon={Globe2} tone="emerald" />
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
                         Session scope

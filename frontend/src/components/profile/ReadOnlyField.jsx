@@ -6,9 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-const DEFAULT_READ_ONLY_MESSAGE =
-  "Editing this field can currently be done only by the database admin. Please request database admin for any change.";
+import { DEFAULT_READ_ONLY_MESSAGE } from "@/components/profile/profile-constants";
 
 export default function ReadOnlyField({
   label,
@@ -64,5 +62,3 @@ export default function ReadOnlyField({
     </div>
   );
 }
-
-export { DEFAULT_READ_ONLY_MESSAGE };

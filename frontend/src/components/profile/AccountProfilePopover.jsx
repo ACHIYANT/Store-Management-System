@@ -85,14 +85,14 @@ export default function AccountProfilePopover({
   const employee = profile?.employee || {};
   const permissions = profile?.permissions || {};
   const displayName = toDisplay(account.fullname, fallbackName);
-  const roleList = Array.isArray(account.roles) ? account.roles : [];
   const primaryLocation = Array.isArray(permissions.location_scopes)
     ? permissions.location_scopes[0]
     : "";
 
   const rolePreview = useMemo(
-    () => roleList.slice(0, 3),
-    [roleList],
+    () =>
+      (Array.isArray(account.roles) ? account.roles : []).slice(0, 3),
+    [account.roles],
   );
 
   const handleNavigate = (path) => {

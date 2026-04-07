@@ -3,9 +3,8 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  KeyRound,
   LoaderCircle,
-  LockKeyhole,
+  RefreshCcw,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import AccentIconBadge from "@/components/profile/AccentIconBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { changeMyPassword } from "@/lib/profile-api";
@@ -157,9 +157,7 @@ export default function ChangePasswordDialog({
             <div className="relative mt-6 space-y-3">
               <div className="rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-4 shadow-[0_16px_36px_-24px_rgba(15,23,42,0.35)]">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
-                    <LockKeyhole className="h-5 w-5" />
-                  </div>
+                  <AccentIconBadge icon={ShieldCheck} tone="slate" />
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
                       Session stays active
@@ -174,9 +172,7 @@ export default function ChangePasswordDialog({
 
               <div className="rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-4 shadow-[0_16px_36px_-24px_rgba(15,23,42,0.35)]">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-                    <KeyRound className="h-5 w-5" />
-                  </div>
+                  <AccentIconBadge icon={RefreshCcw} tone="emerald" />
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
                       Reusable security path
