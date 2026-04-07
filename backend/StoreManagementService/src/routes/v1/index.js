@@ -30,6 +30,7 @@ const EmployeeMigrationController = require("../../controllers/employee-migratio
 const EmployeeAccessController = require("../../controllers/employee-access-controller");
 const VendorMigrationController = require("../../controllers/vendor-migration-controller");
 const CategoryMasterMigrationController = require("../../controllers/category-master-migration-controller");
+const ProfileController = require("../../controllers/profile-controller");
 
 const {
   ensureAuth,
@@ -129,6 +130,7 @@ router.patch(
   EmployeeController.update,
 );
 router.get("/employee", EmployeeController.getAll);
+router.get("/profile/me", ProfileController.getMyProfile);
 
 // Custodians (Division / Vehicle / Employee master)
 router.post(

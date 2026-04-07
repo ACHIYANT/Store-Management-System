@@ -54,6 +54,7 @@ import Requisitions from "./pages/Requisitions";
 import RequisitionInbox from "./pages/RequisitionInbox";
 import RequisitionStoreQueue from "./pages/RequisitionStoreQueue";
 import RequisitionDetail from "./pages/RequisitionDetail";
+import Profile from "./pages/Profile";
 
 function App() {
   const user = JSON.parse(localStorage.getItem("me") || "null"); // {roles: [...]}
@@ -82,6 +83,14 @@ function App() {
                 ]}
               >
                 <ApprovalInbox />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute user={user}>
+                <Profile />
               </ProtectedRoute>
             }
           />
