@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -218,18 +218,16 @@ export default function Login() {
             >
               {loading ? <Loader2 className="animate-spin" /> : "Login"}
             </Button>
-            <div className="space-y-0">
+            <div className="space-y-1.5">
               <p className="text-center text-sm text-gray-500">
-                Forgot your password?{" "}
-                <a href="/reset-pwd" className="text-blue-600">
-                  Reset here
-                </a>
+                Need first-time access or missed onboarding?{" "}
+                <Link to="/activate-account" className="text-blue-600">
+                  Activate Account
+                </Link>
               </p>
-              <p className="text-center text-sm text-gray-500">
-                New to Hartron Store?{" "}
-                <a href="/sign-up" className="text-blue-600">
-                  Join Here
-                </a>
+              <p className="text-center text-xs text-gray-400">
+                Your account will be verified against the employee master using
+                your employee code and registered mobile number.
               </p>
             </div>
           </CardContent>

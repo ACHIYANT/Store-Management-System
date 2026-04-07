@@ -1,7 +1,7 @@
 import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+import ActivateAccount from "./pages/ActivateAccount";
 import ResetPassword from "./pages/ResetPassword";
 import PageNotFound from "./pages/PageNotFound";
 import Homepage from "./pages/Homepage";
@@ -65,7 +65,11 @@ function App() {
         {/* Public Routes - no sidebar */}
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/sign-up" element={<Signup />} />
+        <Route path="/activate-account" element={<ActivateAccount />} />
+        <Route
+          path="/sign-up"
+          element={<Navigate to="/activate-account" replace />}
+        />
         <Route path="/reset-pwd" element={<ResetPassword />} />
 
         {/* Protected Routes - with sidebar */}
