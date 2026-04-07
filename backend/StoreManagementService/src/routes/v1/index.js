@@ -31,12 +31,16 @@ const EmployeeAccessController = require("../../controllers/employee-access-cont
 const VendorMigrationController = require("../../controllers/vendor-migration-controller");
 const CategoryMasterMigrationController = require("../../controllers/category-master-migration-controller");
 const ProfileController = require("../../controllers/profile-controller");
+const AccountActivationController = require("../../controllers/account-activation-controller");
 
 const {
   ensureAuth,
   requireAnyRole,
   requireAdminOperations,
 } = require("../../middlewares/auth-middleware");
+const {
+  ensureInternalService,
+} = require("../../middlewares/internal-service-middleware");
 const { requireNextApprover } = require("../../middlewares/role-middleware");
 const { DayBookService } = require("../../services/index");
 const { DayBookRepository } = require("../../repository/index");
@@ -57,6 +61,20 @@ const { verifyMrn } = require("../../controllers/mrn-verification-controller");
 const CategoryHeadController = require("../../controllers/categoryhead-controller");
 const CategoryGroupController = require("../../controllers/categorygroup-controller");
 const ForensicAuditController = require("../../controllers/forensic-audit-controller");
+
+router.post(
+  "/account-activation/validate",
+  AccountActivationController.validateActivation,
+);
+router.post(
+  "/account-activation/execute",
+  AccountActivationController.executeActivation,
+);
+router.post(
+  "/internal/account-activation/verify-login-eligibility",
+  ensureInternalService,
+  AccountActivationController.verifyLoginEligibility,
+);
 
 // 🔎 Stage inbox — role-based (shows only what you can act on now)
 router.use(ensureAuth);

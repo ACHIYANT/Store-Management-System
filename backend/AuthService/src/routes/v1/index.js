@@ -43,10 +43,21 @@ router.post(
   UserController.executeProvisionFromEmployee,
 );
 router.post(
+  "/internal/users/activate-from-employee/validate",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.validateActivateFromEmployee,
+);
+router.post(
+  "/internal/users/activate-from-employee/execute",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.executeActivateFromEmployee,
+);
+router.post(
   "/signup",
   authSignInRateLimiter,
-  AuthRequestValidator.validateUserAuth,
-  UserController.create
+  UserController.rejectPublicSignup
 );
 router.post(
   "/signin",

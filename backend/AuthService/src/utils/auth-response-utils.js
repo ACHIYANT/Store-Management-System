@@ -25,6 +25,14 @@ const DEFAULT_ERROR_HINTS = {
     "Enter the same new password in both fields.",
   PASSWORD_REUSE_FORBIDDEN:
     "Choose a new password that is different from your current or default password.",
+  PUBLIC_SIGNUP_DISABLED:
+    "Use the activate account flow to claim access with your employee details.",
+  STORE_EMPLOYEE_VERIFICATION_FAILED:
+    "Please contact the administrator to complete employee onboarding.",
+  STORE_VERIFICATION_TIMEOUT: "Please try again in a moment.",
+  STORE_VERIFICATION_UNREACHABLE: "Please try again in a moment.",
+  ACCOUNT_ALREADY_EXISTS:
+    "Please sign in with your existing credentials or contact the administrator.",
   CSRF_MISMATCH: "Refresh the page and try again.",
   INTERNAL_SERVER_ERROR: "Please try again in a moment.",
 };
