@@ -17,6 +17,10 @@ export default function Employee() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 400);
   const canManageMaster = useMemo(() => hasRole("SUPER_ADMIN"), []);
+  const nameCollator = useMemo(
+    () => new Intl.Collator("en", { sensitivity: "base", numeric: true }),
+    [],
+  );
 
   const fetchEmployeesPage = useCallback(
     async ({ cursor, limit }) => {
@@ -51,6 +55,21 @@ export default function Employee() {
     trimBatch: TRIM_BATCH,
   });
 
+  const sortedData = useMemo(() => {
+    return [...data].sort((left, right) => {
+      const nameCompare = nameCollator.compare(
+        String(left?.name || "").trim(),
+        String(right?.name || "").trim(),
+      );
+      if (nameCompare !== 0) return nameCompare;
+
+      return nameCollator.compare(
+        String(left?.emp_id || "").trim(),
+        String(right?.emp_id || "").trim(),
+      );
+    });
+  }, [data, nameCollator]);
+
   const columns = [
     { key: "emp_id", label: "Employee Id" },
     { key: "name", label: "Name" },
@@ -74,7 +93,7 @@ export default function Employee() {
   }
 
   function handleUpdate() {
-    const selectedEmployee = data.find(
+    const selectedEmployee = sortedData.find(
       (employee) => employee.emp_id === selectedRows
     );
 
@@ -94,7 +113,7 @@ export default function Employee() {
     <ListPage
       title="Employees"
       columns={columns}
-      data={data}
+      data={sortedData}
       loading={loading}
       onAdd={handleAdd}
       idCol="emp_id"
@@ -109,7 +128,7 @@ export default function Employee() {
       table={
         <ListTable
           columns={columns}
-          data={data}
+          data={sortedData}
           idCol="emp_id"
           selectedRows={selectedRows}
           onRowSelect={handleRowSelect}

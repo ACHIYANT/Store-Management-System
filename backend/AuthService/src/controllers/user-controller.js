@@ -94,6 +94,20 @@ const create = async (req, res) => {
   }
 };
 
+const rejectPublicSignup = async (req, res) => {
+  try {
+    userService.rejectPublicSignup();
+    return res.status(204).send();
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 403,
+      code: "PUBLIC_SIGNUP_DISABLED",
+      message: "Public signup is not available.",
+      hint: "Use the activate account flow to claim access with your employee details.",
+    });
+  }
+};
+
 const validateProvisionFromEmployee = async (req, res) => {
   try {
     const response = await userService.previewProvisionFromEmployee(req.body || {}, {
@@ -134,6 +148,51 @@ const executeProvisionFromEmployee = async (req, res) => {
       statusCode: 500,
       code: "PROVISION_EXECUTE_FAILED",
       message: "Unable to provision user from employee.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
+const validateActivateFromEmployee = async (req, res) => {
+  try {
+    const response = await userService.previewActivationFromEmployee(req.body || {}, {
+      serviceName: req.internalService?.serviceName || null,
+    });
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 200,
+        message:
+          response?.action === "already_exists"
+            ? "Account already exists for this employee."
+            : "Employee activation request validated successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "ACTIVATION_VALIDATE_FAILED",
+      message: "Unable to validate employee activation request.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
+const executeActivateFromEmployee = async (req, res) => {
+  try {
+    const response = await userService.activateFromEmployee(req.body || {}, {
+      serviceName: req.internalService?.serviceName || null,
+    });
+    return res.status(201).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 201,
+        message: "User account activated from employee successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "ACTIVATION_EXECUTE_FAILED",
+      message: "Unable to activate user from employee.",
       hint: "Please try again in a moment.",
     });
   }
@@ -559,8 +618,11 @@ const listRoles = async (_req, res) => {
 
 module.exports = {
   create,
+  rejectPublicSignup,
   validateProvisionFromEmployee,
   executeProvisionFromEmployee,
+  validateActivateFromEmployee,
+  executeActivateFromEmployee,
   listUsers,
   getCsrfToken,
   signIn,

@@ -1,10 +1,15 @@
 const UserRepository = require("../repository/user-repository");
 const jwt = require("jsonwebtoken");
+const axios = require("axios");
 const {
   EMPLOYEE_PROVISION_DEFAULT_PASSWORD,
   JWT_KEY,
   PASSWORD_CHANGE_JWT_KEY,
   PASSWORD_CHANGE_TOKEN_TTL,
+  STORE_BASE_URL,
+  STORE_INTERNAL_SERVICE_KEY,
+  STORE_INTERNAL_SERVICE_NAME,
+  STORE_VERIFICATION_REQUEST_TIMEOUT_MS,
 } = require("../config/serverConfig");
 const bcrypt = require("bcrypt");
 const { isAssignmentManagedRole } = require("../constants/org-assignments");
@@ -152,6 +157,41 @@ const authTimeoutError = () => ({
   hint: "Please try again in a moment.",
 });
 
+const publicSignupDisabledError = () =>
+  buildAuthError({
+    statusCode: 403,
+    code: "PUBLIC_SIGNUP_DISABLED",
+    message: "Public signup is not available.",
+    explanation:
+      "This system uses employee account activation instead of open self-registration.",
+    hint: "Use the activate account flow to claim access with your employee details.",
+  });
+
+const storeVerificationNotConfiguredError = () =>
+  buildAuthError({
+    statusCode: 503,
+    code: "STORE_VERIFICATION_NOT_CONFIGURED",
+    message: "Employee verification is not configured.",
+    explanation:
+      "The authentication service is missing the Store verification endpoint configuration.",
+    hint: "Please contact a super admin to complete the service configuration.",
+  });
+
+const storeVerificationFailedError = ({
+  message = "This account is not eligible for Store sign-in yet.",
+  hint = "Please contact the administrator to complete employee onboarding.",
+  details = [],
+  upstreamRequestId = null,
+} = {}) =>
+  buildAuthError({
+    statusCode: 403,
+    code: "STORE_EMPLOYEE_VERIFICATION_FAILED",
+    message,
+    hint,
+    details,
+    data: upstreamRequestId ? { upstreamRequestId } : {},
+  });
+
 const PASSWORD_CHANGE_TOKEN_PURPOSE = "PASSWORD_CHANGE";
 
 const sessionRevokedError = () =>
@@ -272,6 +312,10 @@ class UserService {
     this.UserRepository = new UserRepository();
   }
 
+  resolveExistingActivationState(user) {
+    return Boolean(user?.must_change_password) ? "provisioned" : "active";
+  }
+
   buildSessionPayload(user) {
     const roles = getRoleNames(user);
     return {
@@ -358,6 +402,243 @@ class UserService {
       passwordChangeToken,
       expiresInSeconds: getDecodedTokenLifetime(passwordChangeToken),
     };
+  }
+
+  buildEmployeeUserPayload(
+    data = {},
+    {
+      password = "",
+      mustChangePassword = false,
+      includePassword = false,
+      passwordChangedAt = null,
+    } = {},
+  ) {
+    const payload = {
+      empcode: Number(data?.empcode ?? data?.emp_id),
+      fullname: normalizeText(data?.fullname ?? data?.name),
+      mobileno: normalizeText(data?.mobileno ?? data?.mobile_no),
+      designation: normalizeText(data?.designation),
+      division: normalizeText(data?.division),
+      must_change_password: Boolean(mustChangePassword),
+    };
+
+    if (includePassword) {
+      payload.password = String(password || "");
+    }
+    if (passwordChangedAt) {
+      payload.password_changed_at = passwordChangedAt;
+    }
+
+    return payload;
+  }
+
+  collectEmployeeUserPayloadValidationErrors(
+    payload = {},
+    { requirePassword = false } = {},
+  ) {
+    const validationErrors = [];
+
+    if (!Number.isInteger(payload.empcode) || payload.empcode <= 0) {
+      validationErrors.push("empcode must be a positive integer.");
+    }
+    if (!payload.fullname) validationErrors.push("fullname is required.");
+    if (!payload.mobileno) validationErrors.push("mobileno is required.");
+    if (!payload.designation) validationErrors.push("designation is required.");
+    if (!payload.division) validationErrors.push("division is required.");
+    if (requirePassword && !String(payload.password || "").trim()) {
+      validationErrors.push("password is required.");
+    }
+
+    return validationErrors;
+  }
+
+  async previewEmployeeUserPayload(
+    payload = {},
+    context = {},
+    {
+      createAction = "create",
+      existingAction = "already_exists",
+      existingState = "already_exists",
+      conflictCode = "USER_ALREADY_EXISTS_CONFLICT",
+      conflictMessage = (empcode) =>
+        `User already exists for empcode ${empcode} with different details.`,
+      conflictHint = "Review the existing Auth account before retrying.",
+      mustChangePassword = false,
+    } = {},
+  ) {
+    const validationErrors = this.collectEmployeeUserPayloadValidationErrors(payload, {
+      requirePassword: false,
+    });
+
+    if (validationErrors.length) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "INVALID_EMPLOYEE_USER_PAYLOAD",
+        message: "Employee account payload is invalid.",
+        hint: "Send complete employee details and try again.",
+        details: validationErrors,
+      });
+    }
+
+    const existingByEmpcode = await withTimeout(
+      this.UserRepository.findByEmpcode(payload.empcode),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (existingByEmpcode) {
+      const mismatchDetails = [];
+      if (!eqText(existingByEmpcode.fullname, payload.fullname)) {
+        mismatchDetails.push(
+          `fullname mismatch: Auth has '${existingByEmpcode.fullname}', request sent '${payload.fullname}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.mobileno, payload.mobileno)) {
+        mismatchDetails.push(
+          `mobileno mismatch: Auth has '${existingByEmpcode.mobileno}', request sent '${payload.mobileno}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.designation, payload.designation)) {
+        mismatchDetails.push(
+          `designation mismatch: Auth has '${existingByEmpcode.designation}', request sent '${payload.designation}'.`,
+        );
+      }
+      if (!eqText(existingByEmpcode.division, payload.division)) {
+        mismatchDetails.push(
+          `division mismatch: Auth has '${existingByEmpcode.division}', request sent '${payload.division}'.`,
+        );
+      }
+
+      if (mismatchDetails.length) {
+        throw buildAuthError({
+          statusCode: 409,
+          code: conflictCode,
+          message: conflictMessage(payload.empcode),
+          hint: conflictHint,
+          details: mismatchDetails,
+        });
+      }
+
+      return {
+        action: existingAction,
+        activation_state: existingState,
+        source_service: normalizeText(context?.serviceName) || null,
+        user: {
+          id: existingByEmpcode.id,
+          empcode: existingByEmpcode.empcode,
+          fullname: existingByEmpcode.fullname,
+          mobileno: existingByEmpcode.mobileno,
+          designation: existingByEmpcode.designation,
+          division: existingByEmpcode.division,
+          must_change_password: Boolean(existingByEmpcode.must_change_password),
+        },
+      };
+    }
+
+    const existingByMobile = await withTimeout(
+      this.UserRepository.findByMobileNoOptional(payload.mobileno),
+      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
+      authTimeoutError,
+    );
+
+    if (
+      existingByMobile &&
+      Number(existingByMobile.empcode) !== Number(payload.empcode)
+    ) {
+      throw buildAuthError({
+        statusCode: 409,
+        code: "MOBILE_ALREADY_IN_USE",
+        message: `Mobile number ${payload.mobileno} already belongs to another user.`,
+        hint: "Use a different mobile number or fix the existing Auth account before retrying.",
+      });
+    }
+
+    return {
+      action: createAction,
+      activation_state: mustChangePassword ? "provisioned" : "ready",
+      source_service: normalizeText(context?.serviceName) || null,
+      user: {
+        id: null,
+        empcode: payload.empcode,
+        fullname: payload.fullname,
+        mobileno: payload.mobileno,
+        designation: payload.designation,
+        division: payload.division,
+        must_change_password: Boolean(mustChangePassword),
+      },
+    };
+  }
+
+  shouldBypassStoreEmployeeVerification(user) {
+    return getRoleNames(user).some(
+      (roleName) => String(roleName || "").trim().toUpperCase() === "SUPER_ADMIN",
+    );
+  }
+
+  async verifyStoreEmployeeLoginEligibility(user) {
+    if (!user || this.shouldBypassStoreEmployeeVerification(user)) {
+      return { allowed: true, bypassed: true };
+    }
+
+    const storeBaseUrl = String(STORE_BASE_URL || "").trim().replace(/\/+$/, "");
+    const internalKey = String(STORE_INTERNAL_SERVICE_KEY || "").trim();
+    const serviceName = String(STORE_INTERNAL_SERVICE_NAME || "").trim();
+
+    if (!storeBaseUrl || !internalKey || !serviceName) {
+      throw storeVerificationNotConfiguredError();
+    }
+
+    try {
+      const response = await axios.post(
+        `${storeBaseUrl}/internal/account-activation/verify-login-eligibility`,
+        {
+          empcode: user.empcode,
+        },
+        {
+          headers: {
+            "x-internal-service-key": internalKey,
+            "x-internal-service-name": serviceName,
+          },
+          timeout: Number(STORE_VERIFICATION_REQUEST_TIMEOUT_MS || 5000),
+        },
+      );
+
+      return response?.data?.data || { allowed: true };
+    } catch (error) {
+      const payload = error?.response?.data || {};
+      const upstreamRequestId =
+        String(error?.response?.headers?.["x-request-id"] || payload?.requestId || "").trim() ||
+        null;
+
+      if (error?.response) {
+        throw storeVerificationFailedError({
+          message:
+            String(payload?.message || payload?.err?.message || "").trim() ||
+            "This account is not eligible for Store sign-in yet.",
+          hint:
+            String(payload?.hint || "").trim() ||
+            "Please contact the administrator to complete employee onboarding.",
+          details: Array.isArray(payload?.details) ? payload.details : [],
+          upstreamRequestId,
+        });
+      }
+
+      if (error?.code === "ECONNABORTED") {
+        throw buildAuthError({
+          statusCode: 503,
+          code: "STORE_VERIFICATION_TIMEOUT",
+          message: "Employee verification timed out.",
+          hint: "Please try again in a moment.",
+        });
+      }
+
+      throw buildAuthError({
+        statusCode: 503,
+        code: "STORE_VERIFICATION_UNREACHABLE",
+        message: "Employee verification could not be completed.",
+        hint: "Please try again in a moment.",
+      });
+    }
   }
 
   ensureSessionStillValidForPasswordVersion(user, decodedToken = {}) {
@@ -604,30 +885,20 @@ class UserService {
     }
   }
 
+  rejectPublicSignup() {
+    throw publicSignupDisabledError();
+  }
+
   async provisionFromEmployee(data = {}, context = {}) {
-    const empcode = Number(data?.empcode ?? data?.emp_id);
-    const payload = {
-      empcode,
-      fullname: normalizeText(data?.fullname ?? data?.name),
-      mobileno: normalizeText(data?.mobileno ?? data?.mobile_no),
-      designation: normalizeText(data?.designation),
-      division: normalizeText(data?.division),
+    const payload = this.buildEmployeeUserPayload(data, {
       password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
-      must_change_password: true,
-    };
+      mustChangePassword: true,
+      includePassword: true,
+    });
 
-    const validationErrors = [];
-    if (!Number.isInteger(payload.empcode) || payload.empcode <= 0) {
-      validationErrors.push("empcode must be a positive integer.");
-    }
-    if (!payload.fullname) validationErrors.push("fullname is required.");
-    if (!payload.mobileno) validationErrors.push("mobileno is required.");
-    if (!payload.designation) validationErrors.push("designation is required.");
-    if (!payload.division) validationErrors.push("division is required.");
-    if (!payload.password) {
-      validationErrors.push("Default provisioning password is not configured.");
-    }
-
+    const validationErrors = this.collectEmployeeUserPayloadValidationErrors(payload, {
+      requirePassword: true,
+    });
     if (validationErrors.length) {
       throw buildAuthError({
         statusCode: 400,
@@ -642,124 +913,49 @@ class UserService {
   }
 
   async previewProvisionFromEmployee(data = {}, context = {}) {
-    const empcode = Number(data?.empcode ?? data?.emp_id);
-    const payload = {
-      empcode,
-      fullname: normalizeText(data?.fullname ?? data?.name),
-      mobileno: normalizeText(data?.mobileno ?? data?.mobile_no),
-      designation: normalizeText(data?.designation),
-      division: normalizeText(data?.division),
-      password: String(EMPLOYEE_PROVISION_DEFAULT_PASSWORD || "").trim(),
-      must_change_password: true,
-    };
+    const payload = this.buildEmployeeUserPayload(data, {
+      mustChangePassword: true,
+    });
 
-    const validationErrors = [];
-    if (!Number.isInteger(payload.empcode) || payload.empcode <= 0) {
-      validationErrors.push("empcode must be a positive integer.");
-    }
-    if (!payload.fullname) validationErrors.push("fullname is required.");
-    if (!payload.mobileno) validationErrors.push("mobileno is required.");
-    if (!payload.designation) validationErrors.push("designation is required.");
-    if (!payload.division) validationErrors.push("division is required.");
-    if (!payload.password) {
-      validationErrors.push("Default provisioning password is not configured.");
+    const preview = await this.previewEmployeeUserPayload(payload, context, {
+      createAction: "create",
+      existingAction: "already_exists",
+      existingState: "provisioned",
+      conflictCode: "USER_ALREADY_EXISTS_CONFLICT",
+      conflictMessage: (empcode) =>
+        `User already exists for empcode ${empcode} with different details.`,
+      conflictHint: "Review the existing Auth account before retrying provisioning.",
+      mustChangePassword: true,
+    });
+
+    if (preview.action === "already_exists") {
+      preview.activation_state = this.resolveExistingActivationState(preview.user);
     }
 
-    if (validationErrors.length) {
-      throw buildAuthError({
-        statusCode: 400,
-        code: "INVALID_PROVISION_PAYLOAD",
-        message: "Employee provisioning payload is invalid.",
-        hint: "Send complete employee details and ensure the default provisioning password is configured.",
-        details: validationErrors,
-      });
+    return preview;
+  }
+
+  async previewActivationFromEmployee(data = {}, context = {}) {
+    const payload = this.buildEmployeeUserPayload(data, {
+      mustChangePassword: false,
+    });
+
+    const preview = await this.previewEmployeeUserPayload(payload, context, {
+      createAction: "activate",
+      existingAction: "already_exists",
+      existingState: "active",
+      conflictCode: "ACCOUNT_ALREADY_EXISTS_CONFLICT",
+      conflictMessage: (empcode) =>
+        `Account already exists for empcode ${empcode} with different details.`,
+      conflictHint: "Review the existing Auth account before retrying activation.",
+      mustChangePassword: false,
+    });
+
+    if (preview.action === "already_exists") {
+      preview.activation_state = this.resolveExistingActivationState(preview.user);
     }
 
-    const existingByEmpcode = await withTimeout(
-      this.UserRepository.findByEmpcode(payload.empcode),
-      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
-      authTimeoutError,
-    );
-
-    if (existingByEmpcode) {
-      const mismatchDetails = [];
-      if (!eqText(existingByEmpcode.fullname, payload.fullname)) {
-        mismatchDetails.push(
-          `fullname mismatch: Auth has '${existingByEmpcode.fullname}', provisioning requested '${payload.fullname}'.`,
-        );
-      }
-      if (!eqText(existingByEmpcode.mobileno, payload.mobileno)) {
-        mismatchDetails.push(
-          `mobileno mismatch: Auth has '${existingByEmpcode.mobileno}', provisioning requested '${payload.mobileno}'.`,
-        );
-      }
-      if (!eqText(existingByEmpcode.designation, payload.designation)) {
-        mismatchDetails.push(
-          `designation mismatch: Auth has '${existingByEmpcode.designation}', provisioning requested '${payload.designation}'.`,
-        );
-      }
-      if (!eqText(existingByEmpcode.division, payload.division)) {
-        mismatchDetails.push(
-          `division mismatch: Auth has '${existingByEmpcode.division}', provisioning requested '${payload.division}'.`,
-        );
-      }
-
-      if (mismatchDetails.length) {
-        throw buildAuthError({
-          statusCode: 409,
-          code: "USER_ALREADY_EXISTS_CONFLICT",
-          message: `User already exists for empcode ${payload.empcode} with different details.`,
-          hint: "Review the existing Auth account before retrying provisioning.",
-          details: mismatchDetails,
-        });
-      }
-
-      return {
-        action: "already_exists",
-        source_service: normalizeText(context?.serviceName) || null,
-        user: {
-          id: existingByEmpcode.id,
-          empcode: existingByEmpcode.empcode,
-          fullname: existingByEmpcode.fullname,
-          mobileno: existingByEmpcode.mobileno,
-          designation: existingByEmpcode.designation,
-          division: existingByEmpcode.division,
-          must_change_password: Boolean(existingByEmpcode.must_change_password),
-        },
-      };
-    }
-
-    const existingByMobile = await withTimeout(
-      this.UserRepository.findByMobileNoOptional(payload.mobileno),
-      Number(process.env.AUTH_DB_QUERY_TIMEOUT_MS || 10_000),
-      authTimeoutError,
-    );
-
-    if (
-      existingByMobile &&
-      Number(existingByMobile.empcode) !== Number(payload.empcode)
-    ) {
-      throw buildAuthError({
-        statusCode: 409,
-        code: "MOBILE_ALREADY_IN_USE",
-        message: `Mobile number ${payload.mobileno} already belongs to another user.`,
-        hint: "Use a different mobile number or fix the existing Auth account before retrying provisioning.",
-      });
-    }
-
-    return {
-      action: "create",
-      source_service: normalizeText(context?.serviceName) || null,
-      user: {
-        id: null,
-        empcode: payload.empcode,
-        fullname: payload.fullname,
-        mobileno: payload.mobileno,
-        designation: payload.designation,
-        division: payload.division,
-        must_change_password: true,
-      },
-    };
+    return preview;
   }
 
   async _provisionFromEmployeePayload(payload = {}, context = {}) {
@@ -828,6 +1024,107 @@ class UserService {
     }
   }
 
+  async activateFromEmployee(data = {}, context = {}) {
+    const payload = this.buildEmployeeUserPayload(data, {
+      password: String(data?.newPassword || ""),
+      mustChangePassword: false,
+      includePassword: true,
+      passwordChangedAt: new Date(),
+    });
+
+    const validationErrors = this.collectEmployeeUserPayloadValidationErrors(payload, {
+      requirePassword: true,
+    });
+    if (validationErrors.length) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "INVALID_ACTIVATION_PAYLOAD",
+        message: "Employee activation payload is invalid.",
+        hint: "Send complete employee details and a valid new password to continue.",
+        details: validationErrors,
+      });
+    }
+
+    this.validateNewPasswordInput(null, {
+      newPassword: data?.newPassword,
+      confirmPassword: data?.confirmPassword,
+    });
+
+    const preview = await this.previewActivationFromEmployee(payload, context);
+    if (preview.action === "already_exists") {
+      throw buildAuthError({
+        statusCode: 409,
+        code: "ACCOUNT_ALREADY_EXISTS",
+        message: "An account already exists for this employee.",
+        hint: "Please sign in with your existing credentials or contact the administrator.",
+        data: {
+          activation_state: preview.activation_state,
+          user: preview.user,
+        },
+      });
+    }
+
+    try {
+      const createdUser = await this.UserRepository.create(payload);
+      return {
+        action: "activated",
+        activation_state: "active",
+        source_service: normalizeText(context?.serviceName) || null,
+        user: {
+          id: createdUser.id,
+          empcode: createdUser.empcode,
+          fullname: createdUser.fullname,
+          mobileno: createdUser.mobileno,
+          designation: createdUser.designation,
+          division: createdUser.division,
+          must_change_password: Boolean(createdUser.must_change_password),
+        },
+      };
+    } catch (error) {
+      if (error?.statusCode) {
+        if (Number(error.statusCode) === 400 && !error.code) {
+          throw buildAuthError({
+            statusCode: 400,
+            code: "INVALID_ACTIVATION_PAYLOAD",
+            message: "Employee activation payload is invalid.",
+            hint: "Correct the activation details and try again.",
+            details: Array.isArray(error?.explanation) ? error.explanation : [],
+          });
+        }
+        throw error;
+      }
+      if (error?.name === "SequelizeUniqueConstraintError") {
+        throw buildAuthError({
+          statusCode: 409,
+          code: "ACCOUNT_ALREADY_EXISTS",
+          message: "An account already exists for this employee.",
+          hint: "Please sign in with your existing credentials or contact the administrator.",
+          details: Array.isArray(error?.errors)
+            ? error.errors
+                .map((entry) => String(entry?.message || "").trim())
+                .filter(Boolean)
+            : [],
+        });
+      }
+      if (error?.name === "SequelizeValidationError") {
+        throw buildAuthError({
+          statusCode: 400,
+          code: "INVALID_ACTIVATION_PAYLOAD",
+          message: "Employee activation payload is invalid.",
+          hint: "Correct the activation details and try again.",
+          details: Array.isArray(error?.explanation) ? error.explanation : [],
+        });
+      }
+      throw buildAuthError({
+        statusCode: 500,
+        code: "ACCOUNT_ACTIVATION_FAILED",
+        message: "Unable to activate the account.",
+        explanation: "Something went wrong while creating the Auth account.",
+        hint: "Please try again in a moment.",
+      });
+    }
+  }
+
   async signIn(mobileno, plainPassword) {
     try {
       if (!mobileno || !plainPassword) {
@@ -845,22 +1142,21 @@ class UserService {
         throw invalidCredentialsError();
       }
 
+      await this.verifyStoreEmployeeLoginEligibility(user);
+
       if (user.must_change_password) {
         throw passwordChangeRequiredError(this.buildPasswordChangeRequiredPayload(user));
       }
 
       return this.buildSessionPayload(user);
     } catch (error) {
-      if (
-        error?.statusCode === 401 ||
-        error?.name === "AttributeNotFound"
-      ) {
+      if (error?.name === "AttributeNotFound") {
         throw invalidCredentialsError();
       }
-      if (error?.code === "PASSWORD_CHANGE_REQUIRED") {
-        throw error;
+      if (Number(error?.statusCode) === 401) {
+        throw invalidCredentialsError();
       }
-      if (error?.statusCode === 503) {
+      if (error?.statusCode) {
         throw error;
       }
       throw {

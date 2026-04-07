@@ -6,6 +6,8 @@ const DEFAULT_ALLOWED_HEADERS = [
   "Authorization",
   "x-access-token",
   "x-csrf-token",
+  "x-internal-service-key",
+  "x-internal-service-name",
   "X-Requested-With",
 ];
 const DEFAULT_EXPOSED_HEADERS = ["x-request-id", "retry-after"];
