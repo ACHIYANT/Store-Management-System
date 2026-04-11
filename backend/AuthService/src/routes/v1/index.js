@@ -55,6 +55,12 @@ router.post(
   UserController.executeActivateFromEmployee,
 );
 router.post(
+  "/internal/users/resolve-pending-queue-holders",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.resolvePendingQueueHolders,
+);
+router.post(
   "/signup",
   authSignInRateLimiter,
   UserController.rejectPublicSignup
