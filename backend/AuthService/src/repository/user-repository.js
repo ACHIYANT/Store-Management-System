@@ -418,6 +418,46 @@ class UserRepository {
     });
   }
 
+  async listUsersByRoleNames(roleNames = []) {
+    const normalizedRoleNames = [...new Set(
+      (Array.isArray(roleNames) ? roleNames : [])
+        .map((roleName) => String(roleName || "").trim().toUpperCase())
+        .filter(Boolean),
+    )];
+    if (!normalizedRoleNames.length) {
+      return [];
+    }
+
+    return User.findAll({
+      attributes: [
+        "id",
+        "empcode",
+        "fullname",
+        "mobileno",
+        "designation",
+        "division",
+      ],
+      include: [
+        {
+          model: Role,
+          as: "roles",
+          through: { attributes: [] },
+          required: true,
+          where: {
+            name: {
+              [Op.in]: normalizedRoleNames,
+            },
+          },
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [
+        ["fullname", "ASC"],
+        ["id", "ASC"],
+      ],
+    });
+  }
+
   async assignLocationScopeToUser(
     userId,
     { locationScope, scopeLabel = null, actorUserId = null } = {},

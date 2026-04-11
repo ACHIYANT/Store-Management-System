@@ -13,6 +13,7 @@ const {
 } = require("../config/serverConfig");
 const bcrypt = require("bcrypt");
 const { isAssignmentManagedRole } = require("../constants/org-assignments");
+const { normalizeDivisionValue } = require("../utils/division-utils");
 const {
   PASSWORD_POLICY_HINT,
   PASSWORD_POLICY_MESSAGE,
@@ -117,6 +118,45 @@ const serializeUserSummary = (user) => ({
   location_scopes: serializeLocationScopes(user.userLocationScopes),
   assignments: serializeAssignments(user.orgAssignments),
 });
+
+const normalizeLocationScopeKey = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+const STORE_STAGE_STATUSES = new Set([
+  "Approved",
+  "PartiallyApproved",
+  "Fulfilling",
+]);
+
+const serializePendingHolderUser = (user = {}) => ({
+  id: user.id,
+  empcode: user.empcode,
+  fullname: user.fullname,
+  mobileno: user.mobileno,
+  designation: user.designation || null,
+  division: user.division || null,
+});
+
+const buildUniqueUsers = (users = []) => {
+  const byId = new Map();
+  for (const user of users) {
+    const id = Number(user?.id);
+    if (!Number.isFinite(id) || byId.has(id)) continue;
+    byId.set(id, serializePendingHolderUser(user));
+  }
+  return [...byId.values()].sort((left, right) => {
+    const byName = String(left?.fullname || "").localeCompare(
+      String(right?.fullname || ""),
+      "en",
+      { sensitivity: "base" },
+    );
+    if (byName !== 0) return byName;
+    return Number(left?.id || 0) - Number(right?.id || 0);
+  });
+};
 
 const normalizeText = (value) => {
   const text = String(value || "").trim().replace(/\s+/g, " ");
@@ -1291,6 +1331,139 @@ class UserService {
   async listUsers(query = {}) {
     const users = await this.UserRepository.listUsers(query);
     return users.map((user) => serializeUserSummary(user));
+  }
+
+  async resolvePendingQueueHolders(payload = {}) {
+    const targets = Array.isArray(payload?.targets)
+      ? payload.targets
+      : Array.isArray(payload?.rows)
+        ? payload.rows
+        : [];
+
+    const normalizedTargets = targets
+      .map((target) => {
+        const requisitionId = Number(target?.requisition_id ?? target?.id);
+        if (!Number.isFinite(requisitionId) || requisitionId <= 0) return null;
+
+        const status = String(target?.status || "").trim();
+        const currentStageRole = String(
+          target?.current_stage_role || target?.pending_role || "",
+        )
+          .trim()
+          .toUpperCase();
+        const derivedPendingRole =
+          currentStageRole ||
+          (STORE_STAGE_STATUSES.has(status) ? "STORE_ENTRY" : "");
+
+        return {
+          requisition_id: requisitionId,
+          pending_role: derivedPendingRole || null,
+          requester_division: normalizeDivisionValue(target?.requester_division) || null,
+          location_scope: normalizeLocationScopeKey(target?.location_scope),
+        };
+      })
+      .filter(Boolean);
+
+    if (!normalizedTargets.length) {
+      return { targets: [] };
+    }
+
+    const needsDivisionHeads = normalizedTargets.some(
+      (target) => target.pending_role === "DIVISION_HEAD",
+    );
+    const needsStoreIncharge = normalizedTargets.some(
+      (target) => target.pending_role === "STORE_ENTRY",
+    );
+
+    const assignmentService = require("./org-assignment-service");
+    const [divisionAssignments, storeAssignments] = await Promise.all([
+      needsDivisionHeads
+        ? assignmentService.list({ assignmentType: "DIVISION_HEAD", active: true })
+        : Promise.resolve([]),
+      needsStoreIncharge
+        ? assignmentService.list({ assignmentType: "STORE_INCHARGE", active: true })
+        : Promise.resolve([]),
+    ]);
+
+    const roleNamesForFallback = [...new Set(
+      normalizedTargets
+        .map((target) => target.pending_role)
+        .filter((roleName) => roleName && roleName !== "DIVISION_HEAD"),
+    )];
+    const roleUsers = roleNamesForFallback.length
+      ? await this.UserRepository.listUsersByRoleNames(roleNamesForFallback)
+      : [];
+
+    const roleUsersByRole = new Map();
+    for (const user of roleUsers) {
+      const roles = Array.isArray(user?.roles) ? user.roles : [];
+      for (const role of roles) {
+        const roleName = String(role?.name || "").trim().toUpperCase();
+        if (!roleName || !roleNamesForFallback.includes(roleName)) continue;
+        const currentUsers = roleUsersByRole.get(roleName) || [];
+        currentUsers.push(user);
+        roleUsersByRole.set(roleName, currentUsers);
+      }
+    }
+
+    const resolvedTargets = normalizedTargets.map((target) => {
+      let matchedUsers = [];
+      let source = null;
+
+      if (target.pending_role === "DIVISION_HEAD" && target.requester_division) {
+        matchedUsers = (Array.isArray(divisionAssignments) ? divisionAssignments : [])
+          .filter((assignment) =>
+            normalizeDivisionValue(
+              assignment?.metadata_json?.division_value ||
+                assignment?.scope_label ||
+                assignment?.metadata_json?.display_name,
+            ) === target.requester_division,
+          )
+          .map((assignment) => assignment?.user)
+          .filter(Boolean);
+        if (matchedUsers.length) {
+          source = "assignment";
+        }
+      }
+
+      if (!matchedUsers.length && target.pending_role === "STORE_ENTRY" && target.location_scope) {
+        matchedUsers = (Array.isArray(storeAssignments) ? storeAssignments : [])
+          .filter((assignment) => {
+            const location = normalizeLocationScopeKey(
+              assignment?.metadata_json?.location ||
+                assignment?.scope_key ||
+                assignment?.scope_label,
+            );
+            return location === target.location_scope;
+          })
+          .map((assignment) => assignment?.user)
+          .filter(Boolean);
+        if (matchedUsers.length) {
+          source = "assignment";
+        }
+      }
+
+      if (!matchedUsers.length && target.pending_role) {
+        matchedUsers = roleUsersByRole.get(target.pending_role) || [];
+        if (matchedUsers.length) {
+          source = "role";
+        }
+      }
+
+      const holders = buildUniqueUsers(matchedUsers);
+      return {
+        requisition_id: target.requisition_id,
+        pending_role: target.pending_role,
+        source,
+        holder_count: holders.length,
+        primary_holder: holders[0] || null,
+        holders,
+      };
+    });
+
+    return {
+      targets: resolvedTargets,
+    };
   }
 
   async listRoles() {
