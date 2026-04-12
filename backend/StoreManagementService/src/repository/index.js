@@ -4,6 +4,7 @@ const CategoryGroupRepository = require("./categorygroup-repository");
 const DayBookRepository = require("./daybook-repository");
 const DayBookItemSerialRepository = require("./daybookitemserials-repository");
 const IssuedItemRepository = require("./issueditem-repository");
+const MaterialIssueReceiptRepository = require("./material-issue-receipt-repository");
 const RequisitionRepository = require("./requisition-repository");
 
 module.exports = {
@@ -20,5 +21,6 @@ module.exports = {
   AssetEventRepository: require("./assetevent-repository"),
   CategoryHeadRepository: require("./cateogryhead-repository"),
   CategoryGroupRepository,
+  MaterialIssueReceiptRepository,
   RequisitionRepository,
 };

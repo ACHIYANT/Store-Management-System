@@ -164,6 +164,7 @@ const uploadMigrationSpreadsheet = multer({
 module.exports = {
   uploadEncryptedBill: buildEncryptedUploadMiddleware("bills", "bill"),
   uploadEncryptedItem: buildEncryptedUploadMiddleware("items", "item"),
+  uploadEncryptedMir: buildEncryptedUploadMiddleware("mirs", "mir"),
   uploadEncryptedRequisition: buildEncryptedUploadMiddleware(
     "requisitions",
     "requisition",

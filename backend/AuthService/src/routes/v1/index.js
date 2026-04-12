@@ -61,6 +61,12 @@ router.post(
   UserController.resolvePendingQueueHolders,
 );
 router.post(
+  "/internal/users/resolve-mir-signatory",
+  authInternalProvisionRateLimiter,
+  ensureInternalService,
+  UserController.resolveMirSignatory,
+);
+router.post(
   "/signup",
   authSignInRateLimiter,
   UserController.rejectPublicSignup

@@ -7,6 +7,7 @@ const DayBookItemSerialService = require("./daybookitemserials-service");
 const CustodianService = require("./custodian-service");
 const GatePassService = require("./gatepass-service");
 const IssuedItemService = require("./issueditem-services");
+const MaterialIssueReceiptService = require("./material-issue-receipt-service");
 const RequisitionService = require("./requisition-service");
 
 module.exports = {
@@ -25,5 +26,6 @@ module.exports = {
   DayBookEntrySequenceService: require("./daybook-entry-sequence-service"),
   CustodianService: require("./custodian-service"),
   GatePassService: require("./gatepass-service"),
+  MaterialIssueReceiptService,
   RequisitionService,
 };
