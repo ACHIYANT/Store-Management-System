@@ -6,6 +6,10 @@ import Modal from "@/components/Modal";
 import PopupMessage from "@/components/PopupMessage";
 import useDebounce from "@/hooks/useDebounce";
 import { toAuthApiUrl, toStoreApiUrl } from "@/lib/api-config";
+import {
+  formatDivisionDisplayLabel,
+  normalizeDivisionValue,
+} from "@/lib/divisions";
 import { hasRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,7 +147,12 @@ const normalizeLabelKey = (value) =>
     .toLowerCase();
 
 const formatScopedOptionLabel = (option, selector, duplicateCounts) => {
-  const baseLabel = String(option?.display_name || option?.id || "").trim();
+  const baseLabel = String(
+    selector === "division"
+      ? option?.assignment_display_label ||
+          formatDivisionDisplayLabel(option?.division_value || option?.display_name)
+      : option?.display_name || option?.id || "",
+  ).trim();
   const location = String(option?.location || "").trim();
 
   if (!baseLabel) return "—";
@@ -160,11 +169,22 @@ const formatScopedOptionLabel = (option, selector, duplicateCounts) => {
 };
 
 const formatAssignmentSummaryLabel = (assignment) => {
+  const isDivisionScope =
+    String(assignment?.metadata_json?.custodian_type || "")
+      .trim()
+      .toUpperCase() === "DIVISION";
+  const divisionValue = normalizeDivisionValue(
+    assignment?.metadata_json?.division_value ||
+      assignment?.scope_label ||
+      assignment?.metadata_json?.display_name,
+  );
   const baseLabel = String(
-    assignment?.scope_label ||
-      assignment?.metadata_json?.display_name ||
-      assignment?.scope_key ||
-      "",
+    isDivisionScope
+      ? formatDivisionDisplayLabel(divisionValue)
+      : assignment?.scope_label ||
+          assignment?.metadata_json?.display_name ||
+          assignment?.scope_key ||
+          "",
   ).trim();
   const scopeType = String(assignment?.scope_type || "")
     .trim()
@@ -185,6 +205,29 @@ const formatAssignmentSummaryLabel = (assignment) => {
   }
 
   return `${baseLabel} (${location})`;
+};
+
+const formatAssignmentScopeTypeLabel = (assignment) => {
+  const scopeType = String(assignment?.scope_type || "")
+    .trim()
+    .toUpperCase();
+  const custodianType = String(assignment?.metadata_json?.custodian_type || "")
+    .trim()
+    .toUpperCase();
+
+  if (scopeType === "CUSTODIAN" && custodianType === "DIVISION") {
+    return "Division";
+  }
+  if (scopeType === "CUSTODIAN" && custodianType === "VEHICLE") {
+    return "Vehicle";
+  }
+  if (scopeType === "LOCATION") {
+    return "Location";
+  }
+  if (scopeType === "GLOBAL") {
+    return "Global";
+  }
+  return scopeType || "—";
 };
 
 export default function AccessControl() {
@@ -365,6 +408,21 @@ export default function AccessControl() {
     ASSIGNMENT_TYPE_CONFIG[assignmentForm.assignmentType] ||
     ASSIGNMENT_TYPE_CONFIG.DIVISION_HEAD;
 
+  const divisionAssignmentOptions = useMemo(
+    () =>
+      divisionCustodians.map((option) => {
+        const divisionValue = normalizeDivisionValue(option?.display_name);
+        return {
+          ...option,
+          division_value: divisionValue || String(option?.display_name || "").trim() || null,
+          assignment_display_label: formatDivisionDisplayLabel(
+            divisionValue || option?.display_name,
+          ),
+        };
+      }),
+    [divisionCustodians],
+  );
+
   const assignmentOptions = useMemo(() => {
     if (assignmentDefinition.selector === "vehicle") {
       return vehicleCustodians;
@@ -382,10 +440,10 @@ export default function AccessControl() {
         },
       ];
     }
-    return divisionCustodians;
+    return divisionAssignmentOptions;
   }, [
     assignmentDefinition.selector,
-    divisionCustodians,
+    divisionAssignmentOptions,
     vehicleCustodians,
     locationOptions,
   ]);
@@ -632,10 +690,27 @@ export default function AccessControl() {
         notes: assignmentForm.notes || null,
       };
 
-      if (
-        assignmentDefinition.selector === "division" ||
-        assignmentDefinition.selector === "vehicle"
-      ) {
+      if (assignmentDefinition.selector === "division") {
+        const divisionValue = normalizeDivisionValue(
+          selectedScope?.division_value || selectedScope?.display_name,
+        );
+        requestPayload = {
+          ...requestPayload,
+          scopeType: "CUSTODIAN",
+          scopeKey: selectedScope.id,
+          scopeLabel: divisionValue || selectedScope.display_name,
+          metadata_json: {
+            custodian_id: selectedScope.id,
+            custodian_type: selectedScope.custodian_type,
+            display_name: selectedScope.display_name,
+            location: selectedScope.location || null,
+            division_value: divisionValue || null,
+            division_display_label: divisionValue
+              ? formatDivisionDisplayLabel(divisionValue)
+              : null,
+          },
+        };
+      } else if (assignmentDefinition.selector === "vehicle") {
         requestPayload = {
           ...requestPayload,
           scopeType: "CUSTODIAN",
@@ -922,7 +997,8 @@ export default function AccessControl() {
                               {formatAssignmentSummaryLabel(assignment)}
                             </div>
                             <div className="mt-1 text-xs text-slate-500">
-                              Scope: {assignment.scope_type} | Ref: {assignment.scope_key}
+                              Scope: {formatAssignmentScopeTypeLabel(assignment)} | Ref:{" "}
+                              {assignment.scope_key}
                             </div>
                             <div className="mt-1 text-xs text-slate-500">
                               Location: {assignment.metadata_json?.location || "—"}

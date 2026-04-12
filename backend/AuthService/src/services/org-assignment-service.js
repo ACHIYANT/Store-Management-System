@@ -12,6 +12,10 @@ const {
   normalizeScopeLabel,
   normalizeScopeType,
 } = require("../constants/org-assignments");
+const {
+  formatDivisionDisplayLabel,
+  normalizeDivisionValue,
+} = require("../utils/division-utils");
 
 const createError = (message, statusCode = StatusCodes.BAD_REQUEST) => {
   const error = new Error(message);
@@ -52,6 +56,7 @@ const serializeAssignment = (assignment) => {
           empcode: plain.user.empcode,
           fullname: plain.user.fullname,
           mobileno: plain.user.mobileno,
+          designation: plain.user.designation,
           division: plain.user.division,
         }
       : null,
@@ -121,6 +126,12 @@ class OrgAssignmentService {
     let metadataJson = providedMetadata;
 
     if (scopeType === ASSIGNMENT_SCOPE_TYPES.CUSTODIAN) {
+      const providedDisplayName = normalizeScopeLabel(
+        metadataJson?.display_name ||
+          metadataJson?.scope_label ||
+          payload.displayName ||
+          payload.display_name,
+      );
       const custodianType = String(
         metadataJson?.custodian_type || metadataJson?.type || "",
       )
@@ -149,12 +160,33 @@ class OrgAssignmentService {
         ...(metadataJson || {}),
         custodian_id: scopeKey,
         custodian_type: custodianType,
-        display_name: scopeLabel || metadataJson?.display_name || null,
+        display_name: providedDisplayName || scopeLabel || metadataJson?.display_name || null,
         location:
           metadataJson?.location !== undefined && metadataJson?.location !== null
             ? String(metadataJson.location).trim() || null
             : null,
       };
+
+      if (custodianType === "DIVISION") {
+        const divisionValue =
+          normalizeDivisionValue(
+            metadataJson?.division_value ||
+              payload.divisionValue ||
+              payload.division_value ||
+              scopeLabel ||
+              providedDisplayName,
+          ) || null;
+        scopeLabel = divisionValue || scopeLabel || providedDisplayName || null;
+        metadataJson = {
+          ...metadataJson,
+          division_value: divisionValue,
+          division_display_label: divisionValue
+            ? formatDivisionDisplayLabel(divisionValue)
+            : null,
+          display_name:
+            metadataJson.display_name || providedDisplayName || scopeLabel || null,
+        };
+      }
     }
 
     if (scopeType === ASSIGNMENT_SCOPE_TYPES.LOCATION) {

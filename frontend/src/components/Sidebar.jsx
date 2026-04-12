@@ -157,8 +157,6 @@ export default function Sidebar() {
       "ACCTS_APPROVER",
     ],
     requisitionsStoreQueue: [
-      "USER",
-      "EMPLOYEE",
       "DIVISION_HEAD",
       "DIVISIONAL_HEAD",
       "ADMIN_APPROVER",
