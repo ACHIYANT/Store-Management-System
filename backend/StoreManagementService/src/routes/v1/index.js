@@ -19,6 +19,7 @@ const AssetController = require("../../controllers/asset-controller");
 const AssetEventController = require("../../controllers/assetevent-controller");
 const GatePassController = require("../../controllers/gatepass-controller");
 const RequisitionController = require("../../controllers/requisition-controller");
+const MaterialIssueReceiptController = require("../../controllers/material-issue-receipt-controller");
 
 const {
   uploadMigrationFile,
@@ -46,6 +47,7 @@ const { DayBookService } = require("../../services/index");
 const { DayBookRepository } = require("../../repository/index");
 
 const {
+  uploadEncryptedMir,
   uploadEncryptedRequisition,
   uploadMigrationSpreadsheet,
 } = require("../../middlewares/upload-middleware");
@@ -278,6 +280,23 @@ router.post(
   requireAnyRole(["STORE_ENTRY", "SUPER_ADMIN"]),
   uploadEncryptedRequisition,
   IssuedItemController.issueBulk,
+);
+
+router.get(
+  "/mirs",
+  requireAnyRole(["STORE_ENTRY", "SUPER_ADMIN"]),
+  MaterialIssueReceiptController.list,
+);
+router.get(
+  "/mirs/:mirId",
+  requireAnyRole(["STORE_ENTRY", "SUPER_ADMIN"]),
+  MaterialIssueReceiptController.getById,
+);
+router.post(
+  "/mirs/:mirId/upload-signed",
+  requireAnyRole(["STORE_ENTRY", "SUPER_ADMIN"]),
+  uploadEncryptedMir,
+  MaterialIssueReceiptController.uploadSigned,
 );
 
 // ? Requisitions (digital employee requisition workflow)

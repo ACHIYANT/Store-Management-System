@@ -1466,6 +1466,60 @@ class UserService {
     };
   }
 
+  async resolveMirSignatory(payload = {}) {
+    const assignmentType = String(
+      payload?.assignmentType || payload?.assignment_type || "",
+    )
+      .trim()
+      .toUpperCase();
+    const scopeKey = String(payload?.scopeKey || payload?.scope_key || "")
+      .trim();
+    const scopeType = String(payload?.scopeType || payload?.scope_type || "")
+      .trim()
+      .toUpperCase();
+
+    if (!assignmentType) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "MIR_SIGNATORY_ASSIGNMENT_TYPE_REQUIRED",
+        message: "assignmentType is required.",
+        hint: "Provide a valid assignmentType to continue.",
+      });
+    }
+
+    if (!scopeKey) {
+      throw buildAuthError({
+        statusCode: 400,
+        code: "MIR_SIGNATORY_SCOPE_KEY_REQUIRED",
+        message: "scopeKey is required.",
+        hint: "Provide a valid scopeKey to continue.",
+      });
+    }
+
+    const assignmentService = require("./org-assignment-service");
+    const assignments = await assignmentService.list({
+      assignmentType,
+      scopeType: scopeType || null,
+      scopeKey,
+      active: true,
+    });
+
+    const holders = buildUniqueUsers(
+      (Array.isArray(assignments) ? assignments : [])
+        .map((assignment) => assignment?.user)
+        .filter(Boolean),
+    );
+
+    return {
+      assignment_type: assignmentType,
+      scope_type: scopeType || null,
+      scope_key: scopeKey,
+      holder_count: holders.length,
+      primary_holder: holders[0] || null,
+      holders,
+    };
+  }
+
   async listRoles() {
     const roles = await this.UserRepository.listRoles();
     return roles.map((role) => ({

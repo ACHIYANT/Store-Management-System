@@ -13,6 +13,7 @@ const {
   sequelize,
 } = require("../models");
 const RequisitionRepository = require("./requisition-repository");
+const MaterialIssueReceiptRepository = require("./material-issue-receipt-repository");
 
 const { Op, literal } = require("sequelize");
 const {
@@ -1239,7 +1240,29 @@ class IssuedItemRepository {
         });
       }
 
-      return { employee_id: resolvedEmployeeId, results };
+      let mir = null;
+      if (requisitionRow && issuedSource === "ONLINE_REQUISITION") {
+        const mirRepo = new MaterialIssueReceiptRepository();
+        mir = await mirRepo.createOrUpdateForOnlineRequisition({
+          requisition: requisitionRow,
+          resolvedCustodian,
+          actor: actor || {},
+          transaction: t,
+        });
+      }
+
+      return {
+        employee_id: resolvedEmployeeId,
+        results,
+        mir: mir
+          ? {
+              id: mir.id,
+              mir_no: mir.mir_no,
+              requisition_id: mir.requisition_id,
+              status: mir.status,
+            }
+          : null,
+      };
     });
   }
 }

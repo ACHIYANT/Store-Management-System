@@ -217,6 +217,25 @@ const resolvePendingQueueHolders = async (req, res) => {
   }
 };
 
+const resolveMirSignatory = async (req, res) => {
+  try {
+    const response = await userService.resolveMirSignatory(req.body || {});
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 200,
+        message: "MIR signatory resolved successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "MIR_SIGNATORY_RESOLVE_FAILED",
+      message: "Unable to resolve MIR signatory.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
 const listUsers = async (req, res) => {
   try {
     const response = await userService.listUsers(req.query || {});
@@ -643,6 +662,7 @@ module.exports = {
   validateActivateFromEmployee,
   executeActivateFromEmployee,
   resolvePendingQueueHolders,
+  resolveMirSignatory,
   listUsers,
   getCsrfToken,
   signIn,

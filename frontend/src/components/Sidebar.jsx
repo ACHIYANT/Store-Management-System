@@ -166,6 +166,7 @@ export default function Sidebar() {
     ],
     mrnList: ["STORE_ENTRY"],
     mrnVerify: ["SUPER_ADMIN", "STORE_ENTRY"],
+    mirList: ["SUPER_ADMIN", "STORE_ENTRY"],
     issueItems: ["STORE_ENTRY"],
     issuedItems: ["STORE_ENTRY"],
     issuedStatement: ["STORE_ENTRY"],
@@ -243,6 +244,7 @@ export default function Sidebar() {
       canSeeRequisitionStoreQueue);
 
   const canSeeIssueItems = hasSubItemAccessStrict(subItemRoleRules.issueItems);
+  const canSeeMirList = hasSubItemAccessStrict(subItemRoleRules.mirList);
   const canSeeIssuedItems = hasSubItemAccessStrict(
     subItemRoleRules.issuedItems,
   );
@@ -251,7 +253,7 @@ export default function Sidebar() {
   );
   const showIssueNav =
     canAccessIssue &&
-    (canSeeIssueItems || canSeeIssuedItems || canSeeIssuedStatement);
+    (canSeeIssueItems || canSeeMirList || canSeeIssuedItems || canSeeIssuedStatement);
 
   const canSeeGatePasses = hasSubItemAccessStrict(subItemRoleRules.gatePasses);
   const canSeeGatePassVerify = hasSubItemAccessStrict(
@@ -347,6 +349,8 @@ export default function Sidebar() {
     }
     if (
       path.startsWith("/issue") ||
+      path.startsWith("/mirs") ||
+      path.startsWith("/mir-page") ||
       path.startsWith("/issued-items") ||
       path.startsWith("/reports/employee-issues") ||
       path.startsWith("/reports/custodian-issues")
@@ -567,6 +571,13 @@ export default function Sidebar() {
                   icon={FolderOpenDot}
                   label="Issue Items"
                   onClick={() => handleNavigate("/issue")}
+                />
+              )}
+              {canSeeMirList && (
+                <SubItem
+                  icon={FileCheck2}
+                  label="MIR List"
+                  onClick={() => handleNavigate("/mirs")}
                 />
               )}
               {canSeeIssuedItems && (

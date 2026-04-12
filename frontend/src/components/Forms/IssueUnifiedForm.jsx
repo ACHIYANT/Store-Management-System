@@ -1027,6 +1027,7 @@ export default function IssueUnifiedForm({
       });
     }
     try {
+      let response = null;
       if (requisitionMode === "offline" && requisitionFile) {
         // multipart with file
         const fd = new FormData();
@@ -1042,12 +1043,12 @@ export default function IssueUnifiedForm({
         }
         fd.append("items", JSON.stringify(payload.items));
         fd.append("serializedItems", JSON.stringify(payload.serializedItems));
-        await axios.post(`${API}/issue/bulk-with-requisition`, fd, {
+        response = await axios.post(`${API}/issue/bulk-with-requisition`, fd, {
           headers: { "Content-Type": "multipart/form-data" },
         });
       } else {
         // simple JSON
-        await axios.post(`${API}/issue/bulk`, payload, {
+        response = await axios.post(`${API}/issue/bulk`, payload, {
           headers: { "Content-Type": "application/json" },
         });
       }
@@ -1058,11 +1059,14 @@ export default function IssueUnifiedForm({
           (a, b) => a + (b.assetIds?.length || 0),
           0,
         );
+      const generatedMir = response?.data?.data?.mir || null;
 
       setPopup({
         open: true,
         type: "success",
-        message: `Issued ${totalQty} item(s) successfully`,
+        message: generatedMir?.mir_no
+          ? `Issued ${totalQty} item(s) successfully.\nMIR generated: ${generatedMir.mir_no}`
+          : `Issued ${totalQty} item(s) successfully`,
       });
 
       // reset lightweight fields; keep selections that are still on screen?
