@@ -105,6 +105,7 @@ const prepareAndStartServer = async () => {
         "/v1/internal/users/provision-from-employee/execute",
         "/v1/internal/users/activate-from-employee/validate",
         "/v1/internal/users/activate-from-employee/execute",
+        "/v1/internal/users/resolve-pending-queue-holders",
       ],
     }),
   );

@@ -198,6 +198,25 @@ const executeActivateFromEmployee = async (req, res) => {
   }
 };
 
+const resolvePendingQueueHolders = async (req, res) => {
+  try {
+    const response = await userService.resolvePendingQueueHolders(req.body || {});
+    return res.status(200).json(
+      buildSuccessPayload(req, res, response, {
+        statusCode: 200,
+        message: "Pending queue holders resolved successfully.",
+      }),
+    );
+  } catch (error) {
+    return sendError(req, res, error, {
+      statusCode: 500,
+      code: "PENDING_QUEUE_HOLDERS_RESOLVE_FAILED",
+      message: "Unable to resolve pending queue holders.",
+      hint: "Please try again in a moment.",
+    });
+  }
+};
+
 const listUsers = async (req, res) => {
   try {
     const response = await userService.listUsers(req.query || {});
@@ -623,6 +642,7 @@ module.exports = {
   executeProvisionFromEmployee,
   validateActivateFromEmployee,
   executeActivateFromEmployee,
+  resolvePendingQueueHolders,
   listUsers,
   getCsrfToken,
   signIn,

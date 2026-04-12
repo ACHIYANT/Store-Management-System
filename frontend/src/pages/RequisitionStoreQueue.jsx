@@ -22,6 +22,45 @@ const STATUS_CHIP_MAP = {
   Fulfilled: { color: "green", emoji: "🏁" },
 };
 
+const getStageDisplay = (row = {}) => {
+  const stageRoleDisplay =
+    String(row?.current_stage_role_display || "").trim() || row?.current_stage_role || "-";
+  const status = String(row?.status || "");
+  if (
+    ["Submitted", "InReview", "PartiallyApproved"].includes(status) &&
+    (row?.current_stage_role_display || row?.current_stage_role)
+  ) {
+    return `${stageRoleDisplay} (L${row.current_stage_order ?? "-"})`;
+  }
+  if (["Approved", "PartiallyApproved", "Fulfilling"].includes(status)) {
+    return stageRoleDisplay;
+  }
+  return stageRoleDisplay;
+};
+
+const renderStageWithHolder = (row = {}) => {
+  const holder = row?.pending_holder || null;
+  const stageText = getStageDisplay(row);
+  if (!holder) {
+    return stageText;
+  }
+  const extraHolderCount = Math.max(
+    0,
+    Number(row?.pending_holder_count || 0) - 1,
+  );
+
+  return (
+    <div className="space-y-0.5">
+      <div className="font-medium text-slate-900">{holder.fullname || "-"}</div>
+      <div className="text-xs text-slate-600">{holder.designation || "-"}</div>
+      <div className="text-xs text-slate-500">
+        {stageText}
+        {extraHolderCount > 0 ? ` | +${extraHolderCount} more` : ""}
+      </div>
+    </div>
+  );
+};
+
 export default function RequisitionStoreQueue() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -31,7 +70,7 @@ export default function RequisitionStoreQueue() {
     async ({ cursor, limit }) => {
       const res = await axios.get(`${API}/requisitions`, {
         params: {
-          scope: "store",
+          scope: "queue",
           cursorMode: true,
           cursor: cursor || undefined,
           limit,
@@ -67,19 +106,7 @@ export default function RequisitionStoreQueue() {
     {
       key: "pending_at",
       label: "Pending At",
-      render: (_value, row) => {
-        const status = String(row?.status || "");
-        if (
-          ["Submitted", "InReview", "PartiallyApproved"].includes(status) &&
-          row?.current_stage_role
-        ) {
-          return `${row.current_stage_role} (L${row.current_stage_order ?? "-"})`;
-        }
-        if (["Approved", "PartiallyApproved", "Fulfilling"].includes(status)) {
-          return "STORE_ENTRY";
-        }
-        return row?.current_stage_role || "-";
-      },
+      render: (_value, row) => renderStageWithHolder(row),
     },
     { key: "requester_name", label: "Requester" },
     { key: "requester_emp_id", label: "Emp ID" },
