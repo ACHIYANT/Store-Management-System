@@ -217,6 +217,10 @@ export default function ListTable({
       : 0;
 
   const getRowClass = (row) => {
+    if (row.status === "PENDING_SIGNATURE")
+      return "bg-red-100 border-l-4 border-red-500";
+    if (row.status === "SIGNED_UPLOADED")
+      return "bg-green-100 border-l-4 border-green-500";
     if (row.store_progress === "Pending")
       return "bg-yellow-100 border-l-4 border-yellow-400";
     if (row.status === "Rejected")

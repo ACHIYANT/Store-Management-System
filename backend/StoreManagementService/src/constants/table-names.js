@@ -20,6 +20,7 @@ module.exports = {
   ITEM_CATEGORY_TABLE: "ItemCategories",
   ITEM_MASTER_ALIAS_TABLE: "ItemMasterAliases",
   ITEM_MASTER_TABLE: "ItemMasters",
+  MATERIAL_ISSUE_RECEIPT_TABLE: "MaterialIssueReceipts",
   REQUISITION_ACTION_TABLE: "RequisitionActions",
   REQUISITION_ATTACHMENT_TABLE: "RequisitionAttachments",
   REQUISITION_ITEM_TABLE: "RequisitionItems",

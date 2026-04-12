@@ -25,6 +25,8 @@ import DayBookItems from "./pages/DayBookItems";
 import Mrn from "./pages/Mrn";
 import MrnPage from "./pages/MrnPage";
 import MrnVerify from "./pages/MrnVerify";
+import Mir from "./pages/Mir";
+import MirPage from "./pages/MirPage";
 import ItemCategoryUpdateForm from "./components/Forms/ItemCategoryUpdateForm";
 import Stocks from "./pages/Stocks";
 import StockItems from "./pages/StockItems";
@@ -177,8 +179,10 @@ function App() {
           />
           <Route path="/mrn" element={<Mrn />} />
           <Route path="/mrn/verify" element={<MrnVerify />} />
+          <Route path="/mirs" element={<Mir />} />
           <Route path="/stocks" element={<Stocks />}></Route>
           <Route path="/mrn-page/:daybookId" element={<MrnPage />} />
+          <Route path="/mir-page/:mirId" element={<MirPage />} />
           <Route path="/stock-items-all/:id" element={<StockItems />} />
           <Route path="/issue" element={<Issue />} />
           <Route path="/requisitions" element={<Requisitions />} />
