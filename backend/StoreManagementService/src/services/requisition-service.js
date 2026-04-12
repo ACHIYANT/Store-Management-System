@@ -2,15 +2,30 @@ const axios = require("axios");
 const RequisitionRepository = require("../repository/requisition-repository");
 const { AUTH_BASE_URL } = require("../config/serverConfig");
 const {
+  resolvePendingQueueHoldersInAuthService,
+} = require("../utils/auth-pending-holder-api");
+const {
   assertActorCanAccessLocation,
   resolveActorLocationScope,
   resolveEmployeeLocationScope,
 } = require("../utils/location-scope");
+const { normalizeDivisionValue } = require("../utils/division-utils");
 
+// Store fulfillment is picked up automatically once the last approval stage
+// marks the requisition Approved/PartiallyApproved. It is not modeled as
+// another approval-stage role here.
 const DEFAULT_REQUISITION_STAGES = [
   { role_name: "DIVISION_HEAD", stage_order: 1, flow_type: "REQUISITION" },
   { role_name: "ADMIN_APPROVER", stage_order: 2, flow_type: "REQUISITION" },
 ];
+
+const STORE_STAGE_STATUSES = new Set([
+  "Approved",
+  "PartiallyApproved",
+  "Fulfilling",
+]);
+
+const normalizeDivisionScopeValue = (value) => normalizeDivisionValue(value) || "";
 
 const normalizeAssignmentScopeValues = (
   assignments = [],
@@ -36,9 +51,20 @@ const normalizeAssignmentScopeValues = (
     const label = String(assignment?.scope_label || "").trim();
     const key = String(assignment?.scope_key || "").trim();
     const metadataLabel = String(assignment?.metadata_json?.display_name || "").trim();
-    if (label) values.push(label);
-    if (key) values.push(key);
-    if (metadataLabel) values.push(metadataLabel);
+    const metadataDivisionValue = normalizeDivisionScopeValue(
+      assignment?.metadata_json?.division_value,
+    );
+    const labelDivisionValue = normalizeDivisionScopeValue(label);
+    const displayDivisionValue = normalizeDivisionScopeValue(metadataLabel);
+
+    if (metadataDivisionValue) values.push(metadataDivisionValue);
+    if (labelDivisionValue) values.push(labelDivisionValue);
+    if (displayDivisionValue) values.push(displayDivisionValue);
+    if (!metadataDivisionValue && !labelDivisionValue && !displayDivisionValue) {
+      if (label) values.push(label);
+      if (key) values.push(key);
+      if (metadataLabel) values.push(metadataLabel);
+    }
   }
 
   return [...new Set(values)];
@@ -53,11 +79,19 @@ const hasMatchingAssignmentScope = (
   const expected = String(expectedValue || "").trim().toLowerCase();
   if (!expected) return false;
 
+  const normalizedExpectedDivision = normalizeDivisionScopeValue(expectedValue);
+  const comparableExpected = normalizedExpectedDivision || expected;
+
   return normalizeAssignmentScopeValues(
     assignments,
     assignmentType,
     scopeType,
-  ).some((value) => String(value || "").trim().toLowerCase() === expected);
+  ).some((value) => {
+    const normalizedDivisionValue = normalizeDivisionScopeValue(value);
+    const comparableValue =
+      normalizedDivisionValue || String(value || "").trim().toLowerCase();
+    return comparableValue === comparableExpected;
+  });
 };
 
 class RequisitionService {
@@ -97,6 +131,10 @@ class RequisitionService {
         (stage) => stage.role_name && Number.isFinite(stage.stage_order),
       )
       .sort((a, b) => a.stage_order - b.stage_order);
+  }
+
+  _resolveRequesterDivision(actor = {}) {
+    return normalizeDivisionValue(actor?.division || null) || actor?.division || null;
   }
 
   async _fetchApprovalStagesFromAuth() {
@@ -174,7 +212,7 @@ class RequisitionService {
           ? String(actor.empcode)
           : null,
       requesterName: actor?.fullname || actor?.name || null,
-      requesterDivision: actor?.division || null,
+      requesterDivision: this._resolveRequesterDivision(actor),
       requesterLocationScope,
       purpose: payload?.purpose || null,
       remarks: payload?.remarks || null,
@@ -189,8 +227,7 @@ class RequisitionService {
     const stages = await this.getStagesForRequisition();
     const firstStageOrder = stages.length ? Number(stages[0].stage_order) : null;
     const viewerStageOrders = await this._resolveUserStageOrders(actor?.roles || []);
-
-    return this.repository.list({
+    const result = await this.repository.list({
       scope: query.scope || "my",
       page: query.page,
       limit: query.limit,
@@ -201,13 +238,60 @@ class RequisitionService {
       fromDate: query.fromDate,
       toDate: query.toDate,
       viewerUserId: actor?.id || null,
-      viewerDivision: actor?.division || null,
+      viewerDivision: this._resolveRequesterDivision(actor),
       viewerRoles: actor?.roles || [],
       viewerAssignments: actor?.assignments || [],
       viewerActor: actor || {},
       viewerStageOrders,
       firstStageOrder,
     });
+
+    const requestedScope = String(query?.scope || "my").trim().toLowerCase();
+    const shouldResolvePendingHolder =
+      requestedScope === "queue" || requestedScope === "store" || requestedScope === "inbox";
+    if (!shouldResolvePendingHolder) {
+      return result;
+    }
+
+    const baseRows = Array.isArray(result?.rows) ? result.rows : [];
+    if (!baseRows.length) {
+      return result;
+    }
+
+    const holderTargets = baseRows.map((row) => ({
+      requisition_id: row.id,
+      status: row.status,
+      current_stage_role:
+        row.current_stage_role ||
+        (STORE_STAGE_STATUSES.has(String(row?.status || "").trim()) ? "STORE_ENTRY" : null),
+      requester_division: row.requester_division,
+      location_scope: row.location_scope,
+    }));
+
+    try {
+      const resolved = await resolvePendingQueueHoldersInAuthService(holderTargets);
+      const byRequisitionId = new Map(
+        (Array.isArray(resolved?.targets) ? resolved.targets : [])
+          .map((target) => [Number(target?.requisition_id), target])
+          .filter(([requisitionId]) => Number.isFinite(requisitionId)),
+      );
+
+      return {
+        ...result,
+        rows: baseRows.map((row) => {
+          const pendingHolder = byRequisitionId.get(Number(row?.id)) || null;
+          return {
+            ...row,
+            pending_holder: pendingHolder?.primary_holder || null,
+            pending_holder_count: Number(pendingHolder?.holder_count || 0),
+            pending_holder_source: pendingHolder?.source || null,
+          };
+        }),
+      };
+    } catch (error) {
+      console.error("RequisitionService.list pending-holder enrichment failed:", error);
+      return result;
+    }
   }
 
   async getById(id, actor = {}) {
@@ -241,15 +325,16 @@ class RequisitionService {
       Number(record.current_stage_order) === firstStageOrder &&
       String(record.requester_division || "").trim()
     ) {
+      const requesterDivision =
+        normalizeDivisionValue(record.requester_division) || record.requester_division;
+      const actorDivision = normalizeDivisionValue(actor?.division || null);
       canSeeAsCurrentApprover =
         hasMatchingAssignmentScope(
           actor?.assignments || [],
           "DIVISION_HEAD",
-          record.requester_division,
+          requesterDivision,
         ) ||
-        (String(actor?.division || "").trim() &&
-          String(actor.division).trim().toLowerCase() ===
-            String(record.requester_division).trim().toLowerCase());
+        (actorDivision && actorDivision === requesterDivision);
     }
 
     if (
@@ -298,6 +383,7 @@ class RequisitionService {
       actor,
       initialStage,
       remarks: payload?.remarks || null,
+      requesterDivision: this._resolveRequesterDivision(actor),
     });
   }
 

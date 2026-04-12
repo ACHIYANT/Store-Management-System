@@ -22,7 +22,14 @@ class OrgAssignmentRepository {
         {
           model: User,
           as: "user",
-          attributes: ["id", "empcode", "fullname", "mobileno", "division"],
+          attributes: [
+            "id",
+            "empcode",
+            "fullname",
+            "mobileno",
+            "designation",
+            "division",
+          ],
         },
       ],
       order: [
@@ -43,7 +50,14 @@ class OrgAssignmentRepository {
         {
           model: User,
           as: "user",
-          attributes: ["id", "empcode", "fullname", "mobileno", "division"],
+          attributes: [
+            "id",
+            "empcode",
+            "fullname",
+            "mobileno",
+            "designation",
+            "division",
+          ],
         },
       ],
     });

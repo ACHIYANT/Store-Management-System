@@ -20,6 +20,7 @@ const {
   assertActorCanAccessLocation,
   buildLocationScopeWhere,
 } = require("../utils/location-scope");
+const { normalizeDivisionValue } = require("../utils/division-utils");
 
 const FINAL_REQUISITION_STATUSES = new Set([
   "Approved",
@@ -105,6 +106,13 @@ function normalizeAssignments(assignments = []) {
     : [];
 }
 
+function isDivisionAssignmentType(assignmentType) {
+  const normalizedType = String(assignmentType || "")
+    .trim()
+    .toUpperCase();
+  return normalizedType === "DIVISION_HEAD" || normalizedType === "DIVISION_CUSTODIAN";
+}
+
 function getAssignmentScopeValues(
   assignments = [],
   assignmentType,
@@ -121,6 +129,18 @@ function getAssignmentScopeValues(
   for (const assignment of normalizeAssignments(assignments)) {
     if (assignment.assignment_type !== normalizedType) continue;
     if (normalizedScopeType && assignment.scope_type !== normalizedScopeType) continue;
+    if (isDivisionAssignmentType(normalizedType)) {
+      const divisionCandidates = [
+        assignment.metadata_json?.division_value,
+        assignment.scope_label,
+        assignment.metadata_json?.display_name,
+      ]
+        .map((value) => normalizeDivisionValue(value))
+        .filter(Boolean);
+      values.push(...divisionCandidates);
+      continue;
+    }
+
     if (assignment.scope_label) values.push(assignment.scope_label);
     if (assignment.scope_key) values.push(assignment.scope_key);
     if (assignment.metadata_json?.display_name) {
@@ -137,7 +157,9 @@ function hasMatchingAssignmentScope(
   expectedScopeValue,
   scopeType = null,
 ) {
-  const expected = String(expectedScopeValue || "").trim();
+  const expected = isDivisionAssignmentType(assignmentType)
+    ? normalizeDivisionValue(expectedScopeValue)
+    : String(expectedScopeValue || "").trim();
   if (!expected) return false;
 
   return getAssignmentScopeValues(assignments, assignmentType, scopeType).some(
@@ -145,13 +167,35 @@ function hasMatchingAssignmentScope(
   );
 }
 
+function hasGlobalAssignment(assignments = []) {
+  return normalizeAssignments(assignments).some(
+    (assignment) =>
+      assignment.assignment_type === "GLOBAL" || assignment.scope_type === "GLOBAL",
+  );
+}
+
+function formatStageRoleDisplay(roleName) {
+  const normalizedRole = String(roleName || "").trim().toUpperCase();
+  if (!normalizedRole) return null;
+
+  if (normalizedRole === "DIVISIONAL_HEAD") {
+    return "Division Head";
+  }
+
+  return normalizedRole
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function deriveStageRoleDisplay(status, currentStageRole) {
   const rawRole = String(currentStageRole || "").trim();
-  if (rawRole) return rawRole;
+  if (rawRole) return formatStageRoleDisplay(rawRole);
 
   const normalizedStatus = String(status || "").trim();
   if (["Approved", "PartiallyApproved", "Fulfilling", "Fulfilled"].includes(normalizedStatus)) {
-    return "STORE_ENTRY";
+    return formatStageRoleDisplay("STORE_ENTRY");
   }
 
   return null;
@@ -159,7 +203,8 @@ function deriveStageRoleDisplay(status, currentStageRole) {
 
 function normalizeScope(scope) {
   const normalized = String(scope || "my").trim().toLowerCase();
-  if (["my", "inbox", "store", "all"].includes(normalized)) return normalized;
+  if (normalized === "store") return "queue";
+  if (["my", "inbox", "queue", "all"].includes(normalized)) return normalized;
   return "my";
 }
 
@@ -1047,7 +1092,7 @@ class RequisitionRepository {
       } else {
         where.id = -1;
       }
-    } else if (normalizedScope === "store") {
+    } else if (normalizedScope === "queue") {
       const isStoreViewer =
         normalizedRoles.includes("STORE_ENTRY") ||
         normalizedRoles.includes("SUPER_ADMIN");
@@ -1078,10 +1123,10 @@ class RequisitionRepository {
               current_stage_order: firstStage,
               requester_division: { [Op.in]: scopedDivisions },
             });
-          } else if (String(viewerDivision || "").trim()) {
+          } else if (normalizeDivisionValue(viewerDivision || null)) {
             scopedOr.push({
               current_stage_order: firstStage,
-              requester_division: String(viewerDivision).trim(),
+              requester_division: normalizeDivisionValue(viewerDivision || null),
             });
           }
 
@@ -1106,7 +1151,8 @@ class RequisitionRepository {
     } else if (normalizedScope === "all") {
       const isPrivileged =
         normalizedRoles.includes("SUPER_ADMIN") ||
-        normalizedRoles.includes("STORE_ENTRY");
+        normalizedRoles.includes("STORE_ENTRY") ||
+        hasGlobalAssignment(viewerAssignments);
       if (!isPrivileged) {
         where.id = -1;
       }
@@ -1568,12 +1614,16 @@ class RequisitionRepository {
         const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
           actor?.assignments,
           "DIVISION_HEAD",
-          requisition.requester_division,
+          normalizeDivisionValue(requisition.requester_division),
         );
-        const viewerDivision = String(actor?.division || "").trim();
+        const viewerDivision = normalizeDivisionValue(actor?.division || null);
         if (
           !hasDivisionHeadAssignment &&
-          (!viewerDivision || !eqText(viewerDivision, requisition.requester_division))
+          (!viewerDivision ||
+            !eqText(
+              viewerDivision,
+              normalizeDivisionValue(requisition.requester_division),
+            ))
         ) {
           throw new Error(
             "You can approve first-stage requisitions only for your own division.",
@@ -1821,12 +1871,16 @@ class RequisitionRepository {
         const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
           actor?.assignments,
           "DIVISION_HEAD",
-          requisition.requester_division,
+          normalizeDivisionValue(requisition.requester_division),
         );
-        const viewerDivision = String(actor?.division || "").trim();
+        const viewerDivision = normalizeDivisionValue(actor?.division || null);
         if (
           !hasDivisionHeadAssignment &&
-          (!viewerDivision || !eqText(viewerDivision, requisition.requester_division))
+          (!viewerDivision ||
+            !eqText(
+              viewerDivision,
+              normalizeDivisionValue(requisition.requester_division),
+            ))
         ) {
           throw new Error(
             "You can reject first-stage requisitions only for your own division.",
@@ -1886,6 +1940,7 @@ class RequisitionRepository {
     actor = {},
     initialStage = null,
     remarks = null,
+    requesterDivision = null,
   }) {
     const actorUserId = toNumber(actor?.id);
     if (!actorUserId) throw new Error("Invalid user.");
@@ -1914,6 +1969,8 @@ class RequisitionRepository {
 
       await requisition.update(
         {
+          requester_division:
+            normalizeDivisionValue(requesterDivision) || requisition.requester_division,
           status: hasStage ? "Submitted" : "Approved",
           current_stage_order: hasStage ? initialStage.stage_order : null,
           current_stage_role: hasStage ? initialStage.role_name : null,

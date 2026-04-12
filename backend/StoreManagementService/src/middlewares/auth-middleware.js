@@ -52,17 +52,19 @@ async function withFallbackLocationScopes(user = {}) {
   }
 
   const access = collectActorLocationScopes(baseUser);
-  if (access.unrestricted) {
-    return baseUser;
+  if (access.scopes.length > 0 && !baseUser.location_scopes.length) {
+    const assignmentScopedUser = {
+      ...baseUser,
+      location_scopes: access.scopes,
+      location_scope_source: "assignment",
+    };
+    if (access.unrestricted) {
+      return assignmentScopedUser;
+    }
+    return assignmentScopedUser;
   }
 
-  if (access.scopes.length > 0) {
-    if (!baseUser.location_scopes.length) {
-      return {
-        ...baseUser,
-        location_scope_source: "assignment",
-      };
-    }
+  if (access.unrestricted) {
     return baseUser;
   }
 
