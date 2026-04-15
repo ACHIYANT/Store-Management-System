@@ -25,7 +25,14 @@ class AssetEventRepository {
     return [
       {
         model: Asset,
-        attributes: ["id", "serial_number", "asset_tag", "stock_id"],
+        attributes: [
+          "id",
+          "serial_number",
+          "asset_tag",
+          "stock_id",
+          "status",
+          "location_scope",
+        ],
         required: false,
         include: [
           {
@@ -174,6 +181,8 @@ class AssetEventRepository {
             serial_number: asset.serial_number ?? null,
             asset_tag: asset.asset_tag ?? null,
             item_name: asset.Stock?.item_name ?? null,
+            status: asset.status ?? null,
+            location_scope: asset.location_scope ?? null,
           }
         : null,
     };

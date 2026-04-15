@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import QRCode from "qrcode";
 import Modal from "@/components/Modal";
+import logo from "/logo.svg";
 
 import {
   Select,
@@ -23,6 +24,63 @@ const CUSTODIAN_TYPES = [
   { value: "DIVISION", label: "Division" },
   { value: "VEHICLE", label: "Vehicle" },
 ];
+const MM_TO_CSS_PX = 96 / 25.4;
+const ASSET_STICKER_SPEC = Object.freeze({
+  widthMm: 63.5,
+  heightMm: 46.6,
+  safeInsetMm: 2,
+  qrMm: 18,
+  qrGapMm: 2,
+  logoMm: 6.5,
+  widthPx: Math.round(63.5 * MM_TO_CSS_PX),
+  heightPx: Math.round(46.6 * MM_TO_CSS_PX),
+  qrPx: Math.round(18 * MM_TO_CSS_PX),
+});
+const A4_SHEET_SPEC = Object.freeze({
+  cols: 3,
+  rows: 6,
+  slots: 18,
+  pageWidthMm: 210,
+  pageHeightMm: 297,
+  leftMarginMm: 3,
+  rightMarginMm: 3,
+  topMarginMm: 3,
+  bottomMarginMm: 3,
+  colGapMm: 6.75,
+  rowGapMm: 2.28,
+});
+const ASSET_LABEL_SLOT_STORAGE_KEY = "sms:asset-label-next-slot";
+
+const clampSheetSlot = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.min(A4_SHEET_SPEC.slots, Math.max(1, Math.floor(numeric)));
+};
+
+const readStoredSheetSlot = () => {
+  if (typeof window === "undefined") return 1;
+  return clampSheetSlot(
+    window.localStorage.getItem(ASSET_LABEL_SLOT_STORAGE_KEY) || 1,
+  );
+};
+
+const computeNextSheetSlot = (startSlot, labelCount = 1) =>
+  ((clampSheetSlot(startSlot) - 1 + Math.max(1, Number(labelCount) || 1)) %
+    A4_SHEET_SPEC.slots) +
+  1;
+
+const computeSheetEndSlot = (startSlot, labelCount = 1) =>
+  ((clampSheetSlot(startSlot) -
+    1 +
+    Math.max(0, (Number(labelCount) || 1) - 1)) %
+    A4_SHEET_SPEC.slots) +
+  1;
+
+const stripSvgPrelude = (markup) =>
+  String(markup || "")
+    .replace(/<\?xml[\s\S]*?\?>/gi, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "")
+    .trim();
 
 export default function IssueUnifiedForm({
   stockId,
@@ -61,8 +119,12 @@ export default function IssueUnifiedForm({
   //qr code states
   const [qrOpen, setQrOpen] = useState(false);
   const [qrAsset, setQrAsset] = useState(null);
-  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrPrintAssets, setQrPrintAssets] = useState([]);
+  const [qrSvgMarkup, setQrSvgMarkup] = useState("");
+  const [qrTargetUrl, setQrTargetUrl] = useState("");
   const [qrBusy, setQrBusy] = useState(false);
+  const [logoSvgMarkup, setLogoSvgMarkup] = useState("");
+  const [sheetStartSlot, setSheetStartSlot] = useState(readStoredSheetSlot);
 
   // employees
   const [employees, setEmployees] = useState([]);
@@ -84,6 +146,24 @@ export default function IssueUnifiedForm({
       .get(`${API}/category-head`)
       .then((r) => setCategoryHeads(r.data?.data || []));
     axios.get(`${API}/employee`).then((r) => setEmployees(r.data?.data || []));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(logo)
+      .then((response) => response.text())
+      .then((markup) => {
+        if (!active) return;
+        setLogoSvgMarkup(stripSvgPrelude(markup));
+      })
+      .catch(() => {
+        if (!active) return;
+        setLogoSvgMarkup("");
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -654,6 +734,11 @@ export default function IssueUnifiedForm({
     [assets, usedAssetIds],
   );
 
+  const selectedAssetRows = useMemo(() => {
+    const selectedSet = new Set(selectedAssets.map((id) => Number(id)));
+    return availableAssets.filter((asset) => selectedSet.has(Number(asset.id)));
+  }, [availableAssets, selectedAssets]);
+
   const availableStocks = useMemo(() => {
     let scopedStocks = stocks;
     if (requisitionMode === "online") {
@@ -1128,8 +1213,7 @@ export default function IssueUnifiedForm({
           className="h-8 px-3"
           onClick={async (e) => {
             e.stopPropagation();
-            await openQrPreview(row);
-            printQr();
+            await printSheet([row], readStoredSheetSlot());
           }}
         >
           Print
@@ -1139,55 +1223,613 @@ export default function IssueUnifiedForm({
   ];
 
   // QR helpers
-  const buildQrPayload = (a) =>
-    `asset_id=${a.id}&asset_tag=${encodeURIComponent(
-      a.asset_tag || "",
-    )}&serial=${encodeURIComponent(a.serial_number || "")}`;
+  const loadInlineLogoSvg = useCallback(async () => {
+    if (logoSvgMarkup) return logoSvgMarkup;
+    try {
+      const response = await fetch(logo);
+      const markup = stripSvgPrelude(await response.text());
+      setLogoSvgMarkup(markup);
+      return markup;
+    } catch {
+      return "";
+    }
+  }, [logoSvgMarkup]);
 
-  const openQrPreview = async (assetRow) => {
+  const buildQrTargetUrl = (a) => {
+    if (typeof window === "undefined") return "";
+    const verificationCode = String(a?.verification_code || "").trim();
+    if (verificationCode) {
+      return `${window.location.origin}/asset/verify?code=${encodeURIComponent(
+        verificationCode,
+      )}`;
+    }
+    if (!a?.id) return "";
+    return `${window.location.origin}/asset/${encodeURIComponent(a.id)}/timeline`;
+  };
+
+  const buildQrSvg = async (assetRow) =>
+    QRCode.toString(buildQrTargetUrl(assetRow), {
+      type: "svg",
+      width: 256,
+      margin: 1,
+      errorCorrectionLevel: "L",
+      color: {
+        dark: "#111827",
+        light: "#FFFFFF",
+      },
+    });
+
+  const buildSheetPages = useCallback((assetRows = [], startSlot = 1) => {
+    const safeSlot = clampSheetSlot(startSlot);
+    const rows = Array.isArray(assetRows) ? assetRows.filter(Boolean) : [];
+    if (!rows.length) return [];
+
+    const pages = [];
+    let page = Array.from({ length: A4_SHEET_SPEC.slots }, () => null);
+    let pointer = safeSlot - 1;
+
+    rows.forEach((assetRow) => {
+      page[pointer] = assetRow;
+      pointer += 1;
+      if (pointer >= A4_SHEET_SPEC.slots) {
+        pages.push(page);
+        page = Array.from({ length: A4_SHEET_SPEC.slots }, () => null);
+        pointer = 0;
+      }
+    });
+
+    if (page.some(Boolean)) {
+      pages.push(page);
+    }
+
+    return pages;
+  }, []);
+
+  const openQrPreview = async (assetRow, assetRows = [assetRow]) => {
     try {
       setQrBusy(true);
+      const normalizedRows = Array.isArray(assetRows)
+        ? assetRows.filter(Boolean)
+        : [assetRow].filter(Boolean);
       setQrAsset(assetRow);
-      const payload = buildQrPayload(assetRow);
-      const url = await QRCode.toDataURL(payload, { width: 256, margin: 1 });
-      setQrDataUrl(url);
+      setQrPrintAssets(normalizedRows);
+      setSheetStartSlot(readStoredSheetSlot());
+      const targetUrl = buildQrTargetUrl(assetRow);
+      const svgMarkup = await buildQrSvg(assetRow);
+      setQrTargetUrl(targetUrl);
+      setQrSvgMarkup(svgMarkup);
       setQrOpen(true);
     } finally {
       setQrBusy(false);
     }
   };
 
-  const printQr = () => {
-    const w = window.open("", "_blank", "width=420,height=520");
-    if (!w) return;
-    const title = `Asset ${qrAsset?.asset_tag || qrAsset?.id || ""}`;
-    w.document.write(`
+  const escapeHtml = (value) =>
+    String(value ?? "-")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const buildLogoPrintMarkup = (inlineLogoMarkup) =>
+    inlineLogoMarkup
+      ? `<div class="brand-mark">${inlineLogoMarkup}</div>`
+      : `<img src="${escapeHtml(logo)}" alt="HARTRON" class="brand-image" />`;
+
+  const buildStickerMarkup = ({
+    assetRow,
+    svgMarkup,
+    inlineLogoMarkup,
+    className = "sticker",
+  }) => `
+    <div class="${className}">
+      <div class="sticker-layout">
+        <div class="qr-column">
+          <div class="qr-shell">${svgMarkup}</div>
+          <div class="scan-note">Scan to verify</div>
+        </div>
+        <div class="info-column">
+          <div class="brand">
+            ${buildLogoPrintMarkup(inlineLogoMarkup)}
+            <div class="brand-copy">
+              <div class="brand-name">HARTRON</div>
+              <div class="brand-subtitle">Store Asset Label</div>
+            </div>
+          </div>
+          <div class="meta">
+            <div class="meta-row">
+              <div class="meta-label">Asset ID</div>
+              <div class="meta-value">${escapeHtml(assetRow?.id)}</div>
+            </div>
+            <div class="meta-row">
+              <div class="meta-label">Asset Tag</div>
+              <div class="meta-value">${escapeHtml(assetRow?.asset_tag)}</div>
+            </div>
+            <div class="meta-row">
+              <div class="meta-label">Serial Number</div>
+              <div class="meta-value">${escapeHtml(assetRow?.serial_number)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const buildStickerPrintHtml = ({
+    assetRow,
+    svgMarkup,
+    inlineLogoMarkup,
+  }) => `
     <html>
       <head>
-        <title>${title}</title>
+        <title>${escapeHtml(`Asset ${assetRow?.asset_tag || assetRow?.id || ""}`)}</title>
         <style>
-          body{margin:0;padding:20px;font-family:ui-sans-serif,system-ui,Arial}
-          .wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
-          img{width:256px;height:256px}
-          .text{font-size:12px;color:#111}
-          .bold{font-weight:600}
+          @page { size: A4 portrait; margin: 0; }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #0f172a;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }
+          .page {
+            width: 210mm;
+            min-height: 297mm;
+            box-sizing: border-box;
+            padding: 14mm 0 0;
+            display: flex;
+            justify-content: center;
+          }
+          .sticker {
+            width: ${ASSET_STICKER_SPEC.widthMm}mm;
+            height: ${ASSET_STICKER_SPEC.heightMm}mm;
+            box-sizing: border-box;
+            padding: ${ASSET_STICKER_SPEC.safeInsetMm}mm;
+            overflow: hidden;
+            background: #ffffff;
+          }
+          .sticker-layout {
+            display: grid;
+            grid-template-columns: ${ASSET_STICKER_SPEC.qrMm}mm minmax(0, 1fr);
+            column-gap: ${ASSET_STICKER_SPEC.qrGapMm}mm;
+            align-items: center;
+            height: 100%;
+          }
+          .qr-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.9mm;
+          }
+          .brand {
+            display: flex;
+            align-items: center;
+            gap: 1.35mm;
+            min-width: 0;
+          }
+          .brand-mark,
+          .brand-image {
+            width: ${ASSET_STICKER_SPEC.logoMm}mm;
+            height: ${ASSET_STICKER_SPEC.logoMm}mm;
+            flex: 0 0 ${ASSET_STICKER_SPEC.logoMm}mm;
+          }
+          .brand-mark svg,
+          .brand-image {
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+          .brand-copy {
+            text-align: left;
+            min-width: 0;
+          }
+          .brand-name {
+            font-size: 6.4pt;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            line-height: 1;
+          }
+          .brand-subtitle {
+            margin-top: 0.2mm;
+            color: #475569;
+            font-size: 4.6pt;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            line-height: 1.1;
+          }
+          .qr-shell {
+            width: ${ASSET_STICKER_SPEC.qrMm}mm;
+            height: ${ASSET_STICKER_SPEC.qrMm}mm;
+            border: 0.25mm solid #e2e8f0;
+            border-radius: 1.4mm;
+            padding: 0.65mm;
+            box-sizing: border-box;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .qr-shell svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+          }
+          .meta {
+            display: grid;
+            gap: 0.55mm;
+            min-width: 0;
+          }
+          .meta-row {
+            display: grid;
+            gap: 0.1mm;
+            min-width: 0;
+          }
+          .meta-label {
+            color: #64748b;
+            font-size: 4.3pt;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            line-height: 1.1;
+          }
+          .meta-value {
+            color: #0f172a;
+            font-size: 5.6pt;
+            font-weight: 600;
+            line-height: 1.15;
+            word-break: break-word;
+          }
+          .info-column {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.9mm;
+            min-width: 0;
+          }
+          .scan-note {
+            color: #475569;
+            font-size: 4.2pt;
+            text-align: center;
+            line-height: 1.15;
+            max-width: ${ASSET_STICKER_SPEC.qrMm}mm;
+          }
         </style>
       </head>
       <body>
-        <div class="wrap">
-          <img src="${qrDataUrl}" />
-          <div class="text"><span class="bold">Asset:</span> ${
-            qrAsset?.asset_tag || qrAsset?.id || "-"
-          }</div>
-          <div class="text"><span class="bold">Serial:</span> ${
-            qrAsset?.serial_number || "-"
-          }</div>
+        <div class="page">
+          ${buildStickerMarkup({ assetRow, svgMarkup, inlineLogoMarkup })}
         </div>
-        <script>window.onload = () => { window.print(); setTimeout(()=>window.close(), 300); };</script>
+        <script>
+          const finishPrint = () => {
+            const run = () => {
+              window.focus();
+              setTimeout(() => {
+                window.print();
+                setTimeout(() => window.close(), 350);
+              }, 80);
+            };
+            if (document.fonts && document.fonts.ready) {
+              document.fonts.ready.then(run).catch(run);
+            } else {
+              run();
+            }
+          };
+          window.addEventListener("load", finishPrint);
+        </script>
       </body>
-    </html>`);
+    </html>
+  `;
+
+  const buildSheetPrintHtml = ({
+    assetRows,
+    startSlot,
+    inlineLogoMarkup,
+    qrMarkupById,
+  }) => {
+    const pages = buildSheetPages(assetRows, startSlot);
+    const pageMarkup = pages
+      .map(
+        (pageSlots, pageIndex) => `
+          <div class="sheet-page${pageIndex > 0 ? " page-break" : ""}">
+            <div class="sheet-grid">
+              ${pageSlots
+                .map((assetRow, slotIndex) => {
+                  if (!assetRow) {
+                    return `<div class="sheet-slot empty-slot" data-slot="${slotIndex + 1}"></div>`;
+                  }
+
+                  return `<div class="sheet-slot" data-slot="${slotIndex + 1}">
+                    ${buildStickerMarkup({
+                      assetRow,
+                      svgMarkup:
+                        qrMarkupById.get(Number(assetRow.id)) ||
+                        qrMarkupById.get(String(assetRow.id)) ||
+                        "",
+                      inlineLogoMarkup,
+                      className: "sticker sheet-sticker",
+                    })}
+                  </div>`;
+                })
+                .join("")}
+            </div>
+          </div>`,
+      )
+      .join("");
+
+    return `
+      <html>
+        <head>
+          <title>${escapeHtml(`Asset Label Sheet Slot ${clampSheetSlot(startSlot)}`)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 0; }
+            body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              color: #0f172a;
+              font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+            .sheet-page {
+              width: ${A4_SHEET_SPEC.pageWidthMm}mm;
+              height: ${A4_SHEET_SPEC.pageHeightMm}mm;
+              box-sizing: border-box;
+              padding:
+                ${A4_SHEET_SPEC.topMarginMm}mm
+                ${A4_SHEET_SPEC.rightMarginMm}mm
+                ${A4_SHEET_SPEC.bottomMarginMm}mm
+                ${A4_SHEET_SPEC.leftMarginMm}mm;
+              overflow: hidden;
+            }
+            .page-break {
+              page-break-before: always;
+            }
+            .sheet-grid {
+              display: grid;
+              grid-template-columns: repeat(${A4_SHEET_SPEC.cols}, ${ASSET_STICKER_SPEC.widthMm}mm);
+              grid-template-rows: repeat(${A4_SHEET_SPEC.rows}, ${ASSET_STICKER_SPEC.heightMm}mm);
+              column-gap: ${A4_SHEET_SPEC.colGapMm}mm;
+              row-gap: ${A4_SHEET_SPEC.rowGapMm}mm;
+            }
+            .sheet-slot {
+              width: ${ASSET_STICKER_SPEC.widthMm}mm;
+              height: ${ASSET_STICKER_SPEC.heightMm}mm;
+              overflow: hidden;
+            }
+            .empty-slot {
+              visibility: hidden;
+            }
+            .sticker {
+              width: ${ASSET_STICKER_SPEC.widthMm}mm;
+              height: ${ASSET_STICKER_SPEC.heightMm}mm;
+              box-sizing: border-box;
+              padding: ${ASSET_STICKER_SPEC.safeInsetMm}mm;
+              background: #ffffff;
+              overflow: hidden;
+            }
+            .sticker-layout {
+              display: grid;
+              grid-template-columns: ${ASSET_STICKER_SPEC.qrMm}mm minmax(0, 1fr);
+              column-gap: ${ASSET_STICKER_SPEC.qrGapMm}mm;
+              align-items: center;
+              height: 100%;
+            }
+            .qr-column {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 0.9mm;
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 1.35mm;
+              min-width: 0;
+            }
+            .brand-mark,
+            .brand-image {
+              width: ${ASSET_STICKER_SPEC.logoMm}mm;
+              height: ${ASSET_STICKER_SPEC.logoMm}mm;
+              flex: 0 0 ${ASSET_STICKER_SPEC.logoMm}mm;
+            }
+            .brand-mark svg,
+            .brand-image {
+              width: 100%;
+              height: 100%;
+              display: block;
+            }
+            .brand-copy {
+              text-align: left;
+              min-width: 0;
+            }
+            .brand-name {
+              font-size: 6.4pt;
+              font-weight: 800;
+              letter-spacing: 0.08em;
+              line-height: 1;
+            }
+            .brand-subtitle {
+              margin-top: 0.2mm;
+              color: #475569;
+              font-size: 4.6pt;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              line-height: 1.1;
+            }
+            .qr-shell {
+              width: ${ASSET_STICKER_SPEC.qrMm}mm;
+              height: ${ASSET_STICKER_SPEC.qrMm}mm;
+              border: 0.25mm solid #e2e8f0;
+              border-radius: 1.4mm;
+              padding: 0.65mm;
+              box-sizing: border-box;
+              background: #ffffff;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .qr-shell svg {
+              width: 100%;
+              height: 100%;
+              display: block;
+            }
+            .meta {
+              display: grid;
+              gap: 0.55mm;
+              min-width: 0;
+            }
+            .meta-row {
+              display: grid;
+              gap: 0.1mm;
+              min-width: 0;
+            }
+            .meta-label {
+              color: #64748b;
+              font-size: 4.3pt;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              line-height: 1.1;
+            }
+            .meta-value {
+              color: #0f172a;
+              font-size: 5.6pt;
+              font-weight: 600;
+              line-height: 1.15;
+              word-break: break-word;
+            }
+            .info-column {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              gap: 0.9mm;
+              min-width: 0;
+            }
+            .scan-note {
+              color: #475569;
+              font-size: 4.2pt;
+              text-align: center;
+              line-height: 1.15;
+              max-width: ${ASSET_STICKER_SPEC.qrMm}mm;
+            }
+          </style>
+        </head>
+        <body>
+          ${pageMarkup}
+          <script>
+            const finishPrint = () => {
+              const run = () => {
+                window.focus();
+                setTimeout(() => {
+                  window.print();
+                  setTimeout(() => window.close(), 350);
+                }, 80);
+              };
+              if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(run).catch(run);
+              } else {
+                run();
+              }
+            };
+            window.addEventListener("load", finishPrint);
+          </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const persistNextSheetSlot = (startSlot, labelCount = 1) => {
+    if (typeof window === "undefined") return;
+    const nextSlot = computeNextSheetSlot(startSlot, labelCount);
+    window.localStorage.setItem(
+      ASSET_LABEL_SLOT_STORAGE_KEY,
+      String(nextSlot),
+    );
+    setSheetStartSlot(nextSlot);
+  };
+
+  const printQr = async (assetRow = qrAsset) => {
+    if (!assetRow) return;
+    const svgMarkup =
+      assetRow?.id === qrAsset?.id && qrSvgMarkup
+        ? qrSvgMarkup
+        : await buildQrSvg(assetRow);
+    const inlineLogoMarkup = await loadInlineLogoSvg();
+    const w = window.open("", "_blank", "width=560,height=720");
+    if (!w) return;
+    w.document.write(
+      buildStickerPrintHtml({ assetRow, svgMarkup, inlineLogoMarkup }),
+    );
     w.document.close();
   };
+
+  const buildRepeatedTestRows = (assetRow, copies = A4_SHEET_SPEC.slots) => {
+    if (!assetRow) return [];
+    return Array.from({ length: copies }, () => assetRow);
+  };
+
+  const printSheet = async (
+    assetRows = qrPrintAssets.length ? qrPrintAssets : qrAsset ? [qrAsset] : [],
+    startSlot = sheetStartSlot,
+    { persistSlot = true } = {},
+  ) => {
+    const rows = Array.isArray(assetRows) ? assetRows.filter(Boolean) : [];
+    if (!rows.length) return;
+
+    const inlineLogoMarkup = await loadInlineLogoSvg();
+    const qrEntries = await Promise.all(
+      rows.map(async (assetRow) => {
+        const svgMarkup =
+          Number(assetRow?.id) === Number(qrAsset?.id) && qrSvgMarkup
+            ? qrSvgMarkup
+            : await buildQrSvg(assetRow);
+        return [Number(assetRow.id), svgMarkup];
+      }),
+    );
+
+    const w = window.open("", "_blank", "width=900,height=1200");
+    if (!w) return;
+    w.document.write(
+      buildSheetPrintHtml({
+        assetRows: rows,
+        startSlot,
+        inlineLogoMarkup,
+        qrMarkupById: new Map(qrEntries),
+      }),
+    );
+    w.document.close();
+    if (persistSlot) {
+      persistNextSheetSlot(startSlot, rows.length);
+    }
+  };
+
+  const printRepeatedTestSheet = async () => {
+    if (!qrAsset) return;
+    await printSheet(buildRepeatedTestRows(qrAsset), 1, {
+      persistSlot: false,
+    });
+  };
+
+  const qrDownloadHref = useMemo(() => {
+    if (!qrSvgMarkup) return "";
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvgMarkup)}`;
+  }, [qrSvgMarkup]);
+
+  const sheetPreviewPages = useMemo(
+    () =>
+      buildSheetPages(
+        qrPrintAssets.length ? qrPrintAssets : qrAsset ? [qrAsset] : [],
+        sheetStartSlot,
+      ),
+    [buildSheetPages, qrAsset, qrPrintAssets, sheetStartSlot],
+  );
+
+  const sheetLabelCount = qrPrintAssets.length || (qrAsset ? 1 : 0);
+  const sheetEndSlot = sheetLabelCount
+    ? computeSheetEndSlot(sheetStartSlot, sheetLabelCount)
+    : sheetStartSlot;
 
   const enableItemSelection = Boolean(resolvedCustodianId);
 
@@ -1456,8 +2098,29 @@ export default function IssueUnifiedForm({
             {/* Mode switch: Serialized → assets table; Non-serialized → qty */}
             {isSerialized ? (
               <>
-                <div className="text-sm font-medium text-gray-700 mb-2">
-                  Select serialized assets to issue
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium text-gray-700">
+                    Select serialized assets to issue
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-slate-500">
+                      Selected labels: {selectedAssetRows.length}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 px-3"
+                      disabled={!selectedAssetRows.length}
+                      onClick={() =>
+                        openQrPreview(
+                          selectedAssetRows[0],
+                          selectedAssetRows,
+                        )
+                      }
+                    >
+                      Print Selected Labels
+                    </Button>
+                  </div>
                 </div>
                 <div className="rounded-md border overflow-x-auto">
                   <ListTable
@@ -1810,37 +2473,268 @@ export default function IssueUnifiedForm({
       />
 
       {/* QR Preview Modal */}
-      <Modal isOpen={qrOpen} onClose={() => setQrOpen(false)} title="QR Code">
-        <div className="flex flex-col items-center gap-3 p-2">
+      <Modal
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        title="Asset Sticker Preview"
+        contentClassName="max-h-[92vh] max-w-[96vw] overflow-y-auto sm:max-w-5xl"
+      >
+        <div className="flex max-h-[calc(92vh-5rem)] flex-col items-center gap-3 overflow-y-auto p-2 pr-1">
           {qrBusy ? (
             <div className="text-sm text-gray-600">Generating…</div>
           ) : (
             <>
-              {qrDataUrl ? (
-                <img
-                  src={qrDataUrl}
-                  alt="QR"
-                  className="w-56 h-56 border rounded"
-                />
-              ) : null}
-              <div className="text-xs text-gray-700">
-                <div>
-                  <b>Asset:</b> {qrAsset?.asset_tag || qrAsset?.id || "-"}
-                </div>
-                <div>
-                  <b>Serial:</b> {qrAsset?.serial_number || "-"}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                <div
+                  className="rounded-[18px] border border-slate-300 bg-white p-3 shadow-sm"
+                  style={{
+                    width: `${ASSET_STICKER_SPEC.widthPx}px`,
+                    height: `${ASSET_STICKER_SPEC.heightPx}px`,
+                  }}
+                >
+                  <div
+                    className="grid h-full items-center"
+                    style={{
+                      gridTemplateColumns: `${ASSET_STICKER_SPEC.qrPx}px minmax(0, 1fr)`,
+                      columnGap: `${Math.max(
+                        8,
+                        Math.round(ASSET_STICKER_SPEC.qrGapMm * MM_TO_CSS_PX),
+                      )}px`,
+                    }}
+                  >
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      {qrSvgMarkup ? (
+                        <div
+                          className="flex items-center justify-center rounded-[10px] border border-slate-200 bg-white p-1.5"
+                          style={{
+                            width: `${ASSET_STICKER_SPEC.qrPx}px`,
+                            height: `${ASSET_STICKER_SPEC.qrPx}px`,
+                          }}
+                          dangerouslySetInnerHTML={{ __html: qrSvgMarkup }}
+                        />
+                      ) : null}
+                      <div className="text-center text-[0.56rem] font-medium leading-tight text-slate-500">
+                        Scan to verify
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {logoSvgMarkup ? (
+                          <div
+                            className="shrink-0 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+                            style={{
+                              width: `${Math.round(
+                                ASSET_STICKER_SPEC.logoMm * MM_TO_CSS_PX,
+                              )}px`,
+                              height: `${Math.round(
+                                ASSET_STICKER_SPEC.logoMm * MM_TO_CSS_PX,
+                              )}px`,
+                            }}
+                            dangerouslySetInnerHTML={{ __html: logoSvgMarkup }}
+                          />
+                        ) : (
+                          <img
+                            src={logo}
+                            alt="HARTRON Logo"
+                            className="shrink-0 object-contain"
+                            style={{
+                              width: `${Math.round(
+                                ASSET_STICKER_SPEC.logoMm * MM_TO_CSS_PX,
+                              )}px`,
+                              height: `${Math.round(
+                                ASSET_STICKER_SPEC.logoMm * MM_TO_CSS_PX,
+                              )}px`,
+                            }}
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <div className="text-[0.63rem] font-extrabold tracking-[0.16em] text-slate-900">
+                            HARTRON
+                          </div>
+                          <div className="text-[0.46rem] uppercase tracking-[0.16em] text-slate-500">
+                            Store Asset Label
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 grid gap-1 text-[0.58rem] leading-tight text-slate-800">
+                        <div>
+                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Asset ID
+                          </div>
+                          <div className="font-semibold">{qrAsset?.id || "-"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Asset Tag
+                          </div>
+                          <div className="font-semibold break-words">
+                            {qrAsset?.asset_tag || "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Serial Number
+                          </div>
+                          <div className="font-semibold break-words">
+                            {qrAsset?.serial_number || "-"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button type="button" onClick={printQr} className="h-9">
-                  Print
+              <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+                <div className="font-medium text-slate-900">
+                  Final print size: {ASSET_STICKER_SPEC.widthMm}mm x{" "}
+                  {ASSET_STICKER_SPEC.heightMm}mm
+                </div>
+                <div className="mt-1">
+                  QR square: {ASSET_STICKER_SPEC.qrMm}mm x{" "}
+                  {ASSET_STICKER_SPEC.qrMm}mm
+                </div>
+                <div className="mt-1">
+                  Safe inset inside each cut label: {ASSET_STICKER_SPEC.safeInsetMm}mm
+                </div>
+                <div className="mt-1">
+                  Labels in this print: {sheetLabelCount}
+                </div>
+                <div className="mt-1">
+                  Sheet template: {A4_SHEET_SPEC.cols} columns x{" "}
+                  {A4_SHEET_SPEC.rows} rows with {A4_SHEET_SPEC.leftMarginMm}mm /{" "}
+                  {A4_SHEET_SPEC.rightMarginMm}mm side margins and{" "}
+                  {A4_SHEET_SPEC.colGapMm}mm x {A4_SHEET_SPEC.rowGapMm}mm blank
+                  gutters.
+                </div>
+                <div className="mt-1">
+                  Top / bottom page margins: {A4_SHEET_SPEC.topMarginMm}mm /{" "}
+                  {A4_SHEET_SPEC.bottomMarginMm}mm
+                </div>
+                <div className="mt-1 break-all text-slate-500">
+                  Scan target: {qrTargetUrl || "-"}
+                </div>
+              </div>
+
+              <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      A4 Pre-cut Sticker Sheet
+                    </div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      18 slots per sheet, filled left-to-right, top-to-bottom.
+                    </div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      Each cut label: {ASSET_STICKER_SPEC.widthMm}mm x{" "}
+                      {ASSET_STICKER_SPEC.heightMm}mm
+                    </div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      Current run: slot {sheetStartSlot} to slot {sheetEndSlot}
+                      {sheetPreviewPages.length > 1
+                        ? ` across ${sheetPreviewPages.length} sheet(s)`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Start Slot
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={A4_SHEET_SPEC.slots}
+                        value={sheetStartSlot}
+                        onChange={(e) =>
+                          setSheetStartSlot(clampSheetSlot(e.target.value))
+                        }
+                        className="h-9 w-24"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setSheetStartSlot(1)}
+                    >
+                      Reset to 1
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setSheetStartSlot(readStoredSheetSlot())}
+                    >
+                      Use Suggested
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  {sheetPreviewPages.map((pageSlots, pageIndex) => (
+                    <div key={`sheet-page-${pageIndex}`}>
+                      <div className="mb-2 text-xs font-medium text-slate-500">
+                        Sheet {pageIndex + 1}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {pageSlots.map((assetRow, slotIndex) => {
+                          const slotNumber = slotIndex + 1;
+                          const filled = Boolean(assetRow);
+                          return (
+                            <div
+                              key={`slot-${pageIndex}-${slotNumber}`}
+                              className={`rounded-xl border p-2 text-center text-[11px] ${
+                                filled
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                  : "border-slate-200 bg-slate-50 text-slate-400"
+                              }`}
+                            >
+                              <div className="font-semibold">Slot {slotNumber}</div>
+                              <div className="mt-1 min-h-[2.5rem] break-words">
+                                {filled
+                                  ? assetRow.asset_tag || assetRow.serial_number || `Asset ${assetRow.id}`
+                                  : "Blank"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 text-xs text-slate-600">
+                  After A4 sheet printing, the next slot is remembered automatically
+                  so the next label can start from the next unused cutout.
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => printSheet()} className="h-9">
+                  Print 18-up Sheet
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => printRepeatedTestSheet()}
+                  className="h-9"
+                >
+                  Test: Repeat Same Label x18
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => printQr()}
+                  className="h-9"
+                >
+                  Print Single Sticker
                 </Button>
                 <a
-                  href={qrDataUrl}
-                  download={`asset-${qrAsset?.id || "qr"}.png`}
+                  href={qrDownloadHref}
+                  download={`asset-${qrAsset?.id || "qr"}.svg`}
                   className="h-9 inline-flex items-center px-4 border rounded"
                 >
-                  Download
+                  Download QR SVG
                 </a>
               </div>
             </>

@@ -7,6 +7,7 @@ const {
   DayBookItem,
   DayBookItemSerial,
   Stock,
+  ItemMaster,
   ItemCategory,
   ItemCategoryGroup,
   ItemCategoryHead,
@@ -36,6 +37,34 @@ const {
   getLocationScopeFromResolvedCustodian,
   normalizeLocationScope,
 } = require("../utils/location-scope");
+const {
+  generateAssetSecurityCode,
+} = require("../utils/asset-security-code");
+
+const buildHolderSummary = (asset = {}) => {
+  if (asset?.Employee) {
+    return {
+      type: "EMPLOYEE",
+      id: asset.Employee.emp_id ?? asset.current_employee_id ?? null,
+      name: asset.Employee.name ?? null,
+      division: asset.Employee.division ?? null,
+      location:
+        asset.Employee.office_location ?? asset.location_scope ?? null,
+    };
+  }
+
+  if (asset?.Custodian) {
+    return {
+      type: asset.Custodian.custodian_type ?? asset.custodian_type ?? "CUSTODIAN",
+      id: asset.Custodian.id ?? asset.custodian_id ?? null,
+      name: asset.Custodian.display_name ?? null,
+      division: null,
+      location: asset.Custodian.location ?? asset.location_scope ?? null,
+    };
+  }
+
+  return null;
+};
 
 const resolveCustodian = async (
   { employeeId, custodianId, custodianType },
@@ -309,6 +338,87 @@ class AssetRepository {
       where,
       order: [["id", "DESC"]],
     });
+  }
+
+  async getVerificationSummaryById(assetId) {
+    const assetIdNum = Number(assetId);
+    if (!Number.isFinite(assetIdNum) || assetIdNum <= 0) return null;
+
+    const asset = await Asset.findByPk(assetIdNum, {
+      include: [
+        {
+          model: Stock,
+          attributes: ["id", "item_name"],
+          required: false,
+        },
+        {
+          model: ItemMaster,
+          as: "itemMaster",
+          attributes: ["id", "display_name"],
+          required: false,
+        },
+        {
+          model: ItemCategory,
+          attributes: ["id", "category_name"],
+          required: false,
+        },
+        {
+          model: DayBook,
+          attributes: ["id", "entry_no"],
+          required: false,
+        },
+        {
+          model: Vendors,
+          attributes: ["id", "name"],
+          required: false,
+        },
+        {
+          model: Employee,
+          attributes: ["emp_id", "name", "division", "office_location"],
+          required: false,
+        },
+        {
+          model: Custodian,
+          attributes: ["id", "custodian_type", "display_name", "location"],
+          required: false,
+        },
+      ],
+    });
+
+    if (!asset) return null;
+
+    const latestEvent = await AssetEvent.findOne({
+      where: { asset_id: assetIdNum },
+      attributes: ["id", "event_type", "event_date"],
+      order: [
+        ["event_date", "DESC"],
+        ["id", "DESC"],
+      ],
+    });
+
+    const plain = asset.get({ plain: true });
+
+    return {
+      id: plain.id,
+      serial_number: plain.serial_number,
+      asset_tag: plain.asset_tag,
+      status: plain.status,
+      location_scope: plain.location_scope,
+      purchased_at: plain.purchased_at ?? null,
+      warranty_expiry: plain.warranty_expiry ?? null,
+      item_name:
+        plain.itemMaster?.display_name || plain.Stock?.item_name || null,
+      category_name: plain.ItemCategory?.category_name || null,
+      vendor_name: plain.Vendor?.name || null,
+      daybook_entry_no: plain.DayBook?.entry_no || null,
+      current_holder: buildHolderSummary(plain),
+      last_event_type: latestEvent?.event_type || null,
+      last_event_date: latestEvent?.event_date || null,
+      verification_code: generateAssetSecurityCode({
+        assetId: plain.id,
+        serialNumber: plain.serial_number,
+      }),
+    };
   }
   /** Return assets to store and log events. */
   async returnAssets({

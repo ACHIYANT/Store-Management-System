@@ -41,6 +41,112 @@ const HISTORICAL_NO_SERIAL_PREFIX = "MIG-ASSET-NOSERIAL";
 const HISTORICAL_NO_SERIAL_DISPLAY =
   "Migrated data (Serial number not available)";
 
+const ACTIVE_RELATIONSHIP_STATUS_LABELS = new Set([
+  "Issued",
+  "Sent to Repair",
+  "In Transit",
+]);
+
+const RELATIONSHIP_END_STATUS_BY_EVENT_TYPE = {
+  Returned: "Returned to Store",
+  SubmittedToStore: "Returned to Store",
+  Transferred: "Transferred",
+  Retained: "Retained",
+  Disposed: "Disposed",
+  Lost: "Lost",
+  MarkedEWaste: "Marked E-Waste",
+  EWasteOut: "E-Waste Out",
+  "MRN Cancelled": "MRN Cancelled",
+};
+
+const toSortableTimestamp = (value) => {
+  if (!value) return Number.NaN;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : Number.NaN;
+};
+
+const isEventAfterAnchor = (event = {}, anchor = {}) => {
+  const eventTime = toSortableTimestamp(event.event_date);
+  const anchorTime = toSortableTimestamp(anchor.event_date);
+  if (Number.isFinite(eventTime) && Number.isFinite(anchorTime)) {
+    if (eventTime !== anchorTime) {
+      return eventTime > anchorTime;
+    }
+  }
+  return Number(event.id || 0) > Number(anchor.id || 0);
+};
+
+const normalizeIssuedHolder = ({
+  employeeId = null,
+  custodianId = null,
+  custodianType = null,
+} = {}) => {
+  const normalizedEmployeeId =
+    employeeId !== undefined && employeeId !== null && String(employeeId).trim() !== ""
+      ? String(employeeId)
+      : null;
+  const normalizedCustodianId =
+    custodianId !== undefined && custodianId !== null && String(custodianId).trim() !== ""
+      ? String(custodianId)
+      : normalizedEmployeeId;
+  const normalizedCustodianType =
+    String(custodianType || (normalizedEmployeeId ? "EMPLOYEE" : ""))
+      .trim()
+      .toUpperCase() || null;
+
+  return {
+    employeeId: normalizedEmployeeId,
+    custodianId: normalizedCustodianId,
+    custodianType: normalizedCustodianType,
+  };
+};
+
+const deriveIssuedAssetRelationshipStatus = (
+  asset = {},
+  holder = {},
+  { assetEvents = [], issueEvent = null } = {},
+) => {
+  const currentStatus = String(asset?.status || "").trim();
+  const currentHolder = normalizeIssuedHolder({
+    employeeId: asset?.current_employee_id ?? null,
+    custodianId: asset?.custodian_id ?? null,
+    custodianType: asset?.custodian_type ?? null,
+  });
+  const originalHolder = normalizeIssuedHolder(holder);
+
+  const sameHolder =
+    currentHolder.custodianId &&
+    originalHolder.custodianId &&
+    currentHolder.custodianId === originalHolder.custodianId &&
+    currentHolder.custodianType === originalHolder.custodianType;
+
+  if (issueEvent) {
+    const endingEvent = assetEvents.find((event) => {
+      const eventType = String(event?.event_type || "").trim();
+      return (
+        isEventAfterAnchor(event, issueEvent) &&
+        Boolean(RELATIONSHIP_END_STATUS_BY_EVENT_TYPE[eventType])
+      );
+    });
+    const endingStatus =
+      RELATIONSHIP_END_STATUS_BY_EVENT_TYPE[
+        String(endingEvent?.event_type || "").trim()
+      ] || null;
+    if (endingStatus) {
+      return endingStatus;
+    }
+  }
+
+  if (currentStatus === "Retained") return "Retained";
+  if (currentStatus === "InStore") return "Returned to Store";
+  if (currentStatus === "Issued") return sameHolder ? "Issued" : "Transferred";
+  if (currentStatus === "Repair") return "Sent to Repair";
+  if (currentStatus === "InTransit") return "In Transit";
+  if (currentStatus === "Removed as MRN Cancelled") return "MRN Cancelled";
+
+  return currentStatus || null;
+};
+
 const ensureSameLocationScope = (sourceLocationScope, targetLocationScope, label) => {
   const source = normalizeLocationScope(sourceLocationScope);
   const target = normalizeLocationScope(targetLocationScope);
@@ -414,8 +520,6 @@ class IssuedItemRepository {
     const useCurrentOnly = Boolean(currentOnly);
     const offset = (safePage - 1) * safeLimit;
     const searchTerm = typeof search === "string" ? search.trim() : "";
-    const currentHoldingStatuses = new Set(["Issued", "Repair"]);
-
     const toStartOfDay = (dateStr) => new Date(`${dateStr}T00:00:00.000`);
     const toEndOfDay = (dateStr) => new Date(`${dateStr}T23:59:59.999`);
 
@@ -539,6 +643,8 @@ class IssuedItemRepository {
     };
 
     /* ---------------- Query ---------------- */
+    let assetEventHistoryById = new Map();
+
     const mapRow = (r) => {
       const cat = r.Stock?.ItemCategory;
       const serialized = !!cat?.serialized_required;
@@ -549,9 +655,16 @@ class IssuedItemRepository {
         (Number.isFinite(rowEmployeeId) ? String(rowEmployeeId) : null);
       const custodianType =
         r.custodian_type ?? (Number.isFinite(rowEmployeeId) ? "EMPLOYEE" : null);
+      const issuedHolder = normalizeIssuedHolder({
+        employeeId: Number.isFinite(rowEmployeeId) ? rowEmployeeId : null,
+        custodianId,
+        custodianType,
+      });
       const custodianName = r.Custodian?.display_name || r.Employee?.name || null;
       const rawAssets =
         r.AssetEvents?.map((ev) => ({
+          issue_event_id: ev.id ?? null,
+          issue_event_date: ev.event_date ?? null,
           asset_id: ev.Asset?.id,
           asset_tag: ev.Asset?.asset_tag,
           serial_number: this._isHistoricalNoSerialAsset(ev.Asset?.serial_number)
@@ -564,22 +677,31 @@ class IssuedItemRepository {
           current_employee_id: ev.Asset?.current_employee_id ?? null,
           custodian_id: ev.Asset?.custodian_id ?? null,
           custodian_type: ev.Asset?.custodian_type ?? null,
+          relationship_status_label: deriveIssuedAssetRelationshipStatus(
+            {
+              status: ev.Asset?.status || null,
+              current_employee_id: ev.Asset?.current_employee_id ?? null,
+              custodian_id: ev.Asset?.custodian_id ?? null,
+              custodian_type: ev.Asset?.custodian_type ?? null,
+            },
+            issuedHolder,
+            {
+              assetEvents: assetEventHistoryById.get(ev.Asset?.id) || [],
+              issueEvent: {
+                id: ev.id ?? null,
+                event_date: ev.event_date ?? null,
+              },
+            },
+          ),
         })).filter((a) => Boolean(a.asset_id)) || [];
 
       const filteredAssets =
         useCurrentOnly && serialized
-          ? rawAssets.filter((a) => {
-              const matchesEmployee =
-                Number.isFinite(rowEmployeeId) &&
-                Number(a.current_employee_id) === rowEmployeeId;
-              const matchesCustodian =
-                custodianId != null &&
-                String(a.custodian_id || "") === String(custodianId);
-              return (
-                (matchesEmployee || matchesCustodian) &&
-                currentHoldingStatuses.has(String(a.status || ""))
-              );
-            })
+          ? rawAssets.filter((a) =>
+              ACTIVE_RELATIONSHIP_STATUS_LABELS.has(
+                String(a.relationship_status_label || "").trim(),
+              ),
+            )
           : rawAssets;
 
       if (useCurrentOnly && serialized && filteredAssets.length === 0) {
@@ -608,6 +730,11 @@ class IssuedItemRepository {
           asset_id: a.asset_id,
           asset_tag: a.asset_tag,
           serial_number: a.serial_number,
+          status: a.status,
+          current_employee_id: a.current_employee_id,
+          custodian_id: a.custodian_id,
+          custodian_type: a.custodian_type,
+          relationship_status_label: a.relationship_status_label,
         })),
         requisition_url: r.requisition_url || null,
         requisition_id: r.requisition_id || r.Requisition?.id || null,
@@ -633,6 +760,41 @@ class IssuedItemRepository {
       ],
     };
 
+    const buildAssetEventHistoryById = async (issuedRows) => {
+      const assetIds = [
+        ...new Set(
+          (issuedRows || [])
+            .flatMap((row) => row.AssetEvents || [])
+            .map((event) => event?.Asset?.id)
+            .filter(Boolean),
+        ),
+      ];
+
+      if (assetIds.length === 0) {
+        return new Map();
+      }
+
+      const assetEvents = await AssetEvent.findAll({
+        where: { asset_id: { [Op.in]: assetIds } },
+        attributes: ["id", "asset_id", "event_type", "event_date"],
+        order: [
+          ["asset_id", "ASC"],
+          ["event_date", "ASC"],
+          ["id", "ASC"],
+        ],
+        raw: true,
+      });
+
+      return assetEvents.reduce((map, event) => {
+        const key = event.asset_id;
+        if (!map.has(key)) {
+          map.set(key, []);
+        }
+        map.get(key).push(event);
+        return map;
+      }, new Map());
+    };
+
     if (useCursorMode) {
       const cursorParts = decodeCursor(cursor);
       const cursorWhere = applyDateIdDescCursor(
@@ -650,6 +812,7 @@ class IssuedItemRepository {
 
       const hasMore = rowsWithExtra.length > safeLimit;
       const rows = hasMore ? rowsWithExtra.slice(0, safeLimit) : rowsWithExtra;
+      assetEventHistoryById = await buildAssetEventHistoryById(rows);
       const mapped = rows.map(mapRow).filter(Boolean);
       const nextCursor =
         hasMore && rows.length
@@ -679,6 +842,8 @@ class IssuedItemRepository {
       limit: safeLimit,
       offset,
     });
+
+    assetEventHistoryById = await buildAssetEventHistoryById(rows);
 
     return {
       rows: rows.map(mapRow).filter(Boolean),

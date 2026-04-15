@@ -15,12 +15,19 @@ const bcrypt = require("bcrypt");
 const { isAssignmentManagedRole } = require("../constants/org-assignments");
 const { normalizeDivisionValue } = require("../utils/division-utils");
 const {
+  LOCATION_OPTIONS,
+  normalizeLocationValue,
+} = require("../utils/location-options");
+const {
   PASSWORD_POLICY_HINT,
   PASSWORD_POLICY_MESSAGE,
   isPasswordPolicyCompliant,
 } = require("../utils/password-policy");
 
 const DEFAULT_SIGNUP_ROLE = "USER";
+const ALLOWED_LOCATION_LIST = LOCATION_OPTIONS.map((option) => option.value).join(
+  ", ",
+);
 
 const buildAuthError = ({
   statusCode = 401,
@@ -156,6 +163,45 @@ const buildUniqueUsers = (users = []) => {
     if (byName !== 0) return byName;
     return Number(left?.id || 0) - Number(right?.id || 0);
   });
+};
+
+const getAssignmentLocationScopeKey = (assignment = {}) =>
+  normalizeLocationScopeKey(
+    assignment?.metadata_json?.location ||
+      (String(assignment?.scope_type || "").trim().toUpperCase() === "LOCATION"
+        ? assignment?.scope_key || assignment?.scope_label
+        : ""),
+  );
+
+const getDivisionHeadTargetUsers = (assignments = [], target = {}) => {
+  const targetDivision = normalizeDivisionValue(target?.requester_division) || null;
+  const targetLocation = normalizeLocationScopeKey(target?.location_scope);
+  if (!targetDivision) return [];
+
+  const divisionMatches = (Array.isArray(assignments) ? assignments : []).filter(
+    (assignment) =>
+      normalizeDivisionValue(
+        assignment?.metadata_json?.division_value ||
+          assignment?.scope_label ||
+          assignment?.metadata_json?.display_name,
+      ) === targetDivision,
+  );
+  if (!divisionMatches.length) return [];
+  if (!targetLocation) {
+    return divisionMatches.map((assignment) => assignment?.user).filter(Boolean);
+  }
+
+  const exactLocationMatches = divisionMatches.filter(
+    (assignment) => getAssignmentLocationScopeKey(assignment) === targetLocation,
+  );
+  if (exactLocationMatches.length) {
+    return exactLocationMatches.map((assignment) => assignment?.user).filter(Boolean);
+  }
+
+  return divisionMatches
+    .filter((assignment) => !getAssignmentLocationScopeKey(assignment))
+    .map((assignment) => assignment?.user)
+    .filter(Boolean);
 };
 
 const normalizeText = (value) => {
@@ -1411,16 +1457,7 @@ class UserService {
       let source = null;
 
       if (target.pending_role === "DIVISION_HEAD" && target.requester_division) {
-        matchedUsers = (Array.isArray(divisionAssignments) ? divisionAssignments : [])
-          .filter((assignment) =>
-            normalizeDivisionValue(
-              assignment?.metadata_json?.division_value ||
-                assignment?.scope_label ||
-                assignment?.metadata_json?.display_name,
-            ) === target.requester_division,
-          )
-          .map((assignment) => assignment?.user)
-          .filter(Boolean);
+        matchedUsers = getDivisionHeadTargetUsers(divisionAssignments, target);
         if (matchedUsers.length) {
           source = "assignment";
         }
@@ -1582,21 +1619,24 @@ class UserService {
   }
 
   async assignLocationScope(userId, locationScope, options = {}) {
-    const normalizedLocationScope = String(locationScope || "")
-      .trim()
-      .toUpperCase();
-    if (!normalizedLocationScope) {
+    const normalizedLocationLabel = normalizeLocationValue(
+      locationScope || options.scopeLabel || null,
+    );
+    if (!normalizedLocationLabel) {
       throw {
         statusCode: 400,
-        message: "locationScope is required.",
+        message: `locationScope must be one of: ${ALLOWED_LOCATION_LIST}.`,
       };
     }
+    const normalizedLocationScope = String(normalizedLocationLabel)
+      .trim()
+      .toUpperCase();
 
     await this.UserRepository.assignLocationScopeToUser(
       userId,
       {
         locationScope: normalizedLocationScope,
-        scopeLabel: options.scopeLabel || normalizedLocationScope,
+        scopeLabel: normalizedLocationLabel,
         actorUserId: options.actorUserId || null,
       },
     );
