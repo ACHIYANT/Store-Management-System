@@ -48,6 +48,10 @@ export const DIVISION_OPTIONS = [
   },
 ];
 
+const KNOWN_DIVISION_VALUES = new Set(
+  DIVISION_OPTIONS.map((option) => option.value),
+);
+
 const normalizeText = (value) =>
   String(value || "")
     .trim()
@@ -82,6 +86,9 @@ export const normalizeDivisionValue = (value) => {
   );
   return lookup.get(withoutTrailingDivision.toLowerCase()) || withoutTrailingDivision;
 };
+
+export const isKnownDivisionValue = (value) =>
+  KNOWN_DIVISION_VALUES.has(normalizeDivisionValue(value));
 
 export const formatDivisionDisplayLabel = (value) => {
   const canonicalValue = normalizeDivisionValue(value);

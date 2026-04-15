@@ -25,6 +25,7 @@ import DayBookItems from "./pages/DayBookItems";
 import Mrn from "./pages/Mrn";
 import MrnPage from "./pages/MrnPage";
 import MrnVerify from "./pages/MrnVerify";
+import AssetVerify from "./pages/AssetVerify";
 import Mir from "./pages/Mir";
 import MirPage from "./pages/MirPage";
 import ItemCategoryUpdateForm from "./components/Forms/ItemCategoryUpdateForm";
@@ -73,6 +74,7 @@ function App() {
           element={<Navigate to="/activate-account" replace />}
         />
         <Route path="/reset-pwd" element={<ResetPassword />} />
+        <Route path="/asset/verify" element={<AssetVerify />} />
 
         {/* Protected Routes - with sidebar */}
         <Route path="/" element={<Layout />}>

@@ -14,8 +14,13 @@ const {
 } = require("../constants/org-assignments");
 const {
   formatDivisionDisplayLabel,
+  isKnownDivisionValue,
   normalizeDivisionValue,
 } = require("../utils/division-utils");
+const {
+  LOCATION_OPTIONS,
+  normalizeLocationValue,
+} = require("../utils/location-options");
 
 const createError = (message, statusCode = StatusCodes.BAD_REQUEST) => {
   const error = new Error(message);
@@ -33,6 +38,10 @@ const toValidDate = (value, fieldName) => {
   }
   return parsed;
 };
+
+const ALLOWED_LOCATION_LIST = LOCATION_OPTIONS.map((option) => option.value).join(
+  ", ",
+);
 
 const serializeAssignment = (assignment) => {
   const plain = assignment?.get ? assignment.get({ plain: true }) : assignment;
@@ -161,10 +170,20 @@ class OrgAssignmentService {
         custodian_id: scopeKey,
         custodian_type: custodianType,
         display_name: providedDisplayName || scopeLabel || metadataJson?.display_name || null,
-        location:
-          metadataJson?.location !== undefined && metadataJson?.location !== null
-            ? String(metadataJson.location).trim() || null
-            : null,
+        location: (() => {
+          const rawLocation =
+            metadataJson?.location !== undefined && metadataJson?.location !== null
+              ? metadataJson.location
+              : payload.location;
+          if (rawLocation === undefined || rawLocation === null) return null;
+          const normalizedLocation = normalizeLocationValue(rawLocation);
+          if (!normalizedLocation) {
+            throw createError(
+              `location must be one of: ${ALLOWED_LOCATION_LIST}.`,
+            );
+          }
+          return normalizedLocation;
+        })(),
       };
 
       if (custodianType === "DIVISION") {
@@ -176,6 +195,16 @@ class OrgAssignmentService {
               scopeLabel ||
               providedDisplayName,
           ) || null;
+        if (!divisionValue || !isKnownDivisionValue(divisionValue)) {
+          throw createError(
+            "division_value must be one of the configured divisions.",
+          );
+        }
+        if (!metadataJson.location) {
+          throw createError(
+            `location is required and must be one of: ${ALLOWED_LOCATION_LIST} for DIVISION assignments.`,
+          );
+        }
         scopeLabel = divisionValue || scopeLabel || providedDisplayName || null;
         metadataJson = {
           ...metadataJson,
@@ -190,14 +219,16 @@ class OrgAssignmentService {
     }
 
     if (scopeType === ASSIGNMENT_SCOPE_TYPES.LOCATION) {
-      const resolvedLocation =
-        normalizeScopeLabel(
-          scopeLabel ||
-            metadataJson?.location ||
-            payload.location ||
-            payload.scopeLabel ||
-            payload.scopeKey,
-        ) || null;
+      const resolvedLocation = normalizeLocationValue(
+        scopeLabel ||
+          metadataJson?.location ||
+          payload.location ||
+          payload.scopeLabel ||
+          payload.scopeKey,
+      );
+      if (!resolvedLocation) {
+        throw createError(`location must be one of: ${ALLOWED_LOCATION_LIST}.`);
+      }
       scopeLabel = resolvedLocation || scopeLabel || null;
       scopeKey = scopeKey || normalizeScopeKey(resolvedLocation);
       metadataJson = {

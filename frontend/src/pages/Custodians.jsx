@@ -7,6 +7,8 @@ import Modal from "@/components/Modal";
 import PopupMessage from "@/components/PopupMessage";
 import useDebounce from "@/hooks/useDebounce";
 import { toStoreApiUrl } from "@/lib/api-config";
+import { DIVISION_OPTIONS, formatDivisionDisplayLabel } from "@/lib/divisions";
+import { LOCATION_OPTIONS, formatLocationDisplayLabel } from "@/lib/locations";
 import { hasRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,8 +107,19 @@ export default function Custodians() {
   const columns = useMemo(
     () => [
       { key: "id", label: "Custodian ID" },
-      { key: "display_name", label: "Display Name" },
-      { key: "location", label: "Location" },
+      {
+        key: "display_name",
+        label: "Display Name",
+        render: (value, row) =>
+          row?.custodian_type === "DIVISION"
+            ? formatDivisionDisplayLabel(value)
+            : value || "-",
+      },
+      {
+        key: "location",
+        label: "Location",
+        render: (value) => formatLocationDisplayLabel(value) || value || "-",
+      },
       {
         key: "custodian_type",
         label: "Type",
@@ -141,7 +154,10 @@ export default function Custodians() {
       setPopup({
         open: true,
         type: "error",
-        message: "Display name is required.",
+        message:
+          form.custodianType === "DIVISION"
+            ? "Division is required."
+            : "Display name is required.",
         moveTo: "",
       });
       return;
@@ -222,7 +238,8 @@ export default function Custodians() {
                 {
                   key: "location",
                   label: "Location",
-                  type: "text",
+                  type: "select",
+                  options: LOCATION_OPTIONS,
                 },
               ]}
               filters={filters}
@@ -255,6 +272,7 @@ export default function Custodians() {
                 setForm((prev) => ({
                   ...prev,
                   custodianType: value,
+                  displayName: "",
                 }))
               }
             >
@@ -272,22 +290,43 @@ export default function Custodians() {
           </div>
 
           <div className="grid gap-2">
-            <Label>Display Name</Label>
-            <Input
-              value={form.displayName}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  displayName: e.target.value,
-                }))
-              }
-              placeholder={
-                form.custodianType === "DIVISION"
-                  ? "Administration Division"
-                  : "Vehicle KA01AB1234"
-              }
-              className="h-11"
-            />
+            <Label>
+              {form.custodianType === "DIVISION" ? "Division" : "Display Name"}
+            </Label>
+            {form.custodianType === "DIVISION" ? (
+              <Select
+                value={form.displayName || undefined}
+                onValueChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    displayName: value,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Select division" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DIVISION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.displayName}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    displayName: e.target.value,
+                  }))
+                }
+                placeholder="Vehicle KA01AB1234"
+                className="h-11"
+              />
+            )}
             <p className="text-xs text-slate-500">
               Custodian ID is auto-generated as the next sequence for the
               selected type.
@@ -296,19 +335,28 @@ export default function Custodians() {
 
           <div className="grid gap-2">
             <Label>Location</Label>
-            <Input
-              value={form.location}
-              onChange={(e) =>
+            <Select
+              value={form.location || undefined}
+              onValueChange={(value) =>
                 setForm((prev) => ({
                   ...prev,
-                  location: e.target.value,
+                  location: value,
                 }))
               }
-              placeholder="Mumbai / Delhi / Panchkula"
-              className="h-11"
-            />
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Select location" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOCATION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-slate-500">
-              Used in auto-generated IDs: DIV-MUM-001 / VEH-DEL-002.
+              Allowed locations for now: Panchkula, Ambala, Gurugram.
             </p>
           </div>
 

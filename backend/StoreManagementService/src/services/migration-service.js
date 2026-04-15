@@ -75,6 +75,41 @@ class MigrationService {
 
     return `${CAT}-${year}-${daybookItemId}-${String(seq).padStart(3, "0")}`;
   }
+
+  parseAssetTagSequence(assetTag, daybookItemId) {
+    const match = String(assetTag || "").match(
+      new RegExp(`-${daybookItemId}-(\\d+)$`),
+    );
+    const seq = Number(match?.[1] || 0);
+    return Number.isInteger(seq) && seq > 0 ? seq : 0;
+  }
+
+  async getNextAssetTagSequence(daybookItemId, transaction) {
+    const [serialRows, assetRows] = await Promise.all([
+      DayBookItemSerial.findAll({
+        attributes: ["asset_tag"],
+        where: { daybook_item_id: daybookItemId },
+        raw: true,
+        transaction,
+      }),
+      Asset.findAll({
+        attributes: ["asset_tag"],
+        where: { daybook_item_id: daybookItemId },
+        raw: true,
+        transaction,
+      }),
+    ]);
+
+    const maxSeq = [...serialRows, ...assetRows].reduce((max, row) => {
+      return Math.max(
+        max,
+        this.parseAssetTagSequence(row?.asset_tag, daybookItemId),
+      );
+    }, 0);
+
+    return maxSeq + 1;
+  }
+
   parseExcelDate(value) {
     if (!value) return null;
 
@@ -751,7 +786,7 @@ class MigrationService {
 
           groupDetail.created_assets = [];
 
-          let seq = 1;
+          let seq = await this.getNextAssetTagSequence(daybookItem.id, transaction);
 
           for (const r of records) {
             const rowNo = this.getRowNo(r, 0);

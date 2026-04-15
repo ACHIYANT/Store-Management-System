@@ -51,6 +51,10 @@ async function withFallbackLocationScopes(user = {}) {
     return baseUser;
   }
 
+  if (baseUser.location_scopes.length > 0) {
+    return baseUser;
+  }
+
   const access = collectActorLocationScopes(baseUser);
   if (access.scopes.length > 0 && !baseUser.location_scopes.length) {
     const assignmentScopedUser = {

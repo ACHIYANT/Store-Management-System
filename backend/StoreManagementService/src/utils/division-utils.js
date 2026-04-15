@@ -50,6 +50,10 @@ const DIVISION_OPTIONS = Object.freeze([
   },
 ]);
 
+const KNOWN_DIVISION_VALUES = new Set(
+  DIVISION_OPTIONS.map((option) => option.value),
+);
+
 const normalizeText = (value) =>
   String(value || "")
     .trim()
@@ -85,6 +89,9 @@ const normalizeDivisionValue = (value) => {
   return lookup.get(withoutTrailingDivision.toLowerCase()) || withoutTrailingDivision;
 };
 
+const isKnownDivisionValue = (value) =>
+  KNOWN_DIVISION_VALUES.has(normalizeDivisionValue(value));
+
 const formatDivisionDisplayLabel = (value) => {
   const canonicalValue = normalizeDivisionValue(value);
   const option = DIVISION_OPTIONS.find((entry) => entry.value === canonicalValue);
@@ -94,5 +101,6 @@ const formatDivisionDisplayLabel = (value) => {
 module.exports = {
   DIVISION_OPTIONS,
   formatDivisionDisplayLabel,
+  isKnownDivisionValue,
   normalizeDivisionValue,
 };

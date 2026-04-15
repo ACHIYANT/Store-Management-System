@@ -119,6 +119,56 @@ const EVENT_DEFAULT_PARTIES = {
   "MRN Cancelled": { from: "System", to: "Store" },
 };
 
+const ALLOWED_ASSET_ACTIONS = {
+  return: new Set(["Issued"]),
+  transfer: new Set(["Issued"]),
+  repairOut: new Set(["InStore", "Issued"]),
+  repairIn: new Set(["Repair"]),
+  retain: new Set(["Issued"]),
+};
+
+const FINALIZE_BLOCKED_STATUSES = new Set([
+  "EWaste",
+  "EWasteOut",
+  "Disposed",
+  "Lost",
+  "Retained",
+  "Removed as MRN Cancelled",
+]);
+
+const ASSET_STATUS_STYLES = {
+  InStore: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  Issued: "bg-blue-100 text-blue-700 border-blue-200",
+  InTransit: "bg-amber-100 text-amber-700 border-amber-200",
+  Repair: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+  EWaste: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  EWasteOut: "bg-orange-100 text-orange-700 border-orange-200",
+  Disposed: "bg-stone-200 text-stone-800 border-stone-300",
+  Lost: "bg-red-100 text-red-700 border-red-200",
+  Retained: "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "Removed as MRN Cancelled": "bg-red-200 text-red-800 border-red-300",
+};
+
+function isAssetActionAllowed(status, actionKey) {
+  const normalizedStatus = String(status || "").trim();
+  if (!normalizedStatus) return false;
+  if (actionKey === "finalize") {
+    return !FINALIZE_BLOCKED_STATUSES.has(normalizedStatus);
+  }
+  const allowed = ALLOWED_ASSET_ACTIONS[actionKey];
+  return allowed ? allowed.has(normalizedStatus) : true;
+}
+
+function assetActionDisabledReason(status, actionKey) {
+  const normalizedStatus = String(status || "").trim();
+  if (!normalizedStatus) return "Asset status is unavailable right now.";
+  if (isAssetActionAllowed(normalizedStatus, actionKey)) return "";
+  if (actionKey === "finalize") {
+    return `Finalize is not allowed for ${normalizedStatus} assets.`;
+  }
+  return `${actionKey} is not allowed for ${normalizedStatus} assets.`;
+}
+
 function partyText(event, side) {
   const person = side === "from" ? event.from_employee : event.to_employee;
   const id = side === "from" ? event.from_employee_id : event.to_employee_id;
@@ -186,6 +236,8 @@ function normalizeAsset(raw, fallbackId) {
     id: raw?.id ?? raw?.asset_id ?? raw?.assetId ?? fallbackId ?? null,
     serial_number: raw?.serial_number ?? raw?.serialNumber ?? null,
     asset_tag: raw?.asset_tag ?? raw?.assetTag ?? null,
+    status: raw?.status ?? null,
+    location_scope: raw?.location_scope ?? raw?.locationScope ?? null,
     item_name:
       raw?.item_name ??
       raw?.itemName ??
@@ -356,6 +408,11 @@ export default function AssetTimeline() {
     () => events.find((event) => event.asset)?.asset || null,
     [events],
   );
+  const latestEvent = useMemo(
+    () => (events.length ? events[events.length - 1] : null),
+    [events],
+  );
+  const currentStatus = String(assetSummary?.status || "").trim();
 
   useEffect(() => {
     if (!assetId) {
@@ -392,7 +449,9 @@ export default function AssetTimeline() {
   }, [assetId, refreshKey]);
 
   const openActionDialog = (nextDialog) => {
-    if (!assetIds.length) return;
+    if (!assetIds.length || !isAssetActionAllowed(currentStatus, nextDialog)) {
+      return;
+    }
     setDialog(nextDialog);
   };
 
@@ -427,6 +486,22 @@ export default function AssetTimeline() {
                 ? `SN: ${assetSummary.serial_number || "-"} | TAG: ${assetSummary.asset_tag || "-"} | ${assetSummary.item_name || "-"}`
                 : "No asset metadata available"}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 font-medium ${
+                  ASSET_STATUS_STYLES[currentStatus] ||
+                  "border-slate-200 bg-slate-100 text-slate-700"
+                }`}
+              >
+                Status: {currentStatus || "-"}
+              </span>
+              <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
+                Location: {assetSummary?.location_scope || "-"}
+              </span>
+              <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
+                Last Event: {latestEvent?.event_type || "-"}
+              </span>
+            </div>
           </div>
 
           <button
@@ -438,17 +513,26 @@ export default function AssetTimeline() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {actions.map((action) => (
-            <button
-              key={action.key}
-              type="button"
-              onClick={() => openActionDialog(action.key)}
-              disabled={!assetIds.length}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {action.label}
-            </button>
-          ))}
+          {actions.map((action) => {
+            const disabled =
+              !assetIds.length || !isAssetActionAllowed(currentStatus, action.key);
+            return (
+              <button
+                key={action.key}
+                type="button"
+                onClick={() => openActionDialog(action.key)}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? assetActionDisabledReason(currentStatus, action.key)
+                    : action.label
+                }
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {action.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

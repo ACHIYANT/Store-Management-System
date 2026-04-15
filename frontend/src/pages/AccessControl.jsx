@@ -8,8 +8,10 @@ import useDebounce from "@/hooks/useDebounce";
 import { toAuthApiUrl, toStoreApiUrl } from "@/lib/api-config";
 import {
   formatDivisionDisplayLabel,
+  isKnownDivisionValue,
   normalizeDivisionValue,
 } from "@/lib/divisions";
+import { LOCATION_OPTIONS, normalizeLocationValue } from "@/lib/locations";
 import { hasRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -318,7 +320,14 @@ export default function AccessControl() {
     }
 
     if (divisionsResult.status === "fulfilled") {
-      setDivisionCustodians(divisionsResult.value?.data?.data || []);
+      const divisionRows = divisionsResult.value?.data?.data || [];
+      setDivisionCustodians(
+        divisionRows.filter(
+          (row) =>
+            isKnownDivisionValue(row?.display_name) &&
+            Boolean(normalizeLocationValue(row?.location)),
+        ),
+      );
     } else {
       setDivisionCustodians([]);
       messages.push(
@@ -384,25 +393,16 @@ export default function AccessControl() {
     [rolesCatalog],
   );
 
-  const locationOptions = useMemo(() => {
-    const locationMap = new Map();
-    [...divisionCustodians, ...vehicleCustodians].forEach((option) => {
-      const location = String(option?.location || "").trim();
-      if (!location) return;
-      const key = location.toUpperCase();
-      if (!locationMap.has(key)) {
-        locationMap.set(key, {
-          id: key,
-          display_name: location,
-          location,
-          scopeType: "LOCATION",
-        });
-      }
-    });
-    return Array.from(locationMap.values()).sort((a, b) =>
-      String(a.display_name).localeCompare(String(b.display_name)),
-    );
-  }, [divisionCustodians, vehicleCustodians]);
+  const locationOptions = useMemo(
+    () =>
+      LOCATION_OPTIONS.map((option) => ({
+        id: option.value.toUpperCase(),
+        display_name: option.label,
+        location: option.value,
+        scopeType: "LOCATION",
+      })),
+    [],
+  );
 
   const assignmentDefinition =
     ASSIGNMENT_TYPE_CONFIG[assignmentForm.assignmentType] ||
@@ -410,16 +410,23 @@ export default function AccessControl() {
 
   const divisionAssignmentOptions = useMemo(
     () =>
-      divisionCustodians.map((option) => {
-        const divisionValue = normalizeDivisionValue(option?.display_name);
-        return {
-          ...option,
-          division_value: divisionValue || String(option?.display_name || "").trim() || null,
-          assignment_display_label: formatDivisionDisplayLabel(
-            divisionValue || option?.display_name,
-          ),
-        };
-      }),
+      divisionCustodians
+        .filter(
+          (option) =>
+            isKnownDivisionValue(option?.display_name) &&
+            Boolean(normalizeLocationValue(option?.location)),
+        )
+        .map((option) => {
+          const divisionValue = normalizeDivisionValue(option?.display_name);
+          return {
+            ...option,
+            division_value:
+              divisionValue || String(option?.display_name || "").trim() || null,
+            assignment_display_label: formatDivisionDisplayLabel(
+              divisionValue || option?.display_name,
+            ),
+          };
+        }),
     [divisionCustodians],
   );
 

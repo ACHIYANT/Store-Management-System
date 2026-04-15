@@ -85,6 +85,13 @@ function eqText(a, b) {
   return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 }
 
+function normalizeLocationScopeValue(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
 function normalizeAssignments(assignments = []) {
   return Array.isArray(assignments)
     ? assignments
@@ -106,65 +113,77 @@ function normalizeAssignments(assignments = []) {
     : [];
 }
 
-function isDivisionAssignmentType(assignmentType) {
-  const normalizedType = String(assignmentType || "")
-    .trim()
-    .toUpperCase();
-  return normalizedType === "DIVISION_HEAD" || normalizedType === "DIVISION_CUSTODIAN";
-}
-
-function getAssignmentScopeValues(
-  assignments = [],
-  assignmentType,
-  scopeType = null,
-) {
+function getAssignmentsByType(assignments = [], assignmentType, scopeType = null) {
   const normalizedType = String(assignmentType || "")
     .trim()
     .toUpperCase();
   const normalizedScopeType = scopeType
     ? String(scopeType).trim().toUpperCase()
     : null;
-  const values = [];
 
-  for (const assignment of normalizeAssignments(assignments)) {
-    if (assignment.assignment_type !== normalizedType) continue;
-    if (normalizedScopeType && assignment.scope_type !== normalizedScopeType) continue;
-    if (isDivisionAssignmentType(normalizedType)) {
-      const divisionCandidates = [
-        assignment.metadata_json?.division_value,
-        assignment.scope_label,
-        assignment.metadata_json?.display_name,
-      ]
-        .map((value) => normalizeDivisionValue(value))
-        .filter(Boolean);
-      values.push(...divisionCandidates);
-      continue;
-    }
-
-    if (assignment.scope_label) values.push(assignment.scope_label);
-    if (assignment.scope_key) values.push(assignment.scope_key);
-    if (assignment.metadata_json?.display_name) {
-      values.push(String(assignment.metadata_json.display_name));
-    }
-  }
-
-  return [...new Set(values.filter(Boolean))];
+  return normalizeAssignments(assignments).filter((assignment) => {
+    if (assignment.assignment_type !== normalizedType) return false;
+    if (normalizedScopeType && assignment.scope_type !== normalizedScopeType) return false;
+    return true;
+  });
 }
 
-function hasMatchingAssignmentScope(
-  assignments = [],
-  assignmentType,
-  expectedScopeValue,
-  scopeType = null,
-) {
-  const expected = isDivisionAssignmentType(assignmentType)
-    ? normalizeDivisionValue(expectedScopeValue)
-    : String(expectedScopeValue || "").trim();
-  if (!expected) return false;
+function getDivisionHeadAssignmentContexts(assignments = []) {
+  const seen = new Set();
+  const contexts = [];
 
-  return getAssignmentScopeValues(assignments, assignmentType, scopeType).some(
-    (value) => eqText(value, expected),
+  for (const assignment of getAssignmentsByType(assignments, "DIVISION_HEAD")) {
+    const divisionValue = normalizeDivisionValue(
+      assignment.metadata_json?.division_value ||
+        assignment.scope_label ||
+        assignment.metadata_json?.display_name,
+    );
+    if (!divisionValue) continue;
+
+    const locationScope = normalizeLocationScopeValue(
+      assignment.metadata_json?.location ||
+        (assignment.scope_type === "LOCATION"
+          ? assignment.scope_key || assignment.scope_label
+          : ""),
+    );
+    const dedupeKey = `${divisionValue}::${locationScope || ""}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    contexts.push({
+      division_value: divisionValue,
+      location_scope: locationScope || null,
+    });
+  }
+
+  return contexts;
+}
+
+function hasDivisionHeadAssignments(assignments = []) {
+  return getDivisionHeadAssignmentContexts(assignments).length > 0;
+}
+
+function hasMatchingDivisionHeadAssignment(
+  assignments = [],
+  expectedDivision,
+  expectedLocation = null,
+) {
+  const normalizedDivision = normalizeDivisionValue(expectedDivision);
+  const normalizedLocation = normalizeLocationScopeValue(expectedLocation);
+  if (!normalizedDivision) return false;
+
+  const contexts = getDivisionHeadAssignmentContexts(assignments).filter(
+    (context) => context.division_value === normalizedDivision,
   );
+  if (!contexts.length) return false;
+  if (!normalizedLocation) return true;
+
+  const hasExactLocationMatch = contexts.some(
+    (context) => context.location_scope === normalizedLocation,
+  );
+  if (hasExactLocationMatch) return true;
+
+  return contexts.some((context) => !context.location_scope);
 }
 
 function hasGlobalAssignment(assignments = []) {
@@ -1113,16 +1132,31 @@ class RequisitionRepository {
         if (hasDivisionMatchConstraint) {
           const firstStage = toNumber(firstStageOrder);
           const scopedOr = [{ current_stage_order: { [Op.ne]: firstStage } }];
-          const scopedDivisions = getAssignmentScopeValues(
-            viewerAssignments,
-            "DIVISION_HEAD",
-          );
+          const divisionHeadContexts = getDivisionHeadAssignmentContexts(viewerAssignments);
 
-          if (scopedDivisions.length) {
-            scopedOr.push({
-              current_stage_order: firstStage,
-              requester_division: { [Op.in]: scopedDivisions },
-            });
+          if (divisionHeadContexts.length) {
+            const locationlessDivisions = [...new Set(
+              divisionHeadContexts
+                .filter((context) => !context.location_scope)
+                .map((context) => context.division_value),
+            )];
+
+            for (const context of divisionHeadContexts.filter(
+              (entry) => entry.location_scope,
+            )) {
+              scopedOr.push({
+                current_stage_order: firstStage,
+                requester_division: context.division_value,
+                location_scope: context.location_scope,
+              });
+            }
+
+            if (locationlessDivisions.length) {
+              scopedOr.push({
+                current_stage_order: firstStage,
+                requester_division: { [Op.in]: locationlessDivisions },
+              });
+            }
           } else if (normalizeDivisionValue(viewerDivision || null)) {
             scopedOr.push({
               current_stage_order: firstStage,
@@ -1589,7 +1623,7 @@ class RequisitionRepository {
       assertActorCanAccessLocation(
         actor || {},
         requisition.location_scope,
-        "reject this requisition",
+        "approve this requisition",
       );
 
       if (FINAL_REQUISITION_STATUSES.has(String(requisition.status || ""))) {
@@ -1611,15 +1645,19 @@ class RequisitionRepository {
         currentStageOrder === firstStage &&
         String(requisition.requester_division || "").trim()
       ) {
-        const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
+        const actorHasDivisionHeadAssignments = hasDivisionHeadAssignments(
           actor?.assignments,
-          "DIVISION_HEAD",
-          normalizeDivisionValue(requisition.requester_division),
+        );
+        const hasDivisionHeadAssignment = hasMatchingDivisionHeadAssignment(
+          actor?.assignments,
+          requisition.requester_division,
+          requisition.location_scope,
         );
         const viewerDivision = normalizeDivisionValue(actor?.division || null);
         if (
           !hasDivisionHeadAssignment &&
-          (!viewerDivision ||
+          (actorHasDivisionHeadAssignments ||
+            !viewerDivision ||
             !eqText(
               viewerDivision,
               normalizeDivisionValue(requisition.requester_division),
@@ -1850,7 +1888,7 @@ class RequisitionRepository {
       assertActorCanAccessLocation(
         actor || {},
         requisition.location_scope,
-        "submit this requisition",
+        "reject this requisition",
       );
 
       const currentStageOrder = toNumber(requisition.current_stage_order);
@@ -1868,15 +1906,19 @@ class RequisitionRepository {
         currentStageOrder === firstStage &&
         String(requisition.requester_division || "").trim()
       ) {
-        const hasDivisionHeadAssignment = hasMatchingAssignmentScope(
+        const actorHasDivisionHeadAssignments = hasDivisionHeadAssignments(
           actor?.assignments,
-          "DIVISION_HEAD",
-          normalizeDivisionValue(requisition.requester_division),
+        );
+        const hasDivisionHeadAssignment = hasMatchingDivisionHeadAssignment(
+          actor?.assignments,
+          requisition.requester_division,
+          requisition.location_scope,
         );
         const viewerDivision = normalizeDivisionValue(actor?.division || null);
         if (
           !hasDivisionHeadAssignment &&
-          (!viewerDivision ||
+          (actorHasDivisionHeadAssignments ||
+            !viewerDivision ||
             !eqText(
               viewerDivision,
               normalizeDivisionValue(requisition.requester_division),
@@ -1941,6 +1983,7 @@ class RequisitionRepository {
     initialStage = null,
     remarks = null,
     requesterDivision = null,
+    requesterLocationScope = null,
   }) {
     const actorUserId = toNumber(actor?.id);
     if (!actorUserId) throw new Error("Invalid user.");
@@ -1951,10 +1994,13 @@ class RequisitionRepository {
         lock: transaction.LOCK.UPDATE,
       });
       if (!requisition) throw new Error("Requisition not found.");
+      const resolvedLocationScope =
+        normalizeLocationScopeValue(requesterLocationScope) ||
+        requisition.location_scope;
       assertActorCanAccessLocation(
         actor || {},
-        requisition.location_scope,
-        "cancel this requisition",
+        resolvedLocationScope,
+        "submit this requisition",
       );
 
       if (String(requisition.status) !== "Draft") {
@@ -1971,6 +2017,7 @@ class RequisitionRepository {
         {
           requester_division:
             normalizeDivisionValue(requesterDivision) || requisition.requester_division,
+          location_scope: resolvedLocationScope || requisition.location_scope,
           status: hasStage ? "Submitted" : "Approved",
           current_stage_order: hasStage ? initialStage.stage_order : null,
           current_stage_role: hasStage ? initialStage.role_name : null,
