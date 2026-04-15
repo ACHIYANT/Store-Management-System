@@ -33,9 +33,13 @@ const VendorMigrationController = require("../../controllers/vendor-migration-co
 const CategoryMasterMigrationController = require("../../controllers/category-master-migration-controller");
 const ProfileController = require("../../controllers/profile-controller");
 const AccountActivationController = require("../../controllers/account-activation-controller");
+const {
+  verifyAsset,
+} = require("../../controllers/asset-verification-controller");
 
 const {
   ensureAuth,
+  ensureAuthOptional,
   requireAnyRole,
   requireAdminOperations,
 } = require("../../middlewares/auth-middleware");
@@ -77,6 +81,7 @@ router.post(
   ensureInternalService,
   AccountActivationController.verifyLoginEligibility,
 );
+router.get("/assets/verify", ensureAuthOptional, verifyAsset);
 
 // 🔎 Stage inbox — role-based (shows only what you can act on now)
 router.use(ensureAuth);

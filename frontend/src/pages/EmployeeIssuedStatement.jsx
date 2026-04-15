@@ -33,6 +33,17 @@ const renderAssetLink = (assetId, label) => {
     </Link>
   );
 };
+const renderTimelineLink = (assetId, label) => {
+  if (!isValidAssetId(assetId)) return safe(label);
+  return (
+    <Link
+      to={`/asset/${assetId}/timeline`}
+      className="text-blue-600 underline hover:text-blue-800 print:text-black print:no-underline"
+    >
+      {safe(label)}
+    </Link>
+  );
+};
 
 function parseCursorMeta(meta) {
   const nextCursor =
@@ -199,6 +210,7 @@ export default function EmployeeIssuedStatement() {
             asset_id: null,
             asset_tag: "-",
             serial_number: "Migrated data (Serial number not available)",
+            status_label: "-",
             issue_date: item.date,
           });
         } else {
@@ -211,6 +223,7 @@ export default function EmployeeIssuedStatement() {
               asset_id: asset.asset_id ?? asset.id ?? null,
               asset_tag: asset.asset_tag || "-",
               serial_number: asset.serial_number || "-",
+              status_label: asset.relationship_status_label || asset.status || "-",
               issue_date: item.date,
             });
           });
@@ -224,6 +237,7 @@ export default function EmployeeIssuedStatement() {
           asset_id: null,
           asset_tag: "-",
           serial_number: "-",
+          status_label: "-",
           issue_date: item.date,
         });
       }
@@ -433,12 +447,13 @@ export default function EmployeeIssuedStatement() {
               <th className="border p-1">Asset Tag</th>
               <th className="border p-1">Serial No</th>
               <th className="border p-1">Issue Date</th>
+              <th className="border p-1">Status</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td className="border p-2 text-center" colSpan={8}>
+                <td className="border p-2 text-center" colSpan={9}>
                   {statementMode === "CURRENT"
                     ? `No items are currently held by this ${subjectLabel.toLowerCase()}.`
                     : `No items issued to this ${subjectLabel.toLowerCase()}.`}
@@ -462,6 +477,9 @@ export default function EmployeeIssuedStatement() {
                   {row.issue_date
                     ? new Date(row.issue_date).toLocaleDateString()
                     : "-"}
+                </td>
+                <td className="border p-1">
+                  {renderTimelineLink(row.asset_id, row.status_label)}
                 </td>
               </tr>
             ))}

@@ -26,12 +26,13 @@ const STORE_STAGE_STATUSES = new Set([
 ]);
 
 const normalizeDivisionScopeValue = (value) => normalizeDivisionValue(value) || "";
+const normalizeLocationScopeValue = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
 
-const normalizeAssignmentScopeValues = (
-  assignments = [],
-  assignmentType,
-  scopeType = null,
-) => {
+const getAssignmentsByType = (assignments = [], assignmentType, scopeType = null) => {
   const normalizedType = String(assignmentType || "").trim().toUpperCase();
   const normalizedScopeType = scopeType
     ? String(scopeType).trim().toUpperCase()
@@ -39,59 +40,72 @@ const normalizeAssignmentScopeValues = (
 
   if (!Array.isArray(assignments)) return [];
 
-  const values = [];
-  for (const assignment of assignments) {
+  return assignments.filter((assignment) => {
     const type = String(assignment?.assignment_type || "").trim().toUpperCase();
     const currentScopeType = String(assignment?.scope_type || "")
       .trim()
       .toUpperCase();
-    if (!type || type !== normalizedType) continue;
-    if (normalizedScopeType && currentScopeType !== normalizedScopeType) continue;
-
-    const label = String(assignment?.scope_label || "").trim();
-    const key = String(assignment?.scope_key || "").trim();
-    const metadataLabel = String(assignment?.metadata_json?.display_name || "").trim();
-    const metadataDivisionValue = normalizeDivisionScopeValue(
-      assignment?.metadata_json?.division_value,
-    );
-    const labelDivisionValue = normalizeDivisionScopeValue(label);
-    const displayDivisionValue = normalizeDivisionScopeValue(metadataLabel);
-
-    if (metadataDivisionValue) values.push(metadataDivisionValue);
-    if (labelDivisionValue) values.push(labelDivisionValue);
-    if (displayDivisionValue) values.push(displayDivisionValue);
-    if (!metadataDivisionValue && !labelDivisionValue && !displayDivisionValue) {
-      if (label) values.push(label);
-      if (key) values.push(key);
-      if (metadataLabel) values.push(metadataLabel);
-    }
-  }
-
-  return [...new Set(values)];
+    if (!type || type !== normalizedType) return false;
+    if (normalizedScopeType && currentScopeType !== normalizedScopeType) return false;
+    return true;
+  });
 };
 
-const hasMatchingAssignmentScope = (
+const getDivisionHeadAssignmentContexts = (assignments = []) => {
+  const contexts = [];
+  const seen = new Set();
+
+  for (const assignment of getAssignmentsByType(assignments, "DIVISION_HEAD")) {
+    const divisionValue = normalizeDivisionScopeValue(
+      assignment?.metadata_json?.division_value ||
+        assignment?.scope_label ||
+        assignment?.metadata_json?.display_name,
+    );
+    if (!divisionValue) continue;
+
+    const locationScope = normalizeLocationScopeValue(
+      assignment?.metadata_json?.location ||
+        (String(assignment?.scope_type || "").trim().toUpperCase() === "LOCATION"
+          ? assignment?.scope_key || assignment?.scope_label
+          : ""),
+    );
+    const dedupeKey = `${divisionValue}::${locationScope || ""}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    contexts.push({
+      division_value: divisionValue,
+      location_scope: locationScope || null,
+    });
+  }
+
+  return contexts;
+};
+
+const hasDivisionHeadAssignments = (assignments = []) =>
+  getDivisionHeadAssignmentContexts(assignments).length > 0;
+
+const hasMatchingDivisionHeadAssignmentContext = (
   assignments = [],
-  assignmentType,
-  expectedValue,
-  scopeType = null,
+  expectedDivision,
+  expectedLocation = null,
 ) => {
-  const expected = String(expectedValue || "").trim().toLowerCase();
-  if (!expected) return false;
+  const normalizedDivision = normalizeDivisionScopeValue(expectedDivision);
+  const normalizedLocation = normalizeLocationScopeValue(expectedLocation);
+  if (!normalizedDivision) return false;
 
-  const normalizedExpectedDivision = normalizeDivisionScopeValue(expectedValue);
-  const comparableExpected = normalizedExpectedDivision || expected;
+  const contexts = getDivisionHeadAssignmentContexts(assignments).filter(
+    (context) => context.division_value === normalizedDivision,
+  );
+  if (!contexts.length) return false;
+  if (!normalizedLocation) return true;
 
-  return normalizeAssignmentScopeValues(
-    assignments,
-    assignmentType,
-    scopeType,
-  ).some((value) => {
-    const normalizedDivisionValue = normalizeDivisionScopeValue(value);
-    const comparableValue =
-      normalizedDivisionValue || String(value || "").trim().toLowerCase();
-    return comparableValue === comparableExpected;
-  });
+  const hasExactLocationMatch = contexts.some(
+    (context) => context.location_scope === normalizedLocation,
+  );
+  if (hasExactLocationMatch) return true;
+
+  return contexts.some((context) => !context.location_scope);
 };
 
 class RequisitionService {
@@ -135,6 +149,30 @@ class RequisitionService {
 
   _resolveRequesterDivision(actor = {}) {
     return normalizeDivisionValue(actor?.division || null) || actor?.division || null;
+  }
+
+  async _resolveRequesterLocationScope(actor = {}, payload = {}) {
+    const requestedLocationScope = payload?.location_scope || payload?.location || null;
+    if (requestedLocationScope) {
+      return resolveActorLocationScope(actor || {}, requestedLocationScope);
+    }
+
+    const source = String(actor?.location_scope_source || "").trim().toLowerCase();
+    const hasActorLocationScopes =
+      Array.isArray(actor?.location_scopes) &&
+      actor.location_scopes.some((scope) => String(scope || "").trim());
+
+    if ((source && source !== "employee") || (!source && hasActorLocationScopes)) {
+      return resolveActorLocationScope(actor || {}, null);
+    }
+
+    const employeeLocationScope =
+      (await resolveEmployeeLocationScope(actor?.empcode || null)) || null;
+    if (employeeLocationScope) {
+      return employeeLocationScope;
+    }
+
+    return resolveActorLocationScope(actor || {}, null);
   }
 
   async _fetchApprovalStagesFromAuth() {
@@ -198,12 +236,10 @@ class RequisitionService {
     const items = Array.isArray(payload.items) ? payload.items : [];
     const stages = await this.getStagesForRequisition();
     const initialStage = stages[0] || null;
-    const requesterLocationScope =
-      (await resolveEmployeeLocationScope(actor?.empcode || null)) ||
-      resolveActorLocationScope(
-        actor || {},
-        payload?.location_scope || payload?.location,
-      );
+    const requesterLocationScope = await this._resolveRequesterLocationScope(
+      actor,
+      payload,
+    );
 
     return this.repository.create({
       requesterUserId: Number(actor?.id),
@@ -328,13 +364,20 @@ class RequisitionService {
       const requesterDivision =
         normalizeDivisionValue(record.requester_division) || record.requester_division;
       const actorDivision = normalizeDivisionValue(actor?.division || null);
+      const actorHasDivisionHeadAssignmentScope = hasDivisionHeadAssignments(
+        actor?.assignments || [],
+      );
       canSeeAsCurrentApprover =
-        hasMatchingAssignmentScope(
-          actor?.assignments || [],
-          "DIVISION_HEAD",
-          requesterDivision,
-        ) ||
-        (actorDivision && actorDivision === requesterDivision);
+        (actorHasDivisionHeadAssignmentScope
+          ? hasMatchingDivisionHeadAssignmentContext(
+              actor?.assignments || [],
+              requesterDivision,
+              record.location_scope,
+            )
+          : false) ||
+        (!actorHasDivisionHeadAssignmentScope &&
+          actorDivision &&
+          actorDivision === requesterDivision);
     }
 
     if (
@@ -384,6 +427,7 @@ class RequisitionService {
       initialStage,
       remarks: payload?.remarks || null,
       requesterDivision: this._resolveRequesterDivision(actor),
+      requesterLocationScope: await this._resolveRequesterLocationScope(actor, payload),
     });
   }
 

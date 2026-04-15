@@ -1,4 +1,7 @@
 const { AssetService } = require("../services/index");
+const {
+  generateAssetSecurityCode,
+} = require("../utils/asset-security-code");
 const service = new AssetService();
 
 const parseAssetIds = (value) => {
@@ -45,6 +48,18 @@ const parseOptionalText = (value) => {
   if (value == null) return undefined;
   const text = String(value).trim();
   return text ? text : undefined;
+};
+
+const appendVerificationCode = (row) => {
+  const plain = row?.get ? row.get({ plain: true }) : row;
+  if (!plain?.id) return plain;
+  return {
+    ...plain,
+    verification_code: generateAssetSecurityCode({
+      assetId: plain.id,
+      serialNumber: plain.serial_number,
+    }),
+  };
 };
 
 const buildAssetActionPayload = (req, { includeType = false } = {}) => {
@@ -121,7 +136,9 @@ const getInStoreByStock = async (req, res) => {
       req.query || {},
       req.user || null,
     );
-    const data = Array.isArray(result) ? result : result?.rows || [];
+    const data = (Array.isArray(result) ? result : result?.rows || []).map(
+      appendVerificationCode,
+    );
     const meta = Array.isArray(result) ? null : result?.meta || null;
     return res.status(200).json({
       data,
