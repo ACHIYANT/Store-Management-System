@@ -26,30 +26,69 @@ const CUSTODIAN_TYPES = [
 ];
 const MM_TO_CSS_PX = 96 / 25.4;
 const ASSET_STICKER_SPEC = Object.freeze({
-  widthMm: 63.5,
-  heightMm: 46.6,
-  safeInsetMm: 2,
-  qrMm: 18,
-  qrGapMm: 2,
-  logoMm: 6.5,
-  widthPx: Math.round(63.5 * MM_TO_CSS_PX),
-  heightPx: Math.round(46.6 * MM_TO_CSS_PX),
-  qrPx: Math.round(18 * MM_TO_CSS_PX),
+  widthMm: 48,
+  heightMm: 24,
+  contentWidthMm: 48,
+  contentHeightMm: 24,
+  insetXmm: 4,
+  insetYmm: 2,
+  qrMm: 15.5,
+  qrGapMm: 1.4,
+  logoMm: 3.8,
+  widthPx: Math.round(48 * MM_TO_CSS_PX),
+  heightPx: Math.round(24 * MM_TO_CSS_PX),
+  qrPx: Math.round(15.5 * MM_TO_CSS_PX),
 });
 const A4_SHEET_SPEC = Object.freeze({
-  cols: 3,
-  rows: 6,
-  slots: 18,
+  cols: 4,
+  rows: 12,
+  slots: 48,
   pageWidthMm: 210,
   pageHeightMm: 297,
-  leftMarginMm: 3,
-  rightMarginMm: 3,
-  topMarginMm: 3,
-  bottomMarginMm: 3,
-  colGapMm: 6.75,
-  rowGapMm: 2.28,
+  leftMarginMm: 4.5,
+  rightMarginMm: 4.5,
+  topMarginMm: 1.5,
+  bottomMarginMm: 1.5,
+  colGapMm: 3,
+  rowGapMm: 0.55,
 });
 const ASSET_LABEL_SLOT_STORAGE_KEY = "sms:asset-label-next-slot";
+const PRINT_LOGO_SCALE = 0.78;
+const PRINT_LOGO_MM = Number(
+  (ASSET_STICKER_SPEC.logoMm * PRINT_LOGO_SCALE).toFixed(2),
+);
+const APPLE_DISPLAY_STACK =
+  '"SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif';
+const APPLE_TEXT_STACK =
+  '"SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif';
+const APPLE_CARD_CLASS =
+  "rounded-[24px] bg-[#f5f5f7] p-5 shadow-[rgba(0,0,0,0.08)_0_14px_40px_-28px] sm:p-6";
+const APPLE_SECTION_TITLE_CLASS =
+  "mb-4 text-[21px] font-semibold leading-[1.19] tracking-[0.231px] text-[#1d1d1f]";
+const APPLE_LABEL_CLASS =
+  "text-[12px] font-semibold leading-[1.33] tracking-[-0.12px] text-black/80";
+const APPLE_CONTROL_CLASS =
+  "h-11 rounded-[11px] border border-black/[0.08] bg-[#fafafc] text-[14px] tracking-[-0.224px] text-[#1d1d1f]";
+const APPLE_INPUT_CLASS =
+  "h-11 rounded-[11px] border border-black/[0.08] bg-[#fafafc] text-[14px] tracking-[-0.224px] text-[#1d1d1f]";
+const APPLE_READONLY_INPUT_CLASS =
+  "h-11 rounded-[11px] border border-black/[0.06] bg-black/[0.04] text-[14px] tracking-[-0.224px] text-black/60";
+const APPLE_SELECT_CONTENT_CLASS =
+  "rounded-[18px] border border-black/[0.08] bg-white text-[#1d1d1f] shadow-[rgba(0,0,0,0.12)_0_18px_40px_-20px]";
+const APPLE_NOTE_CLASS =
+  "mt-1 rounded-[14px] border border-black/[0.06] bg-white px-3 py-2 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/62";
+const APPLE_INFO_PANEL_CLASS =
+  "rounded-[18px] border border-black/[0.06] bg-white p-4 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]";
+const APPLE_PRIMARY_BUTTON_CLASS =
+  "h-9 rounded-full border border-transparent bg-[#0071e3] px-4 text-[14px] tracking-[-0.224px] text-white hover:bg-[#0077ed] disabled:bg-black/10 disabled:text-black/35";
+const APPLE_OUTLINE_BUTTON_CLASS =
+  "h-9 rounded-full border border-[#0066cc] bg-transparent px-4 text-[14px] tracking-[-0.224px] text-[#0066cc] hover:bg-[#0066cc]/[0.06] disabled:border-black/10 disabled:text-black/30";
+const APPLE_GHOST_BUTTON_CLASS =
+  "h-8 rounded-full border border-black/[0.08] bg-white px-3 text-[14px] tracking-[-0.224px] text-[#1d1d1f] hover:border-[#0071e3]/30 hover:text-[#0066cc]";
+const APPLE_MODE_ACTIVE_CLASS =
+  "rounded-full border border-transparent bg-[#0071e3] px-4 py-2 text-[12px] font-medium tracking-[-0.12px] text-white";
+const APPLE_MODE_INACTIVE_CLASS =
+  "rounded-full border border-black/[0.08] bg-white px-4 py-2 text-[12px] font-medium tracking-[-0.12px] text-black/70 hover:border-[#0071e3]/20 hover:text-[#0066cc] disabled:cursor-not-allowed disabled:opacity-45";
 
 const clampSheetSlot = (value) => {
   const numeric = Number(value);
@@ -1193,7 +1232,7 @@ export default function IssueUnifiedForm({
       render: (_, row) => (
         <Button
           type="button"
-          className="h-8 px-3"
+          className={APPLE_OUTLINE_BUTTON_CLASS}
           onClick={(e) => {
             e.stopPropagation();
             openQrPreview(row);
@@ -1209,8 +1248,7 @@ export default function IssueUnifiedForm({
       render: (_, row) => (
         <Button
           type="button"
-          variant="secondary"
-          className="h-8 px-3"
+          className={APPLE_PRIMARY_BUTTON_CLASS}
           onClick={async (e) => {
             e.stopPropagation();
             await printSheet([row], readStoredSheetSlot());
@@ -1254,7 +1292,7 @@ export default function IssueUnifiedForm({
       margin: 1,
       errorCorrectionLevel: "L",
       color: {
-        dark: "#111827",
+        dark: "#000000",
         light: "#FFFFFF",
       },
     });
@@ -1312,10 +1350,23 @@ export default function IssueUnifiedForm({
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
+  const extractEmbeddedLogoRasterSrc = (inlineLogoMarkup) => {
+    const match = String(inlineLogoMarkup || "").match(
+      /(?:xlink:href|href)=["'](data:image\/[^"']+)["']/i,
+    );
+    return match?.[1] || "";
+  };
+
+  const buildLogoPrintSrc = (inlineLogoMarkup) =>
+    extractEmbeddedLogoRasterSrc(inlineLogoMarkup) ||
+    (inlineLogoMarkup
+      ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+          inlineLogoMarkup,
+        )}`
+      : logo);
+
   const buildLogoPrintMarkup = (inlineLogoMarkup) =>
-    inlineLogoMarkup
-      ? `<div class="brand-mark">${inlineLogoMarkup}</div>`
-      : `<img src="${escapeHtml(logo)}" alt="HARTRON" class="brand-image" />`;
+    `<div class="brand-mark"><img src="${escapeHtml(buildLogoPrintSrc(inlineLogoMarkup))}" alt="HARTRON" class="brand-image brand-image--print" decoding="sync" /></div>`;
 
   const buildStickerMarkup = ({
     assetRow,
@@ -1356,11 +1407,7 @@ export default function IssueUnifiedForm({
     </div>
   `;
 
-  const buildStickerPrintHtml = ({
-    assetRow,
-    svgMarkup,
-    inlineLogoMarkup,
-  }) => `
+  const buildStickerPrintHtml = ({ assetRow, svgMarkup, inlineLogoMarkup }) => `
     <html>
       <head>
         <title>${escapeHtml(`Asset ${assetRow?.asset_tag || assetRow?.id || ""}`)}</title>
@@ -1385,7 +1432,7 @@ export default function IssueUnifiedForm({
             width: ${ASSET_STICKER_SPEC.widthMm}mm;
             height: ${ASSET_STICKER_SPEC.heightMm}mm;
             box-sizing: border-box;
-            padding: ${ASSET_STICKER_SPEC.safeInsetMm}mm;
+            padding: ${ASSET_STICKER_SPEC.insetYmm}mm ${ASSET_STICKER_SPEC.insetXmm}mm;
             overflow: hidden;
             background: #ffffff;
           }
@@ -1401,40 +1448,47 @@ export default function IssueUnifiedForm({
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 0.9mm;
+            gap: 0.45mm;
           }
           .brand {
             display: flex;
             align-items: center;
-            gap: 1.35mm;
+            gap: 0.8mm;
             min-width: 0;
           }
-          .brand-mark,
-          .brand-image {
-            width: ${ASSET_STICKER_SPEC.logoMm}mm;
-            height: ${ASSET_STICKER_SPEC.logoMm}mm;
-            flex: 0 0 ${ASSET_STICKER_SPEC.logoMm}mm;
+          .brand-mark {
+            width: ${PRINT_LOGO_MM}mm;
+            height: ${PRINT_LOGO_MM}mm;
+            flex: 0 0 ${PRINT_LOGO_MM}mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
-          .brand-mark svg,
           .brand-image {
             width: 100%;
             height: 100%;
             display: block;
+            object-fit: contain;
+          }
+          .brand-image--print {
+            image-rendering: -webkit-optimize-contrast;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .brand-copy {
             text-align: left;
             min-width: 0;
           }
           .brand-name {
-            font-size: 6.4pt;
+            font-size: 4.5pt;
             font-weight: 800;
             letter-spacing: 0.08em;
             line-height: 1;
           }
           .brand-subtitle {
-            margin-top: 0.2mm;
+            margin-top: 0.1mm;
             color: #475569;
-            font-size: 4.6pt;
+            font-size: 3.1pt;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             line-height: 1.1;
@@ -1443,8 +1497,8 @@ export default function IssueUnifiedForm({
             width: ${ASSET_STICKER_SPEC.qrMm}mm;
             height: ${ASSET_STICKER_SPEC.qrMm}mm;
             border: 0.25mm solid #e2e8f0;
-            border-radius: 1.4mm;
-            padding: 0.65mm;
+            border-radius: 1mm;
+            padding: 0.35mm;
             box-sizing: border-box;
             background: #ffffff;
             display: flex;
@@ -1458,17 +1512,17 @@ export default function IssueUnifiedForm({
           }
           .meta {
             display: grid;
-            gap: 0.55mm;
+            gap: 0.3mm;
             min-width: 0;
           }
           .meta-row {
             display: grid;
-            gap: 0.1mm;
+            gap: 0.04mm;
             min-width: 0;
           }
           .meta-label {
             color: #64748b;
-            font-size: 4.3pt;
+            font-size: 2.9pt;
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -1476,23 +1530,23 @@ export default function IssueUnifiedForm({
           }
           .meta-value {
             color: #0f172a;
-            font-size: 5.6pt;
+            font-size: 3.8pt;
             font-weight: 600;
-            line-height: 1.15;
+            line-height: 1.05;
             word-break: break-word;
           }
           .info-column {
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 0.9mm;
+            gap: 0.4mm;
             min-width: 0;
           }
           .scan-note {
             color: #475569;
-            font-size: 4.2pt;
+            font-size: 2.8pt;
             text-align: center;
-            line-height: 1.15;
+            line-height: 1.05;
             max-width: ${ASSET_STICKER_SPEC.qrMm}mm;
           }
         </style>
@@ -1604,7 +1658,7 @@ export default function IssueUnifiedForm({
               width: ${ASSET_STICKER_SPEC.widthMm}mm;
               height: ${ASSET_STICKER_SPEC.heightMm}mm;
               box-sizing: border-box;
-              padding: ${ASSET_STICKER_SPEC.safeInsetMm}mm;
+              padding: ${ASSET_STICKER_SPEC.insetYmm}mm ${ASSET_STICKER_SPEC.insetXmm}mm;
               background: #ffffff;
               overflow: hidden;
             }
@@ -1620,40 +1674,47 @@ export default function IssueUnifiedForm({
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              gap: 0.9mm;
+              gap: 0.45mm;
             }
             .brand {
               display: flex;
               align-items: center;
-              gap: 1.35mm;
+              gap: 0.8mm;
               min-width: 0;
             }
-            .brand-mark,
-            .brand-image {
-              width: ${ASSET_STICKER_SPEC.logoMm}mm;
-              height: ${ASSET_STICKER_SPEC.logoMm}mm;
-              flex: 0 0 ${ASSET_STICKER_SPEC.logoMm}mm;
+            .brand-mark {
+              width: ${PRINT_LOGO_MM}mm;
+              height: ${PRINT_LOGO_MM}mm;
+              flex: 0 0 ${PRINT_LOGO_MM}mm;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             }
-            .brand-mark svg,
             .brand-image {
               width: 100%;
               height: 100%;
               display: block;
+              object-fit: contain;
+            }
+            .brand-image--print {
+              image-rendering: -webkit-optimize-contrast;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .brand-copy {
               text-align: left;
               min-width: 0;
             }
             .brand-name {
-              font-size: 6.4pt;
+              font-size: 4.5pt;
               font-weight: 800;
               letter-spacing: 0.08em;
               line-height: 1;
             }
             .brand-subtitle {
-              margin-top: 0.2mm;
+              margin-top: 0.1mm;
               color: #475569;
-              font-size: 4.6pt;
+              font-size: 3.1pt;
               letter-spacing: 0.12em;
               text-transform: uppercase;
               line-height: 1.1;
@@ -1662,8 +1723,8 @@ export default function IssueUnifiedForm({
               width: ${ASSET_STICKER_SPEC.qrMm}mm;
               height: ${ASSET_STICKER_SPEC.qrMm}mm;
               border: 0.25mm solid #e2e8f0;
-              border-radius: 1.4mm;
-              padding: 0.65mm;
+              border-radius: 1mm;
+              padding: 0.35mm;
               box-sizing: border-box;
               background: #ffffff;
               display: flex;
@@ -1677,17 +1738,17 @@ export default function IssueUnifiedForm({
             }
             .meta {
               display: grid;
-              gap: 0.55mm;
+              gap: 0.3mm;
               min-width: 0;
             }
             .meta-row {
               display: grid;
-              gap: 0.1mm;
+              gap: 0.04mm;
               min-width: 0;
             }
             .meta-label {
               color: #64748b;
-              font-size: 4.3pt;
+              font-size: 2.9pt;
               font-weight: 700;
               letter-spacing: 0.08em;
               text-transform: uppercase;
@@ -1695,23 +1756,23 @@ export default function IssueUnifiedForm({
             }
             .meta-value {
               color: #0f172a;
-              font-size: 5.6pt;
+              font-size: 3.8pt;
               font-weight: 600;
-              line-height: 1.15;
+              line-height: 1.05;
               word-break: break-word;
             }
             .info-column {
               display: flex;
               flex-direction: column;
               justify-content: center;
-              gap: 0.9mm;
+              gap: 0.4mm;
               min-width: 0;
             }
             .scan-note {
               color: #475569;
-              font-size: 4.2pt;
+              font-size: 2.8pt;
               text-align: center;
-              line-height: 1.15;
+              line-height: 1.05;
               max-width: ${ASSET_STICKER_SPEC.qrMm}mm;
             }
           </style>
@@ -1743,10 +1804,7 @@ export default function IssueUnifiedForm({
   const persistNextSheetSlot = (startSlot, labelCount = 1) => {
     if (typeof window === "undefined") return;
     const nextSlot = computeNextSheetSlot(startSlot, labelCount);
-    window.localStorage.setItem(
-      ASSET_LABEL_SLOT_STORAGE_KEY,
-      String(nextSlot),
-    );
+    window.localStorage.setItem(ASSET_LABEL_SLOT_STORAGE_KEY, String(nextSlot));
     setSheetStartSlot(nextSlot);
   };
 
@@ -1834,26 +1892,27 @@ export default function IssueUnifiedForm({
   const enableItemSelection = Boolean(resolvedCustodianId);
 
   return (
-    <div className="grid gap-5">
-      <div className="rounded-2xl border border-slate-200 bg-white/85 p-5 shadow-sm backdrop-blur">
-        <div className="text-sm font-semibold text-slate-700 mb-3">
+    <div className="grid gap-5" style={{ fontFamily: APPLE_TEXT_STACK }}>
+      <div className={APPLE_CARD_CLASS}>
+        <div
+          className={APPLE_SECTION_TITLE_CLASS}
+          style={{ fontFamily: APPLE_DISPLAY_STACK }}
+        >
           Issue Details
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
           {/* Issue To Type */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">
-              Issue To Type
-            </label>
+            <label className={APPLE_LABEL_CLASS}>Issue To Type</label>
             <Select
               value={custodianType}
               onValueChange={handleCustodianTypeChange}
               disabled={issueTargetLocked}
             >
-              <SelectTrigger className="h-10 border-slate-300 bg-white">
+              <SelectTrigger className={APPLE_CONTROL_CLASS}>
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                 {CUSTODIAN_TYPES.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label}
@@ -1865,7 +1924,7 @@ export default function IssueUnifiedForm({
 
           {/* Issue To */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">
+            <label className={APPLE_LABEL_CLASS}>
               {isEmployeeCustodian
                 ? "Employee"
                 : custodianType === "DIVISION"
@@ -1878,10 +1937,10 @@ export default function IssueUnifiedForm({
                 onValueChange={handleEmployeeChange}
                 disabled={issueTargetLocked}
               >
-                <SelectTrigger className="h-10 border-slate-300 bg-white">
+                <SelectTrigger className={APPLE_CONTROL_CLASS}>
                   <SelectValue placeholder="Select employee" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                   {employees.map((e) => (
                     <SelectItem
                       key={e.emp_id || e.id}
@@ -1898,7 +1957,7 @@ export default function IssueUnifiedForm({
                 onValueChange={handleCustodianIdChange}
                 disabled={issueTargetLocked}
               >
-                <SelectTrigger className="h-10 border-slate-300 bg-white">
+                <SelectTrigger className={APPLE_CONTROL_CLASS}>
                   <SelectValue
                     placeholder={
                       custodianLoading
@@ -1907,7 +1966,7 @@ export default function IssueUnifiedForm({
                     }
                   />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                   {custodianLoading ? (
                     <SelectItem value="loading" disabled>
                       Loading...
@@ -1927,17 +1986,17 @@ export default function IssueUnifiedForm({
               </Select>
             )}
             {issueTargetLocked ? (
-              <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700">
+              <div className={APPLE_NOTE_CLASS}>
                 Issue-to selection is locked while issue items are present.
                 Remove items from the issue list to change.
               </div>
             ) : !enableItemSelection ? (
-              <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
+              <div className={APPLE_NOTE_CLASS}>
                 Begin by selecting an issue target to continue.
               </div>
             ) : null}
             {!isEmployeeCustodian && requisitionMode === "online" ? (
-              <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700">
+              <div className={APPLE_NOTE_CLASS}>
                 Online requisition is available only for Employee issue.
               </div>
             ) : null}
@@ -1947,15 +2006,13 @@ export default function IssueUnifiedForm({
             <>
               {/* Category Head */}
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700">
-                  Category Head
-                </label>
+                <label className={APPLE_LABEL_CLASS}>Category Head</label>
                 <Select
                   value={String(categoryHeadId || "")}
                   onValueChange={setCategoryHeadId}
                   disabled={!enableItemSelection}
                 >
-                  <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectTrigger className={APPLE_CONTROL_CLASS}>
                     <SelectValue
                       placeholder={
                         enableItemSelection
@@ -1964,7 +2021,7 @@ export default function IssueUnifiedForm({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                     {categoryHeads.map((h) => (
                       <SelectItem key={h.id} value={String(h.id)}>
                         {h.category_head_name}
@@ -1976,15 +2033,13 @@ export default function IssueUnifiedForm({
 
               {/* Category Group */}
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700">
-                  Category Group
-                </label>
+                <label className={APPLE_LABEL_CLASS}>Category Group</label>
                 <Select
                   value={String(categoryGroupId || "")}
                   onValueChange={setCategoryGroupId}
                   disabled={!enableItemSelection || !categoryHeadId}
                 >
-                  <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectTrigger className={APPLE_CONTROL_CLASS}>
                     <SelectValue
                       placeholder={
                         !enableItemSelection
@@ -1995,7 +2050,7 @@ export default function IssueUnifiedForm({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                     {categoryGroups.map((g) => (
                       <SelectItem key={g.id} value={String(g.id)}>
                         {g.category_group_name}
@@ -2007,15 +2062,13 @@ export default function IssueUnifiedForm({
 
               {/* Item Category */}
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700">
-                  Item Category
-                </label>
+                <label className={APPLE_LABEL_CLASS}>Item Category</label>
                 <Select
                   value={String(itemCategoryId || "")}
                   onValueChange={setItemCategoryId}
                   disabled={!enableItemSelection || !categoryGroupId}
                 >
-                  <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectTrigger className={APPLE_CONTROL_CLASS}>
                     <SelectValue
                       placeholder={
                         !enableItemSelection
@@ -2026,7 +2079,7 @@ export default function IssueUnifiedForm({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                     {filteredCategories.map((ic) => (
                       <SelectItem key={ic.id} value={String(ic.id)}>
                         {ic.category_name}{" "}
@@ -2039,9 +2092,7 @@ export default function IssueUnifiedForm({
 
               {/* Stock filtered by category */}
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700">
-                  Stock
-                </label>
+                <label className={APPLE_LABEL_CLASS}>Stock</label>
                 <Select
                   key={itemCategoryId}
                   value={
@@ -2052,7 +2103,7 @@ export default function IssueUnifiedForm({
                   onValueChange={(v) => onStockChange?.(Number(v))}
                   disabled={!enableItemSelection || !itemCategoryId}
                 >
-                  <SelectTrigger className="h-10 border-slate-300 bg-white">
+                  <SelectTrigger className={APPLE_CONTROL_CLASS}>
                     <SelectValue
                       placeholder={
                         !enableItemSelection
@@ -2063,7 +2114,7 @@ export default function IssueUnifiedForm({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                     {availableStocks.map((s) => (
                       <SelectItem key={s._id} value={String(s._id)}>
                         {s.item_name || s.name || `Stock #${s._id}`}{" "}
@@ -2075,11 +2126,11 @@ export default function IssueUnifiedForm({
               </div>
             </>
           ) : (
-            <div className="md:col-span-4 rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 to-white p-4 shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+            <div className={`md:col-span-4 ${APPLE_INFO_PANEL_CLASS}`}>
+              <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0071e3]">
                 Online Requisition Workflow
               </div>
-              <p className="mt-1 text-sm leading-5 text-sky-900">
+              <p className="mt-2 text-[14px] leading-[1.43] tracking-[-0.224px] text-black/72">
                 {enableItemSelection
                   ? "Online Requisition mode is active. Category and stock selectors are unavailable because items are sourced from mapped requisition entries."
                   : "Please select an employee issue target to load mapped online requisition entries."}
@@ -2089,8 +2140,11 @@ export default function IssueUnifiedForm({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/85 p-5 shadow-sm backdrop-blur">
-        <div className="text-sm font-semibold text-slate-700 mb-3">
+      <div className={APPLE_CARD_CLASS}>
+        <div
+          className={APPLE_SECTION_TITLE_CLASS}
+          style={{ fontFamily: APPLE_DISPLAY_STACK }}
+        >
           Issue Mode
         </div>
         {requisitionMode === "offline" ? (
@@ -2099,30 +2153,26 @@ export default function IssueUnifiedForm({
             {isSerialized ? (
               <>
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm font-medium text-gray-700">
+                  <div className="text-[17px] font-medium leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">
                     Select serialized assets to issue
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="text-xs text-slate-500">
+                    <div className="text-[12px] tracking-[-0.12px] text-black/56">
                       Selected labels: {selectedAssetRows.length}
                     </div>
                     <Button
                       type="button"
-                      variant="outline"
-                      className="h-8 px-3"
+                      className={APPLE_OUTLINE_BUTTON_CLASS}
                       disabled={!selectedAssetRows.length}
                       onClick={() =>
-                        openQrPreview(
-                          selectedAssetRows[0],
-                          selectedAssetRows,
-                        )
+                        openQrPreview(selectedAssetRows[0], selectedAssetRows)
                       }
                     >
                       Print Selected Labels
                     </Button>
                   </div>
                 </div>
-                <div className="rounded-md border overflow-x-auto">
+                <div className="overflow-x-auto rounded-[18px] border border-black/[0.08] bg-white">
                   <ListTable
                     data={availableAssets}
                     columns={assetColumns}
@@ -2142,41 +2192,37 @@ export default function IssueUnifiedForm({
             ) : (
               <div className="grid grid-cols-1 gap-4 items-end sm:grid-cols-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-slate-700">
-                    Quantity
-                  </label>
+                  <label className={APPLE_LABEL_CLASS}>Quantity</label>
                   <Input
                     type="number"
                     value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     disabled={!enableItemSelection || !stockId}
-                    className="h-10 max-w-[220px] border-slate-300 bg-white"
+                    className={`${APPLE_INPUT_CLASS} max-w-[220px]`}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-slate-700">
-                    SKU Unit
-                  </label>
+                  <label className={APPLE_LABEL_CLASS}>SKU Unit</label>
                   <Input
                     value={currentSkuUnit}
                     readOnly
-                    className="h-10 max-w-[220px] border-slate-300 bg-slate-100"
+                    className={`${APPLE_READONLY_INPUT_CLASS} max-w-[220px]`}
                   />
                 </div>
                 {stockQty != null ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                    <div className="text-xs font-medium text-emerald-700">
+                  <div className={APPLE_INFO_PANEL_CLASS}>
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0071e3]">
                       Available Quantity
                     </div>
-                    <div className="mt-0.5 text-base font-semibold text-emerald-900">
+                    <div className="mt-1 text-[21px] font-semibold leading-[1.19] tracking-[0.231px] text-[#1d1d1f]">
                       {stockQty}{" "}
-                      <span className="text-sm font-medium text-emerald-700">
+                      <span className="text-[14px] font-medium text-black/56">
                         {currentSkuUnit}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                  <div className={APPLE_NOTE_CLASS}>
                     Select stock to view available quantity.
                   </div>
                 )}
@@ -2184,11 +2230,11 @@ export default function IssueUnifiedForm({
             )}
           </>
         ) : (
-          <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 shadow-sm">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+          <div className={APPLE_INFO_PANEL_CLASS}>
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#0071e3]">
               Automated Issue Source
             </div>
-            <p className="mt-1 text-sm leading-5 text-emerald-900">
+            <p className="mt-2 text-[14px] leading-[1.43] tracking-[-0.224px] text-black/72">
               Online Requisition mode is active. The issue list is prepared from
               mapped requisition entries, and manual item addition is disabled.
             </p>
@@ -2196,17 +2242,20 @@ export default function IssueUnifiedForm({
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/85 p-5 shadow-sm backdrop-blur">
-        <div className="text-sm font-semibold text-slate-700 mb-3">
+      <div className={APPLE_CARD_CLASS}>
+        <div
+          className={APPLE_SECTION_TITLE_CLASS}
+          style={{ fontFamily: APPLE_DISPLAY_STACK }}
+        >
           Requisition & Cart
         </div>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            className={`rounded px-3 py-1.5 text-xs font-medium ${
+            className={`${
               requisitionMode === "offline"
-                ? "bg-sky-600 text-white"
-                : "bg-slate-100 text-slate-700"
+                ? APPLE_MODE_ACTIVE_CLASS
+                : APPLE_MODE_INACTIVE_CLASS
             }`}
             onClick={() => {
               setRequisitionMode("offline");
@@ -2218,10 +2267,10 @@ export default function IssueUnifiedForm({
           </button>
           <button
             type="button"
-            className={`rounded px-3 py-1.5 text-xs font-medium ${
+            className={`${
               requisitionMode === "online"
-                ? "bg-emerald-600 text-white"
-                : "bg-slate-100 text-slate-700"
+                ? APPLE_MODE_ACTIVE_CLASS
+                : APPLE_MODE_INACTIVE_CLASS
             }`}
             onClick={() => {
               setRequisitionMode("online");
@@ -2247,9 +2296,9 @@ export default function IssueUnifiedForm({
           {requisitionMode === "offline" && (
             <Button
               type="button"
-              variant="secondary"
               onClick={addItemToCart}
               disabled={!enableItemSelection}
+              className={APPLE_PRIMARY_BUTTON_CLASS}
             >
               Add to Issue List
             </Button>
@@ -2257,7 +2306,7 @@ export default function IssueUnifiedForm({
 
           {requisitionMode === "offline" ? (
             <div className="flex-1 min-w-[260px]">
-              <label className="text-sm font-medium text-gray-700">
+              <label className={APPLE_LABEL_CLASS}>
                 Requisition Scan (Required)
               </label>
               <div className="relative mt-2">
@@ -2268,22 +2317,18 @@ export default function IssueUnifiedForm({
                       e.preventDefault();
                       setRequisitionFile(null);
                     }}
-                    className="absolute top-2 right-2 bg-white border rounded-full p-1
-              text-gray-400 hover:text-red-600 hover:border-red-300 shadow-sm
-              transition"
+                    className="absolute right-3 top-3 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[12px] tracking-[-0.12px] text-black/48 transition hover:border-[#0071e3]/20 hover:text-[#0066cc]"
                     title="Remove file"
                   >
-                    ✕
+                    Remove
                   </button>
                 )}
                 <label
                   htmlFor="requisitionFile"
-                  className="group cursor-pointer border-2 border-dashed border-gray-300 
-                 rounded-xl p-5 flex flex-col items-center justify-center
-                 hover:border-blue-500 hover:bg-blue-50 transition"
+                  className="group flex cursor-pointer flex-col items-center justify-center rounded-[18px] border border-black/[0.08] bg-white p-5 transition hover:border-[#0071e3]/20 hover:bg-[#fafafc]"
                 >
                   <svg
-                    className="w-9 h-9 text-gray-400 group-hover:text-blue-500 mb-2"
+                    className="mb-2 h-9 w-9 text-black/36 group-hover:text-[#0071e3]"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
@@ -2294,15 +2339,15 @@ export default function IssueUnifiedForm({
                     <path d="M8 12l4-4 4 4" />
                   </svg>
 
-                  <p className="text-sm font-medium text-gray-700">
+                  <p className="text-[14px] font-medium tracking-[-0.224px] text-[#1d1d1f]">
                     Click to upload or drag & drop
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="mt-1 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/56">
                     PNG, JPG, PDF (max 5MB)
                   </p>
 
                   {requisitionFile && (
-                    <span className="mt-2 text-xs text-green-600">
+                    <span className="mt-2 text-[12px] tracking-[-0.12px] text-[#0066cc]">
                       ✔ {requisitionFile.name}
                     </span>
                   )}
@@ -2319,8 +2364,8 @@ export default function IssueUnifiedForm({
               </div>
             </div>
           ) : (
-            <div className="flex-1 min-w-[280px] rounded-lg border bg-white p-3">
-              <div className="text-sm font-medium text-slate-700 mb-2">
+            <div className="flex-1 min-w-[280px] rounded-[18px] border border-black/[0.08] bg-white p-3 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]">
+              <div className="mb-2 text-[14px] font-medium tracking-[-0.224px] text-[#1d1d1f]">
                 Select Approved Digital Requisition
               </div>
               <Select
@@ -2328,7 +2373,7 @@ export default function IssueUnifiedForm({
                 onValueChange={setSelectedRequisitionId}
                 disabled={!activeEmployeeId || onlineReqLoading}
               >
-                <SelectTrigger className="h-10">
+                <SelectTrigger className={APPLE_CONTROL_CLASS}>
                   <SelectValue
                     placeholder={
                       activeEmployeeId
@@ -2337,7 +2382,7 @@ export default function IssueUnifiedForm({
                     }
                   />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={APPLE_SELECT_CONTENT_CLASS}>
                   {onlineRequisitions.map((req) => (
                     <SelectItem key={req.id} value={String(req.id)}>
                       {req.req_no} - {req.status}
@@ -2348,8 +2393,7 @@ export default function IssueUnifiedForm({
               <div className="mt-2 flex items-center gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-8 px-2"
+                  className={APPLE_OUTLINE_BUTTON_CLASS}
                   onClick={() =>
                     fetchOnlineRequisitions({ cursor: null, append: false })
                   }
@@ -2359,8 +2403,7 @@ export default function IssueUnifiedForm({
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-8 px-2"
+                  className={APPLE_OUTLINE_BUTTON_CLASS}
                   onClick={() =>
                     fetchOnlineRequisitions({
                       cursor: onlineReqCursor,
@@ -2373,7 +2416,7 @@ export default function IssueUnifiedForm({
                 </Button>
               </div>
               {selectedOnlineRequisition && (
-                <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700">
+                <div className={APPLE_NOTE_CLASS}>
                   Pending line items available for issue:{" "}
                   <span className="font-semibold text-slate-900">
                     {selectedOnlineRequisition.items?.length || 0}
@@ -2382,7 +2425,7 @@ export default function IssueUnifiedForm({
                 </div>
               )}
               {selectedOnlineRequisition && hasOnlineUnmappedPending && (
-                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
+                <div className={APPLE_NOTE_CLASS}>
                   Some requisition entries are not mapped to category/stock.
                   Please complete item mapping before proceeding.
                 </div>
@@ -2390,7 +2433,7 @@ export default function IssueUnifiedForm({
               {!onlineReqLoading &&
                 activeEmployeeId &&
                 onlineRequisitions.length === 0 && (
-                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700">
+                  <div className={APPLE_NOTE_CLASS}>
                     No approved digital requisitions are available for the
                     selected employee.
                   </div>
@@ -2401,12 +2444,16 @@ export default function IssueUnifiedForm({
 
         {/* Cart preview */}
         {(cartItems.length > 0 || cartSerialized.length > 0) && (
-          <div className="rounded-md border p-3 space-y-2 mt-4 bg-white">
-            <div className="text-sm font-medium">Issue List</div>
+          <div className="mt-4 space-y-2 rounded-[18px] border border-black/[0.08] bg-white p-4 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]">
+            <div className="text-[14px] font-medium tracking-[-0.224px] text-[#1d1d1f]">
+              Issue List
+            </div>
 
             {cartItems.length > 0 && (
-              <div className="text-sm">
-                <div className="font-medium mb-1">Non-serialized</div>
+              <div className="text-[14px] tracking-[-0.224px] text-black/72">
+                <div className="mb-1 font-medium text-[#1d1d1f]">
+                  Non-serialized
+                </div>
                 {cartItems.map((it, idx) => (
                   <div
                     key={`ns-${idx}`}
@@ -2418,8 +2465,7 @@ export default function IssueUnifiedForm({
                     </div>
                     <Button
                       type="button"
-                      variant="ghost"
-                      className="h-8 px-2"
+                      className={APPLE_GHOST_BUTTON_CLASS}
                       onClick={() => removeCartItem(idx)}
                     >
                       Remove
@@ -2430,8 +2476,10 @@ export default function IssueUnifiedForm({
             )}
 
             {cartSerialized.length > 0 && (
-              <div className="text-sm">
-                <div className="font-medium mb-1">Serialized</div>
+              <div className="text-[14px] tracking-[-0.224px] text-black/72">
+                <div className="mb-1 font-medium text-[#1d1d1f]">
+                  Serialized
+                </div>
                 {cartSerialized.map((s, idx) => (
                   <div
                     key={`sz-${idx}`}
@@ -2442,8 +2490,7 @@ export default function IssueUnifiedForm({
                     </div>
                     <Button
                       type="button"
-                      variant="ghost"
-                      className="h-8 px-2"
+                      className={APPLE_GHOST_BUTTON_CLASS}
                       onClick={() => removeCartSerialized(idx)}
                     >
                       Remove
@@ -2460,7 +2507,7 @@ export default function IssueUnifiedForm({
         type="button"
         onClick={submit}
         disabled={!enableItemSelection}
-        className="h-10 w-32 self-start"
+        className={`${APPLE_PRIMARY_BUTTON_CLASS} h-10 w-32 self-start`}
       >
         Issue
       </Button>
@@ -2479,14 +2526,19 @@ export default function IssueUnifiedForm({
         title="Asset Sticker Preview"
         contentClassName="max-h-[92vh] max-w-[96vw] overflow-y-auto sm:max-w-5xl"
       >
-        <div className="flex max-h-[calc(92vh-5rem)] flex-col items-center gap-3 overflow-y-auto p-2 pr-1">
+        <div
+          className="flex max-h-[calc(92vh-5rem)] flex-col items-center gap-3 overflow-y-auto p-2 pr-1"
+          style={{ fontFamily: APPLE_TEXT_STACK }}
+        >
           {qrBusy ? (
-            <div className="text-sm text-gray-600">Generating…</div>
+            <div className="text-[14px] tracking-[-0.224px] text-black/56">
+              Generating…
+            </div>
           ) : (
             <>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+              <div className="rounded-[24px] border border-black/[0.06] bg-[#f5f5f7] p-4 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]">
                 <div
-                  className="rounded-[18px] border border-slate-300 bg-white p-3 shadow-sm"
+                  className="rounded-[18px] border border-black/[0.08] bg-white p-3 shadow-sm"
                   style={{
                     width: `${ASSET_STICKER_SPEC.widthPx}px`,
                     height: `${ASSET_STICKER_SPEC.heightPx}px`,
@@ -2497,7 +2549,7 @@ export default function IssueUnifiedForm({
                     style={{
                       gridTemplateColumns: `${ASSET_STICKER_SPEC.qrPx}px minmax(0, 1fr)`,
                       columnGap: `${Math.max(
-                        8,
+                        5,
                         Math.round(ASSET_STICKER_SPEC.qrGapMm * MM_TO_CSS_PX),
                       )}px`,
                     }}
@@ -2505,7 +2557,7 @@ export default function IssueUnifiedForm({
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       {qrSvgMarkup ? (
                         <div
-                          className="flex items-center justify-center rounded-[10px] border border-slate-200 bg-white p-1.5"
+                          className="flex items-center justify-center rounded-[10px] border border-black/[0.08] bg-white p-1.5"
                           style={{
                             width: `${ASSET_STICKER_SPEC.qrPx}px`,
                             height: `${ASSET_STICKER_SPEC.qrPx}px`,
@@ -2513,12 +2565,12 @@ export default function IssueUnifiedForm({
                           dangerouslySetInnerHTML={{ __html: qrSvgMarkup }}
                         />
                       ) : null}
-                      <div className="text-center text-[0.56rem] font-medium leading-tight text-slate-500">
+                      <div className="text-center text-[0.38rem] font-medium leading-tight text-black/52">
                         Scan to verify
                       </div>
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         {logoSvgMarkup ? (
                           <div
                             className="shrink-0 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
@@ -2548,23 +2600,25 @@ export default function IssueUnifiedForm({
                           />
                         )}
                         <div className="min-w-0">
-                          <div className="text-[0.63rem] font-extrabold tracking-[0.16em] text-slate-900">
+                          <div className="text-[0.45rem] font-extrabold tracking-[0.14em] text-[#1d1d1f]">
                             HARTRON
                           </div>
-                          <div className="text-[0.46rem] uppercase tracking-[0.16em] text-slate-500">
+                          <div className="text-[0.31rem] uppercase tracking-[0.14em] text-black/52">
                             Store Asset Label
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 grid gap-1 text-[0.58rem] leading-tight text-slate-800">
+                      <div className="mt-1 grid gap-0.5 text-[0.39rem] leading-tight text-[#1d1d1f]">
                         <div>
-                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                          <div className="text-[0.28rem] font-bold uppercase tracking-[0.14em] text-black/48">
                             Asset ID
                           </div>
-                          <div className="font-semibold">{qrAsset?.id || "-"}</div>
+                          <div className="font-semibold">
+                            {qrAsset?.id || "-"}
+                          </div>
                         </div>
                         <div>
-                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                          <div className="text-[0.28rem] font-bold uppercase tracking-[0.14em] text-black/48">
                             Asset Tag
                           </div>
                           <div className="font-semibold break-words">
@@ -2572,7 +2626,7 @@ export default function IssueUnifiedForm({
                           </div>
                         </div>
                         <div>
-                          <div className="text-[0.44rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+                          <div className="text-[0.28rem] font-bold uppercase tracking-[0.14em] text-black/48">
                             Serial Number
                           </div>
                           <div className="font-semibold break-words">
@@ -2584,8 +2638,8 @@ export default function IssueUnifiedForm({
                   </div>
                 </div>
               </div>
-              <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-                <div className="font-medium text-slate-900">
+              <div className="w-full max-w-2xl rounded-[24px] border border-black/[0.06] bg-white px-4 py-4 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/68 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]">
+                <div className="font-medium text-[#1d1d1f]">
                   Final print size: {ASSET_STICKER_SPEC.widthMm}mm x{" "}
                   {ASSET_STICKER_SPEC.heightMm}mm
                 </div>
@@ -2594,15 +2648,21 @@ export default function IssueUnifiedForm({
                   {ASSET_STICKER_SPEC.qrMm}mm
                 </div>
                 <div className="mt-1">
-                  Safe inset inside each cut label: {ASSET_STICKER_SPEC.safeInsetMm}mm
+                  Printed content area: {ASSET_STICKER_SPEC.contentWidthMm}mm x{" "}
+                  {ASSET_STICKER_SPEC.contentHeightMm}mm
+                </div>
+                <div className="mt-1">
+                  Inner margin inside each cut label:{" "}
+                  {ASSET_STICKER_SPEC.insetXmm}mm left/right and{" "}
+                  {ASSET_STICKER_SPEC.insetYmm}mm top/bottom
                 </div>
                 <div className="mt-1">
                   Labels in this print: {sheetLabelCount}
                 </div>
                 <div className="mt-1">
                   Sheet template: {A4_SHEET_SPEC.cols} columns x{" "}
-                  {A4_SHEET_SPEC.rows} rows with {A4_SHEET_SPEC.leftMarginMm}mm /{" "}
-                  {A4_SHEET_SPEC.rightMarginMm}mm side margins and{" "}
+                  {A4_SHEET_SPEC.rows} rows with {A4_SHEET_SPEC.leftMarginMm}mm
+                  / {A4_SHEET_SPEC.rightMarginMm}mm side margins and{" "}
                   {A4_SHEET_SPEC.colGapMm}mm x {A4_SHEET_SPEC.rowGapMm}mm blank
                   gutters.
                 </div>
@@ -2610,25 +2670,28 @@ export default function IssueUnifiedForm({
                   Top / bottom page margins: {A4_SHEET_SPEC.topMarginMm}mm /{" "}
                   {A4_SHEET_SPEC.bottomMarginMm}mm
                 </div>
-                <div className="mt-1 break-all text-slate-500">
+                <div className="mt-1 break-all text-black/52">
                   Scan target: {qrTargetUrl || "-"}
                 </div>
               </div>
 
-              <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="w-full max-w-3xl rounded-[24px] border border-black/[0.06] bg-white p-4 shadow-[rgba(0,0,0,0.08)_0_12px_32px_-24px]">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div
+                      className="text-[21px] font-semibold leading-[1.19] tracking-[0.231px] text-[#1d1d1f]"
+                      style={{ fontFamily: APPLE_DISPLAY_STACK }}
+                    >
                       A4 Pre-cut Sticker Sheet
                     </div>
-                    <div className="mt-1 text-xs text-slate-600">
-                      18 slots per sheet, filled left-to-right, top-to-bottom.
+                    <div className="mt-1 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/60">
+                      48 slots per sheet, filled left-to-right, top-to-bottom.
                     </div>
-                    <div className="mt-1 text-xs text-slate-600">
+                    <div className="mt-1 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/60">
                       Each cut label: {ASSET_STICKER_SPEC.widthMm}mm x{" "}
                       {ASSET_STICKER_SPEC.heightMm}mm
                     </div>
-                    <div className="mt-1 text-xs text-slate-600">
+                    <div className="mt-1 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/60">
                       Current run: slot {sheetStartSlot} to slot {sheetEndSlot}
                       {sheetPreviewPages.length > 1
                         ? ` across ${sheetPreviewPages.length} sheet(s)`
@@ -2637,7 +2700,7 @@ export default function IssueUnifiedForm({
                   </div>
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-black/48">
                         Start Slot
                       </label>
                       <Input
@@ -2648,21 +2711,19 @@ export default function IssueUnifiedForm({
                         onChange={(e) =>
                           setSheetStartSlot(clampSheetSlot(e.target.value))
                         }
-                        className="h-9 w-24"
+                        className={`${APPLE_INPUT_CLASS} h-9 w-24`}
                       />
                     </div>
                     <Button
                       type="button"
-                      variant="outline"
-                      className="h-9"
+                      className={APPLE_OUTLINE_BUTTON_CLASS}
                       onClick={() => setSheetStartSlot(1)}
                     >
                       Reset to 1
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      className="h-9"
+                      className={APPLE_OUTLINE_BUTTON_CLASS}
                       onClick={() => setSheetStartSlot(readStoredSheetSlot())}
                     >
                       Use Suggested
@@ -2673,26 +2734,30 @@ export default function IssueUnifiedForm({
                 <div className="mt-4 space-y-4">
                   {sheetPreviewPages.map((pageSlots, pageIndex) => (
                     <div key={`sheet-page-${pageIndex}`}>
-                      <div className="mb-2 text-xs font-medium text-slate-500">
+                      <div className="mb-2 text-[12px] font-medium tracking-[-0.12px] text-black/48">
                         Sheet {pageIndex + 1}
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-4 gap-2">
                         {pageSlots.map((assetRow, slotIndex) => {
                           const slotNumber = slotIndex + 1;
                           const filled = Boolean(assetRow);
                           return (
                             <div
                               key={`slot-${pageIndex}-${slotNumber}`}
-                              className={`rounded-xl border p-2 text-center text-[11px] ${
+                              className={`rounded-[16px] border p-2 text-center text-[11px] ${
                                 filled
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                  : "border-slate-200 bg-slate-50 text-slate-400"
+                                  ? "border-black/[0.08] bg-white text-[#1d1d1f]"
+                                  : "border-black/[0.08] bg-[#f5f5f7] text-black/32"
                               }`}
                             >
-                              <div className="font-semibold">Slot {slotNumber}</div>
+                              <div className="font-semibold">
+                                Slot {slotNumber}
+                              </div>
                               <div className="mt-1 min-h-[2.5rem] break-words">
                                 {filled
-                                  ? assetRow.asset_tag || assetRow.serial_number || `Asset ${assetRow.id}`
+                                  ? assetRow.asset_tag ||
+                                    assetRow.serial_number ||
+                                    `Asset ${assetRow.id}`
                                   : "Blank"}
                               </div>
                             </div>
@@ -2703,36 +2768,39 @@ export default function IssueUnifiedForm({
                   ))}
                 </div>
 
-                <div className="mt-3 text-xs text-slate-600">
-                  After A4 sheet printing, the next slot is remembered automatically
-                  so the next label can start from the next unused cutout.
+                <div className="mt-3 text-[12px] leading-[1.33] tracking-[-0.12px] text-black/60">
+                  After A4 sheet printing, the next slot is remembered
+                  automatically so the next label can start from the next unused
+                  cutout.
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={() => printSheet()} className="h-9">
-                  Print 18-up Sheet
-                </Button>
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => printRepeatedTestSheet()}
-                  className="h-9"
+                  onClick={() => printSheet()}
+                  className={APPLE_PRIMARY_BUTTON_CLASS}
                 >
-                  Test: Repeat Same Label x18
+                  Print 48-up Sheet
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
+                  onClick={() => printRepeatedTestSheet()}
+                  className={APPLE_OUTLINE_BUTTON_CLASS}
+                >
+                  Test: Repeat Same Label x48
+                </Button>
+                <Button
+                  type="button"
                   onClick={() => printQr()}
-                  className="h-9"
+                  className={APPLE_OUTLINE_BUTTON_CLASS}
                 >
                   Print Single Sticker
                 </Button>
                 <a
                   href={qrDownloadHref}
                   download={`asset-${qrAsset?.id || "qr"}.svg`}
-                  className="h-9 inline-flex items-center px-4 border rounded"
+                  className="inline-flex h-9 items-center rounded-full border border-[#0066cc] px-4 text-[14px] tracking-[-0.224px] text-[#0066cc] hover:bg-[#0066cc]/[0.06]"
                 >
                   Download QR SVG
                 </a>
