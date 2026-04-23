@@ -12,6 +12,7 @@ const { logStockMovement } = require("../services/stock-movement-service");
 const {
   assertActorCanAccessLocation,
   buildLocationScopeWhere,
+  collectActorLocationScopes,
 } = require("../utils/location-scope");
 
 const { Op } = require("sequelize");
@@ -27,6 +28,54 @@ const normalizeStockSource = (value) => {
   if (!value) return null;
   const raw = String(value).trim().toUpperCase();
   return STOCK_SOURCES.has(raw) ? raw : null;
+};
+
+const buildInStoreAssetCountSql = (stockAlias = "Stock") => `(
+  SELECT COUNT(*)
+  FROM Assets a
+  WHERE a.stock_id = ${stockAlias}.id
+    AND a.status = 'InStore'
+    AND a.is_active = 1
+)`;
+
+const normalizeSerializedAvailabilityRow = (row = {}) => {
+  const serializedRequired =
+    Number(row["ItemCategory.serialized_required"] || row.serialized_required || 0) === 1 ||
+    row["ItemCategory.serialized_required"] === true ||
+    row.serialized_required === true;
+  const availableQuantity = Number(
+    row.available_quantity ?? row.quantity ?? row.total_quantity ?? 0,
+  );
+  const liveSerialCount = Number(
+    row.live_serial_count ?? row.serial_count ?? availableQuantity ?? 0,
+  );
+
+  return {
+    ...row,
+    quantity: serializedRequired ? liveSerialCount : Number(row.quantity ?? availableQuantity ?? 0),
+    total_quantity: serializedRequired
+      ? liveSerialCount
+      : Number(row.total_quantity ?? row.quantity ?? availableQuantity ?? 0),
+    available_quantity: serializedRequired
+      ? liveSerialCount
+      : availableQuantity,
+    serial_count: serializedRequired
+      ? liveSerialCount
+      : Number(row.serial_count ?? liveSerialCount ?? 0),
+    serialized_required: serializedRequired,
+  };
+};
+
+const normalizeText = (value, fallback = "") => {
+  const text = String(value || "").trim();
+  return text || fallback;
+};
+
+const getItemStatus = (quantity) => {
+  const qty = Number(quantity || 0);
+  if (qty === 0) return "Out of Stock";
+  if (qty <= 5) return "Low Stock";
+  return "Available";
 };
 
 class StockRepository {
@@ -170,17 +219,33 @@ class StockRepository {
       whereGroup.head_id = categoryHeadId;
     }
 
+    const categoryQuantitySql = `
+      CASE
+        WHEN MAX(COALESCE(\`ItemCategory\`.\`serialized_required\`, 0)) = 1
+          THEN SUM(COALESCE((
+            SELECT COUNT(*)
+            FROM Assets a
+            WHERE a.stock_id = \`Stock\`.\`id\`
+              AND a.status = 'InStore'
+              AND a.is_active = 1
+          ), 0))
+        ELSE SUM(\`Stock\`.\`quantity\`)
+      END
+    `;
+
     // 📦 Stock Level filter
     if (stockLevel === "OUT") {
-      havingConditions.push(sequelize.literal("SUM(quantity) = 0"));
+      havingConditions.push(sequelize.literal(`${categoryQuantitySql} = 0`));
     }
 
     if (stockLevel === "LOW") {
-      havingConditions.push(sequelize.literal("SUM(quantity) BETWEEN 1 AND 5"));
+      havingConditions.push(
+        sequelize.literal(`${categoryQuantitySql} BETWEEN 1 AND 5`),
+      );
     }
 
     if (stockLevel === "AVAILABLE") {
-      havingConditions.push(sequelize.literal("SUM(quantity) > 5"));
+      havingConditions.push(sequelize.literal(`${categoryQuantitySql} > 5`));
     }
 
     const useCursorMode = Boolean(cursorMode) && limit != null;
@@ -220,7 +285,10 @@ class StockRepository {
       attributes: [
         "item_category_id",
         [sequelize.col("ItemCategory.category_name"), "category_name"],
-        [sequelize.fn("SUM", sequelize.col("quantity")), "total_quantity"],
+        [
+          sequelize.literal(categoryQuantitySql),
+          "total_quantity",
+        ],
         [
           sequelize.literal(
             "SUM(CASE WHEN `Stock`.`source` = 'DAYBOOK' THEN `Stock`.`quantity` ELSE 0 END)",
@@ -304,15 +372,18 @@ class StockRepository {
       raw: true,
     });
 
-    const normalizedStocks = stocks.map((row) => ({
-      ...row,
-      total_quantity: Number(row.total_quantity || 0),
-      daybook_quantity: Number(row.daybook_quantity || 0),
-      migration_quantity: Number(row.migration_quantity || 0),
-      daybook_lot_count: Number(row.daybook_lot_count || 0),
-      migration_lot_count: Number(row.migration_lot_count || 0),
-      unknown_lot_count: Number(row.unknown_lot_count || 0),
-    }));
+    const normalizedStocks = stocks.map((row) => {
+      const normalized = normalizeSerializedAvailabilityRow(row);
+      return {
+        ...normalized,
+        total_quantity: Number(normalized.total_quantity || 0),
+        daybook_quantity: Number(row.daybook_quantity || 0),
+        migration_quantity: Number(row.migration_quantity || 0),
+        daybook_lot_count: Number(row.daybook_lot_count || 0),
+        migration_lot_count: Number(row.migration_lot_count || 0),
+        unknown_lot_count: Number(row.unknown_lot_count || 0),
+      };
+    });
 
     if (!useCursorMode) {
       return normalizedStocks;
@@ -364,12 +435,19 @@ class StockRepository {
       if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
         return [];
       }
+      const groupedQuantitySql = `
+        CASE
+          WHEN MAX(COALESCE(ic.serialized_required, 0)) = 1
+            THEN SUM(COALESCE(ac.instore_count, 0))
+          ELSE SUM(s.quantity)
+        END
+      `;
       const groupedHaving = [];
-      if (stockLevel === "OUT") groupedHaving.push("SUM(s.quantity) = 0");
+      if (stockLevel === "OUT") groupedHaving.push(`${groupedQuantitySql} = 0`);
       if (stockLevel === "LOW")
-        groupedHaving.push("SUM(s.quantity) BETWEEN 1 AND 5");
-      if (stockLevel === "AVAILABLE") groupedHaving.push("SUM(s.quantity) > 5");
-      if (onlyInStock) groupedHaving.push("SUM(s.quantity) > 0");
+        groupedHaving.push(`${groupedQuantitySql} BETWEEN 1 AND 5`);
+      if (stockLevel === "AVAILABLE") groupedHaving.push(`${groupedQuantitySql} > 5`);
+      if (onlyInStock) groupedHaving.push(`${groupedQuantitySql} > 0`);
       const groupedHavingSql =
         groupedHaving.length > 0
           ? ` HAVING ${groupedHaving.join(" AND ")}`
@@ -394,7 +472,7 @@ class StockRepository {
               MAX(s.item_master_id) AS item_master_id,
               MAX(s.item_category_id) AS item_category_id,
               COALESCE(MAX(im.display_name), MAX(s.item_name)) AS item_name,
-              SUM(s.quantity) AS quantity,
+              ${groupedQuantitySql} AS quantity,
               SUM(CASE WHEN s.source = 'DAYBOOK' THEN s.quantity ELSE 0 END) AS daybook_quantity,
               SUM(CASE WHEN s.source = 'MIGRATION' THEN s.quantity ELSE 0 END) AS migration_quantity,
               SUM(CASE WHEN s.source = 'DAYBOOK' THEN 1 ELSE 0 END) AS daybook_lot_count,
@@ -420,7 +498,8 @@ class StockRepository {
               MAX(s.amount) AS amount,
               MAX(ic.category_name) AS category_name,
               MAX(ic.serialized_required) AS serialized_required,
-              SUM(COALESCE(sc.serial_count, 0)) AS serial_count,
+              SUM(COALESCE(ac.instore_count, 0)) AS serial_count,
+              SUM(COALESCE(ac.instore_count, 0)) AS live_serial_count,
               COUNT(*) AS lot_count,
               GROUP_CONCAT(s.id ORDER BY s.id ASC) AS stock_ids
             FROM Stocks s
@@ -436,6 +515,14 @@ class StockRepository {
               GROUP BY d.stock_id
             ) sc
               ON sc.stock_id = s.id
+            LEFT JOIN (
+              SELECT a.stock_id, COUNT(*) AS instore_count
+              FROM Assets a
+              WHERE a.status = 'InStore'
+                AND a.is_active = 1
+              GROUP BY a.stock_id
+            ) ac
+              ON ac.stock_id = s.id
             WHERE s.item_category_id = :categoryId
               AND s.is_active = 1
               ${sourceWhereSql}
@@ -485,20 +572,24 @@ class StockRepository {
         throw error;
       }
 
-      const normalizedRows = (rows || []).map((row) => ({
-        ...row,
-        id: Number(row.id),
-        stock_id: Number(row.id),
-        item_master_id: row.item_master_id ? Number(row.item_master_id) : null,
-        quantity: Number(row.quantity || 0),
-        daybook_quantity: Number(row.daybook_quantity || 0),
-        migration_quantity: Number(row.migration_quantity || 0),
-        daybook_lot_count: Number(row.daybook_lot_count || 0),
-        migration_lot_count: Number(row.migration_lot_count || 0),
-        unknown_lot_count: Number(row.unknown_lot_count || 0),
-        serial_count: Number(row.serial_count || 0),
-        lot_count: Number(row.lot_count || 0),
-      }));
+      const normalizedRows = (rows || []).map((row) => {
+        const normalized = normalizeSerializedAvailabilityRow(row);
+        return {
+          ...normalized,
+          id: Number(row.id),
+          stock_id: Number(row.id),
+          item_master_id: row.item_master_id ? Number(row.item_master_id) : null,
+          quantity: Number(normalized.quantity || 0),
+          available_quantity: Number(normalized.available_quantity || 0),
+          daybook_quantity: Number(row.daybook_quantity || 0),
+          migration_quantity: Number(row.migration_quantity || 0),
+          daybook_lot_count: Number(row.daybook_lot_count || 0),
+          migration_lot_count: Number(row.migration_lot_count || 0),
+          unknown_lot_count: Number(row.unknown_lot_count || 0),
+          serial_count: Number(normalized.serial_count || 0),
+          lot_count: Number(row.lot_count || 0),
+        };
+      });
 
       if (limit != null && String(limit).trim() !== "") {
         const safeLimit = normalizeLimit(limit, 100, 1000);
@@ -518,11 +609,6 @@ class StockRepository {
       where.item_name = { [Op.like]: `%${search}%` };
     }
 
-    if (stockLevel === "OUT") where.quantity = 0;
-    if (stockLevel === "LOW") where.quantity = { [Op.between]: [1, 5] };
-    if (stockLevel === "AVAILABLE") where.quantity = { [Op.gt]: 5 };
-    if (onlyInStock) where.quantity = { [Op.gt]: 0 };
-
     const useCursorMode = Boolean(cursorMode) && limit != null;
     const safeLimit = useCursorMode ? normalizeLimit(limit, 100, 500) : null;
     const cursorParts = useCursorMode ? decodeCursor(cursor) : null;
@@ -536,19 +622,17 @@ class StockRepository {
         "id",
         "item_name",
         "quantity",
+        [
+          sequelize.literal(buildInStoreAssetCountSql("Stock")),
+          "live_serial_count",
+        ],
         "source",
         "sku_unit",
         "rate",
         "gst_rate",
         "amount",
         [
-          sequelize.literal(`(
-          SELECT COUNT(*)
-          FROM DayBookItemSerials s
-          INNER JOIN DayBookItems d
-            ON d.id = s.daybook_item_id
-          WHERE d.stock_id = Stock.id
-        )`),
+          sequelize.literal(buildInStoreAssetCountSql("Stock")),
           "serial_count",
         ],
       ],
@@ -566,12 +650,33 @@ class StockRepository {
       raw: true,
     });
 
+    const normalizedStocks = stocks
+      .map((row) => {
+        const normalized = normalizeSerializedAvailabilityRow(row);
+        return {
+          ...normalized,
+          quantity: Number(normalized.quantity || 0),
+          available_quantity: Number(normalized.available_quantity || 0),
+          serial_count: Number(normalized.serial_count || 0),
+        };
+      })
+      .filter((row) => {
+        if (stockLevel === "OUT") return Number(row.quantity || 0) === 0;
+        if (stockLevel === "LOW") {
+          const qty = Number(row.quantity || 0);
+          return qty >= 1 && qty <= 5;
+        }
+        if (stockLevel === "AVAILABLE") return Number(row.quantity || 0) > 5;
+        if (onlyInStock) return Number(row.quantity || 0) > 0;
+        return true;
+      });
+
     if (!useCursorMode) {
-      return stocks;
+      return normalizedStocks;
     }
 
-    const hasMore = stocks.length > safeLimit;
-    const rows = hasMore ? stocks.slice(0, safeLimit) : stocks;
+    const hasMore = normalizedStocks.length > safeLimit;
+    const rows = hasMore ? normalizedStocks.slice(0, safeLimit) : normalizedStocks;
     const lastRow = rows.length ? rows[rows.length - 1] : null;
     const nextCursor =
       hasMore && lastRow
@@ -589,6 +694,188 @@ class StockRepository {
         nextCursor,
         mode: "cursor",
       },
+    };
+  }
+
+  async getOutOfStockReport({ viewerActor = null } = {}) {
+    const access = collectActorLocationScopes(viewerActor || {});
+    if (!access.unrestricted && !access.scopes.length) {
+      return {
+        rows: [],
+        summary: {
+          total_items: 0,
+          out_count: 0,
+          low_count: 0,
+          available_count: 0,
+          affected_categories: 0,
+          affected_groups: 0,
+          affected_heads: 0,
+        },
+        critical_categories: [],
+        generated_at: new Date().toISOString(),
+      };
+    }
+
+    const locationWhereSql = access.unrestricted
+      ? ""
+      : " AND s.location_scope IN (:locationScopes)";
+
+    const [rows] = await sequelize.query(
+      `
+        SELECT
+          ch.id AS head_id,
+          ch.category_head_name AS head_name,
+          cg.id AS group_id,
+          cg.category_group_name AS group_name,
+          ic.id AS category_id,
+          ic.category_name AS category_name,
+          MAX(ic.serialized_required) AS serialized_required,
+          CASE
+            WHEN s.item_master_id IS NULL
+              THEN CONCAT('NAME-', LOWER(TRIM(s.item_name)), '|', COALESCE(s.sku_unit, ''))
+            ELSE CONCAT('MASTER-', s.item_master_id)
+          END AS item_key,
+          MAX(s.item_master_id) AS item_master_id,
+          COALESCE(MAX(im.display_name), MAX(s.item_name)) AS item_name,
+          CASE
+            WHEN MAX(COALESCE(ic.serialized_required, 0)) = 1
+              THEN SUM(COALESCE(ac.instore_count, 0))
+            ELSE SUM(s.quantity)
+          END AS quantity,
+          MAX(s.sku_unit) AS sku_unit,
+          COUNT(*) AS lot_count,
+          SUM(CASE WHEN s.source = 'DAYBOOK' THEN s.quantity ELSE 0 END) AS daybook_quantity,
+          SUM(CASE WHEN s.source = 'MIGRATION' THEN s.quantity ELSE 0 END) AS migration_quantity
+        FROM Stocks s
+        INNER JOIN ItemCategories ic
+          ON ic.id = s.item_category_id
+        LEFT JOIN ItemCategoryGroups cg
+          ON cg.id = ic.group_id
+        LEFT JOIN ItemCategoryHeads ch
+          ON ch.id = cg.head_id
+        LEFT JOIN ItemMasters im
+          ON im.id = s.item_master_id
+        LEFT JOIN (
+          SELECT a.stock_id, COUNT(*) AS instore_count
+          FROM Assets a
+          WHERE a.status = 'InStore'
+            AND a.is_active = 1
+          GROUP BY a.stock_id
+        ) ac
+          ON ac.stock_id = s.id
+        WHERE s.is_active = 1
+        ${locationWhereSql}
+        GROUP BY
+          ch.id,
+          ch.category_head_name,
+          cg.id,
+          cg.category_group_name,
+          ic.id,
+          ic.category_name,
+          CASE
+            WHEN s.item_master_id IS NULL
+              THEN CONCAT('NAME-', LOWER(TRIM(s.item_name)), '|', COALESCE(s.sku_unit, ''))
+            ELSE CONCAT('MASTER-', s.item_master_id)
+          END
+        ORDER BY
+          LOWER(ch.category_head_name) ASC,
+          LOWER(cg.category_group_name) ASC,
+          LOWER(ic.category_name) ASC,
+          LOWER(COALESCE(MAX(im.display_name), MAX(s.item_name))) ASC
+      `,
+      {
+        replacements: access.unrestricted ? {} : { locationScopes: access.scopes },
+      },
+    );
+
+    const normalizedRows = (rows || []).map((row, index) => {
+      const quantity = Number(row.quantity || 0);
+      const serializedRequired =
+        Number(row.serialized_required || 0) === 1 ||
+        row.serialized_required === true;
+      return {
+        id: index + 1,
+        item_key: row.item_key,
+        item_master_id: row.item_master_id ? Number(row.item_master_id) : null,
+        head_id: row.head_id ? Number(row.head_id) : null,
+        head_name: normalizeText(row.head_name, "Unassigned Head"),
+        group_id: row.group_id ? Number(row.group_id) : null,
+        group_name: normalizeText(row.group_name, "Unassigned Group"),
+        category_id: row.category_id ? Number(row.category_id) : null,
+        category_name: normalizeText(row.category_name, "Unassigned Category"),
+        item_name: normalizeText(row.item_name, "Unnamed Item"),
+        quantity,
+        sku_unit: normalizeText(row.sku_unit, "Unit"),
+        lot_count: Number(row.lot_count || 0),
+        daybook_quantity: Number(row.daybook_quantity || 0),
+        migration_quantity: Number(row.migration_quantity || 0),
+        type_label: serializedRequired ? "Asset" : "Consumable",
+        serialized_required: serializedRequired,
+        status: getItemStatus(quantity),
+      };
+    });
+
+    const summary = normalizedRows.reduce(
+      (acc, row) => {
+        acc.total_items += 1;
+        if (row.status === "Out of Stock") acc.out_count += 1;
+        else if (row.status === "Low Stock") acc.low_count += 1;
+        else acc.available_count += 1;
+        acc.category_ids.add(row.category_id);
+        acc.group_ids.add(row.group_id);
+        acc.head_ids.add(row.head_id);
+        return acc;
+      },
+      {
+        total_items: 0,
+        out_count: 0,
+        low_count: 0,
+        available_count: 0,
+        category_ids: new Set(),
+        group_ids: new Set(),
+        head_ids: new Set(),
+      },
+    );
+
+    const criticalCategories = [...normalizedRows.reduce((map, row) => {
+      const key = row.category_id || row.category_name;
+      const current = map.get(key) || {
+        category_id: row.category_id,
+        category_name: row.category_name,
+        group_name: row.group_name,
+        head_name: row.head_name,
+        total_items: 0,
+        out_count: 0,
+        low_count: 0,
+        available_count: 0,
+      };
+      current.total_items += 1;
+      if (row.status === "Out of Stock") current.out_count += 1;
+      else if (row.status === "Low Stock") current.low_count += 1;
+      else current.available_count += 1;
+      map.set(key, current);
+      return map;
+    }, new Map()).values()]
+      .sort((left, right) => {
+        if (right.out_count !== left.out_count) return right.out_count - left.out_count;
+        if (right.low_count !== left.low_count) return right.low_count - left.low_count;
+        return left.category_name.localeCompare(right.category_name);
+      })
+      .slice(0, 12);
+
+    return {
+      rows: normalizedRows,
+      summary: {
+        total_items: summary.total_items,
+        out_count: summary.out_count,
+        low_count: summary.low_count,
+        available_count: summary.available_count,
+        affected_categories: [...summary.category_ids].filter(Boolean).length,
+        affected_groups: [...summary.group_ids].filter(Boolean).length,
+        affected_heads: [...summary.head_ids].filter(Boolean).length,
+      },
+      critical_categories: criticalCategories,
+      generated_at: new Date().toISOString(),
     };
   }
 }

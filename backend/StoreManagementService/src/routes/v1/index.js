@@ -196,6 +196,7 @@ router.post(
 // ? Stocks Routes
 
 router.get("/stocks", StockController.getAll);
+router.get("/reports/out-of-stock", StockController.getOutOfStockReport);
 
 router.post(
   "/move-items-to-stock/:daybookId",
