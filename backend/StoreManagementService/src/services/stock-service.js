@@ -68,6 +68,16 @@ class StockService {
       throw error;
     }
   }
+
+  async getOutOfStockReport(actor = null) {
+    try {
+      return await this.stockRepository.getOutOfStockReport({
+        viewerActor: actor,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = StockService;

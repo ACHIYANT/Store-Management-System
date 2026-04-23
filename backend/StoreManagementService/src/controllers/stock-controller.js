@@ -186,9 +186,29 @@ const getStocksByCategoryId = async (req, res) => {
   }
 };
 
+const getOutOfStockReport = async (req, res) => {
+  try {
+    const data = await stockService.getOutOfStockReport(req.user || null);
+    return res.status(200).json({
+      success: true,
+      data,
+      message: "Out of stock report fetched successfully",
+      err: {},
+    });
+  } catch (error) {
+    return res.status(error?.statusCode || 500).json({
+      success: false,
+      data: {},
+      message: "Failed to fetch out of stock report",
+      err: error?.message || error,
+    });
+  }
+};
+
 module.exports = {
   getAll,
   moveDayBookItemsToStock,
   getAllStocksByCategory,
   getStocksByCategoryId,
+  getOutOfStockReport,
 };
