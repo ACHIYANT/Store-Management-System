@@ -58,6 +58,7 @@ import RequisitionInbox from "./pages/RequisitionInbox";
 import RequisitionStoreQueue from "./pages/RequisitionStoreQueue";
 import RequisitionDetail from "./pages/RequisitionDetail";
 import Profile from "./pages/Profile";
+import MyHoldingReport from "./pages/MyHoldingReport";
 
 function App() {
   const user = JSON.parse(localStorage.getItem("me") || "null"); // {roles: [...]}
@@ -227,6 +228,14 @@ function App() {
           <Route
             path="/reports/out-of-stock"
             element={<OutOfStockReport />}
+          />
+          <Route
+            path="/my/current-holding-report"
+            element={
+              <ProtectedRoute user={user}>
+                <MyHoldingReport />
+              </ProtectedRoute>
+            }
           />
           <Route path="/dispose-list" element={<DisposeList />} />
           <Route path="/e-waste" element={<EWasteItems />} />

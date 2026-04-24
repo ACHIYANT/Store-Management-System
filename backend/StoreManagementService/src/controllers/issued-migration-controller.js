@@ -70,6 +70,7 @@ const parseItemType = (value) => {
 const splitUnifiedRows = (rawRows = [], sheetName = "issued_items") => {
   const assetsRows = [];
   const consumableRows = [];
+  const invalidEmployeeRows = [];
   const context = {
     employee_emp_id: null,
     employee_name: null,
@@ -101,10 +102,14 @@ const splitUnifiedRows = (rawRows = [], sheetName = "issued_items") => {
     const rowEmpId = toInteger(get("employee_emp_id", "employee_id", "emp_id"));
     const rowEmpName = toText(get("employee_name", "name"));
     const rowDivision = toText(get("division"));
+    const hasEmployeeText = rowEmpName || rowDivision;
+    const missingEmployeeId = !rowEmpId && hasEmployeeText;
 
-    if (rowEmpId) context.employee_emp_id = rowEmpId;
-    if (rowEmpName) context.employee_name = rowEmpName;
-    if (rowDivision) context.division = rowDivision;
+    if (rowEmpId) {
+      context.employee_emp_id = rowEmpId;
+      context.employee_name = rowEmpName;
+      context.division = rowDivision;
+    }
 
     const hasItemData =
       hasValue(get("item_type", "type", "entry_type")) ||
@@ -116,7 +121,17 @@ const splitUnifiedRows = (rawRows = [], sheetName = "issued_items") => {
       hasValue(get("quantity", "qty"));
 
     if (!hasItemData) {
-      if (rowEmpId || rowEmpName || rowDivision) {
+      if (missingEmployeeId) {
+        invalidEmployeeRows.push({
+          row_no: rowNo,
+          sheet_name: sheetName,
+          employee_emp_id: null,
+          employee_name: rowEmpName,
+          division: rowDivision,
+          employee_error:
+            "employee_emp_id is required when employee_name or division is provided",
+        });
+      } else if (rowEmpId || rowEmpName || rowDivision) {
         employeeHeaderRows += 1;
       }
       continue;
@@ -126,8 +141,7 @@ const splitUnifiedRows = (rawRows = [], sheetName = "issued_items") => {
       ...source,
       row_no: rowNo,
       sheet_name: sheetName,
-      employee_emp_id:
-        rowEmpId || context.employee_emp_id || get("employee_emp_id", "employee_id", "emp_id"),
+      employee_emp_id: rowEmpId || (missingEmployeeId ? null : context.employee_emp_id),
       employee_name:
         rowEmpName || context.employee_name || get("employee_name", "name"),
       division: rowDivision || context.division || get("division"),
@@ -150,10 +164,12 @@ const splitUnifiedRows = (rawRows = [], sheetName = "issued_items") => {
   return {
     assetsRows,
     consumableRows,
+    invalidEmployeeRows,
     stats: {
       employeeHeaderRows,
       inferredTypeRows,
-      parsedRows: assetsRows.length + consumableRows.length,
+      parsedRows:
+        assetsRows.length + consumableRows.length + invalidEmployeeRows.length,
     },
   };
 };
@@ -182,6 +198,7 @@ const buildPayloadFromFile = (filePath, body = {}) => {
     return {
       assetsRows: split.assetsRows,
       consumableRows: split.consumableRows,
+      invalidEmployeeRows: split.invalidEmployeeRows,
       sheetLabels: {
         serialized: singleSheetName,
         consumable: singleSheetName,
@@ -197,6 +214,7 @@ const buildPayloadFromFile = (filePath, body = {}) => {
         parsedRows: split.stats.parsedRows,
         employeeHeaderRows: split.stats.employeeHeaderRows,
         inferredTypeRows: split.stats.inferredTypeRows,
+        invalidEmployeeRows: split.invalidEmployeeRows.length,
       },
     };
   }
@@ -215,6 +233,7 @@ const buildPayloadFromFile = (filePath, body = {}) => {
   return {
     assetsRows,
     consumableRows,
+    invalidEmployeeRows: [],
     sheetLabels: {
       serialized: assetsSheetName || "assets_issued",
       consumable: consumablesSheetName || "consumables_issued",
