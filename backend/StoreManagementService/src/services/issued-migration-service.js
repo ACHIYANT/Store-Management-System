@@ -2,6 +2,7 @@
 
 const {
   sequelize,
+  Employee,
   ItemCategory,
   ItemMaster,
   Stock,
@@ -377,11 +378,14 @@ class IssuedMigrationService {
       transaction,
       },
     );
-    const employee = resolvedCustodian.employeeId
+    const employeeRecord = await Employee.findByPk(resolvedCustodian.employeeId, {
+      transaction,
+    });
+    const employee = employeeRecord
       ? {
-          emp_id: resolvedCustodian.employeeId,
-          name: resolvedCustodian.display_name || this._normalizeText(row.employee_name),
-          division: this._normalizeText(row.division),
+          emp_id: employeeRecord.emp_id,
+          name: employeeRecord.name,
+          division: employeeRecord.division,
         }
       : null;
     const resolvedLocationScope = getLocationScopeFromResolvedCustodian(
@@ -393,10 +397,20 @@ class IssuedMigrationService {
       );
     }
 
+    const hasRowSkuUnit =
+      row.sku_unit !== undefined &&
+      row.sku_unit !== null &&
+      String(row.sku_unit).trim() !== "";
+    const parsedInputSkuUnit = hasRowSkuUnit
+      ? normalizeSkuUnit(row.sku_unit)
+      : null;
     const hintedItemMaster = await this._findItemMaster(
       {
         itemMasterId: row.item_master_id,
         itemCode: row.item_code,
+        categoryId: row.category_id,
+        skuUnit: parsedInputSkuUnit,
+        itemName: row.item_name,
       },
       transaction,
     );
@@ -430,13 +444,6 @@ class IssuedMigrationService {
       );
     }
 
-    const hasRowSkuUnit =
-      row.sku_unit !== undefined &&
-      row.sku_unit !== null &&
-      String(row.sku_unit).trim() !== "";
-    const parsedInputSkuUnit = hasRowSkuUnit
-      ? normalizeSkuUnit(row.sku_unit)
-      : null;
     const resolvedCategoryId =
       category?.id || hintedItemMaster?.item_category_id || row.category_id || null;
     const resolvedItemName =
@@ -458,6 +465,7 @@ class IssuedMigrationService {
       if (!writeMode) {
         return {
           employee,
+          custodian: resolvedCustodian,
           category,
           stock: {
             id: null,
@@ -465,6 +473,8 @@ class IssuedMigrationService {
             sku_unit: parsedInputSkuUnit || "Unit",
             ItemCategory: category || null,
           },
+          location_scope: resolvedLocationScope,
+          sku_unit: parsedInputSkuUnit || "Unit",
           willCreateStock: true,
           item_master_id: hintedItemMaster?.id || null,
         };
@@ -1168,6 +1178,24 @@ class IssuedMigrationService {
     let failed = 0;
 
     for (const row of rows) {
+      const inputEmployeeEmpId =
+        IssuedMigrationService.toInteger(row.employee_emp_id);
+      if (inputEmployeeEmpId == null) {
+        failed += 1;
+        details.push({
+          sheet:
+            row.sheet_name ||
+            sheetName ||
+            (type === "serialized" ? "assets_issued" : "consumables_issued"),
+          row_no: row.row_no,
+          item_no: row.item_no,
+          input_employee_emp_id: row.employee_emp_id ?? null,
+          status: "failed",
+          message: "employee_emp_id is required for issued migration",
+        });
+        continue;
+      }
+
       try {
         const data =
           type === "serialized"
@@ -1196,6 +1224,7 @@ class IssuedMigrationService {
             (type === "serialized" ? "assets_issued" : "consumables_issued"),
           row_no: row.row_no,
           item_no: row.item_no,
+          input_employee_emp_id: row.employee_emp_id ?? null,
           ...data,
         });
       } catch (error) {
@@ -1207,6 +1236,7 @@ class IssuedMigrationService {
             (type === "serialized" ? "assets_issued" : "consumables_issued"),
           row_no: row.row_no,
           item_no: row.item_no,
+          input_employee_emp_id: row.employee_emp_id ?? null,
           status: "failed",
           message: error.message || "Unknown error",
         });
@@ -1219,12 +1249,27 @@ class IssuedMigrationService {
   async validate({
     assetsRows = [],
     consumableRows = [],
+    invalidEmployeeRows = [],
     options = {},
     sheetLabels = {},
   }, context = {}) {
     const importContext = this._buildImportContext(context);
     const normalizedAssets = this._buildSheetRows(assetsRows);
     const normalizedConsumables = this._buildSheetRows(consumableRows);
+    const invalidEmployeeDetails = (invalidEmployeeRows || []).map((row) => ({
+      sheet:
+        row.sheet_name ||
+        sheetLabels.serialized ||
+        sheetLabels.consumable ||
+        "issued_items",
+      row_no: row.row_no,
+      item_no: row.row_no,
+      input_employee_emp_id: row.employee_emp_id ?? null,
+      status: "failed",
+      message:
+        row.employee_error ||
+        "employee_emp_id is required when employee_name or division is provided",
+    }));
 
     const serializedResult = await this._processRows({
       rows: normalizedAssets,
@@ -1243,15 +1288,25 @@ class IssuedMigrationService {
       actorLabel: importContext.performed_by,
     });
 
-    const allDetails = [...serializedResult.details, ...consumableResult.details];
-    const failed = serializedResult.failed + consumableResult.failed;
+    const allDetails = [
+      ...invalidEmployeeDetails,
+      ...serializedResult.details,
+      ...consumableResult.details,
+    ];
+    const failed =
+      invalidEmployeeDetails.length +
+      serializedResult.failed +
+      consumableResult.failed;
 
     return {
       success: failed === 0,
       mode: "validate",
       import_context: importContext,
       summary: {
-        total_rows: normalizedAssets.length + normalizedConsumables.length,
+        total_rows:
+          normalizedAssets.length +
+          normalizedConsumables.length +
+          invalidEmployeeRows.length,
         assets_rows: normalizedAssets.length,
         consumables_rows: normalizedConsumables.length,
         ready_rows:
@@ -1267,12 +1322,27 @@ class IssuedMigrationService {
   async execute({
     assetsRows = [],
     consumableRows = [],
+    invalidEmployeeRows = [],
     options = {},
     sheetLabels = {},
   }, context = {}) {
     const importContext = this._buildImportContext(context);
     const normalizedAssets = this._buildSheetRows(assetsRows);
     const normalizedConsumables = this._buildSheetRows(consumableRows);
+    const invalidEmployeeDetails = (invalidEmployeeRows || []).map((row) => ({
+      sheet:
+        row.sheet_name ||
+        sheetLabels.serialized ||
+        sheetLabels.consumable ||
+        "issued_items",
+      row_no: row.row_no,
+      item_no: row.row_no,
+      input_employee_emp_id: row.employee_emp_id ?? null,
+      status: "failed",
+      message:
+        row.employee_error ||
+        "employee_emp_id is required when employee_name or division is provided",
+    }));
 
     const precheckSerialized = await this._processRows({
       rows: normalizedAssets,
@@ -1292,11 +1362,18 @@ class IssuedMigrationService {
     });
 
     const precheckDetails = [
+      ...invalidEmployeeDetails,
       ...precheckSerialized.details,
       ...precheckConsumable.details,
     ];
-    const precheckFailed = precheckSerialized.failed + precheckConsumable.failed;
-    const totalRows = normalizedAssets.length + normalizedConsumables.length;
+    const precheckFailed =
+      invalidEmployeeDetails.length +
+      precheckSerialized.failed +
+      precheckConsumable.failed;
+    const totalRows =
+      normalizedAssets.length +
+      normalizedConsumables.length +
+      invalidEmployeeRows.length;
 
     if (precheckFailed > 0) {
       return {
