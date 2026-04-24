@@ -222,6 +222,9 @@ export default function Sidebar() {
     "ADMIN_APPROVER",
   ]);
   const canAccessReports = canAccessInventory;
+  const canSeeMyHoldingReport = Boolean(
+    localStorage.getItem("me") || localStorage.getItem("fullname"),
+  );
   const canAccessDisposeOff = hasAnyRole(["SUPER_ADMIN", "STORE_ENTRY"]);
 
   const canSeeMrnList = hasSubItemAccessStrict(subItemRoleRules.mrnList);
@@ -352,6 +355,7 @@ export default function Sidebar() {
       path.startsWith("/mirs") ||
       path.startsWith("/mir-page") ||
       path.startsWith("/issued-items") ||
+      path.startsWith("/my/current-holding-report") ||
       path.startsWith("/reports/employee-issues") ||
       path.startsWith("/reports/custodian-issues")
     ) {
@@ -509,7 +513,8 @@ export default function Sidebar() {
         canAccessRequisition ||
         canAccessMrn ||
         canAccessIssue ||
-        canAccessGatePass) && (
+        canAccessGatePass ||
+        canSeeMyHoldingReport) && (
         <GroupCard title="Operations">
           {canAccessDayBook && (
             <NavItem
@@ -595,6 +600,13 @@ export default function Sidebar() {
                 />
               )}
             </NavItem>
+          )}
+          {canSeeMyHoldingReport && (
+            <NavItem
+              icon={FileSpreadsheet}
+              label="My Holding Report"
+              onClick={() => handleNavigate("/my/current-holding-report")}
+            />
           )}
           {showGatePassNav && (
             <NavItem icon={DoorOpen} label="Gate Pass" collapsible>
@@ -742,6 +754,7 @@ export default function Sidebar() {
         !canAccessMrn &&
         !canAccessIssue &&
         !canAccessGatePass &&
+        !canSeeMyHoldingReport &&
         !canAccessInventory &&
         !canAccessReports &&
         !canAccessMasterEntry &&

@@ -73,6 +73,13 @@ export default function EmployeeIssuedStatement() {
     return inferCustodianTypeFromId(id);
   }, [id, queryParams]);
   const subjectId = id ? decodeURIComponent(String(id)) : "";
+  const requestedMode = useMemo(() => {
+    const raw = String(queryParams.get("mode") || "")
+      .trim()
+      .toUpperCase();
+    return raw === "CURRENT" ? "CURRENT" : "HISTORY";
+  }, [queryParams]);
+  const lockCurrentMode = requestedMode === "CURRENT";
 
   const [employee, setEmployee] = useState(null);
   const [issuedItems, setIssuedItems] = useState([]);
@@ -81,12 +88,16 @@ export default function EmployeeIssuedStatement() {
   const [printTimestamp, setPrintTimestamp] = useState("");
   const [preparedBy, setPreparedBy] = useState("Login Name");
   const [reportType, setReportType] = useState("ALL");
-  const [statementMode, setStatementMode] = useState("HISTORY");
+  const [statementMode, setStatementMode] = useState(requestedMode);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("fullname");
     if (storedUser) setPreparedBy(storedUser);
   }, []);
+
+  useEffect(() => {
+    setStatementMode(requestedMode);
+  }, [requestedMode]);
 
   const fetchIssuedItemsByCursor = useCallback(async (currentOnly = false) => {
     const all = [];
@@ -318,28 +329,30 @@ export default function EmployeeIssuedStatement() {
             : "Issued Items Statement"}
         </h2>
 
-        <div className="print:hidden mb-4 flex items-center justify-center gap-2">
-          <button
-            onClick={() => setStatementMode("HISTORY")}
-            className={`rounded-full border px-3 py-1.5 text-sm ${
-              statementMode === "HISTORY"
-                ? "border-slate-700 bg-slate-700 text-white"
-                : "bg-white text-gray-700"
-            }`}
-          >
-            Issue History
-          </button>
-          <button
-            onClick={() => setStatementMode("CURRENT")}
-            className={`rounded-full border px-3 py-1.5 text-sm ${
-              statementMode === "CURRENT"
-                ? "border-emerald-600 bg-emerald-600 text-white"
-                : "bg-white text-gray-700"
-            }`}
-          >
-            Current Holding Report
-          </button>
-        </div>
+        {!lockCurrentMode && (
+          <div className="print:hidden mb-4 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setStatementMode("HISTORY")}
+              className={`rounded-full border px-3 py-1.5 text-sm ${
+                statementMode === "HISTORY"
+                  ? "border-slate-700 bg-slate-700 text-white"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              Issue History
+            </button>
+            <button
+              onClick={() => setStatementMode("CURRENT")}
+              className={`rounded-full border px-3 py-1.5 text-sm ${
+                statementMode === "CURRENT"
+                  ? "border-emerald-600 bg-emerald-600 text-white"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              Current Holding Report
+            </button>
+          </div>
+        )}
 
         <div className="print:hidden mb-4 flex items-center justify-center gap-2">
           <button

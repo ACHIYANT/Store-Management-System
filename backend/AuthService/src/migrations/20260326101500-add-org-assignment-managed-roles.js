@@ -12,21 +12,26 @@ const ROLE_NAMES = [
 module.exports = {
   async up(queryInterface) {
     for (const roleName of ROLE_NAMES) {
-      await queryInterface.sequelize.query(`
-        INSERT INTO \`${ROLE_TABLE}\` (name, createdAt, updatedAt)
-        SELECT '${roleName}', NOW(), NOW()
+      await queryInterface.sequelize.query(
+        `
+        INSERT INTO ?? (name, createdAt, updatedAt)
+        SELECT ?, NOW(), NOW()
         WHERE NOT EXISTS (
-          SELECT 1 FROM \`${ROLE_TABLE}\` WHERE name = '${roleName}'
+          SELECT 1 FROM ?? WHERE name = ?
         )
-      `);
+      `,
+        {
+          replacements: [ROLE_TABLE, roleName, ROLE_TABLE, roleName],
+        },
+      );
     }
   },
 
   async down(queryInterface) {
     for (const roleName of ROLE_NAMES) {
-      await queryInterface.sequelize.query(`
-        DELETE FROM \`${ROLE_TABLE}\` WHERE name = '${roleName}'
-      `);
+      await queryInterface.sequelize.query(`DELETE FROM ?? WHERE name = ?`, {
+        replacements: [ROLE_TABLE, roleName],
+      });
     }
   },
 };
