@@ -6,6 +6,12 @@ import { STORE_API_BASE_URL } from "@/lib/api-config";
 
 const API = STORE_API_BASE_URL;
 const safe = (value) => (value == null || value === "" ? "-" : value);
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return safe(value);
+  return date.toLocaleDateString();
+};
 const isValidAssetId = (value) => {
   if (value == null) return false;
   const normalized = String(value).trim();
@@ -189,8 +195,10 @@ export default function NocPage() {
               <tr className="bg-gray-200">
                 <th className="border p-1">#</th>
                 <th className="border p-1">Asset ID</th>
+                <th className="border p-1">Item Name</th>
                 <th className="border p-1">Asset Tag</th>
                 <th className="border p-1">Serial Number</th>
+                <th className="border p-1">Issue Date</th>
                 <th className="border p-1">Status</th>
                 <th className="border p-1">Item Category</th>
               </tr>
@@ -204,12 +212,14 @@ export default function NocPage() {
                     <td className="border p-1">
                       {renderAssetLink(assetId, assetId)}
                     </td>
+                    <td className="border p-1">{safe(asset.item_name)}</td>
                     <td className="border p-1">
                       {renderAssetLink(assetId, asset.asset_tag)}
                     </td>
                     <td className="border p-1">
                       {renderAssetLink(assetId, asset.serial_number)}
                     </td>
+                    <td className="border p-1">{formatDate(asset.issue_date)}</td>
                     <td className="border p-1">{safe(asset.status)}</td>
                     <td className="border p-1">
                       {safe(asset?.ItemCategory?.category_name)}
