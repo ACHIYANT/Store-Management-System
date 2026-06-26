@@ -316,7 +316,7 @@ class AssetRepository {
       Object.assign(where, locationWhere);
     }
 
-    return Asset.findAll({
+    const assets = await Asset.findAll({
       where,
       include: [
         {
@@ -324,8 +324,58 @@ class AssetRepository {
           attributes: ["id", "category_name"],
           required: false,
         },
+        {
+          model: Stock,
+          attributes: ["id", "item_name"],
+          required: false,
+        },
+        {
+          model: ItemMaster,
+          as: "itemMaster",
+          attributes: ["id", "display_name"],
+          required: false,
+        },
       ],
       order: [["id", "ASC"]],
+    });
+
+    const assetIds = assets.map((asset) => Number(asset.id)).filter(Boolean);
+    const issueDateByAssetId = new Map();
+
+    if (assetIds.length) {
+      const issueEvents = await AssetEvent.findAll({
+        where: {
+          asset_id: assetIds,
+          event_type: {
+            [Op.in]: ["Issued", "Transferred", "Retained"],
+          },
+        },
+        attributes: ["asset_id", "event_date"],
+        order: [
+          ["event_date", "DESC"],
+          ["id", "DESC"],
+        ],
+      });
+
+      for (const event of issueEvents) {
+        const assetId = Number(event.asset_id);
+        if (!issueDateByAssetId.has(assetId)) {
+          issueDateByAssetId.set(assetId, event.event_date);
+        }
+      }
+    }
+
+    return assets.map((asset) => {
+      const plain = asset.get({ plain: true });
+      return {
+        ...plain,
+        item_name:
+          plain?.itemMaster?.display_name ||
+          plain?.Stock?.item_name ||
+          plain?.ItemCategory?.category_name ||
+          null,
+        issue_date: issueDateByAssetId.get(Number(plain.id)) || null,
+      };
     });
   }
   async getAll(actor = null) {

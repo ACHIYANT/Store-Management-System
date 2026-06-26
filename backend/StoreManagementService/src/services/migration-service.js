@@ -18,6 +18,7 @@ const { buildMigrationActorLabel } = require("../utils/migration-api-utils");
 
 const MIGRATION_DAYBOOK_ID = 107; // <-- replace with yours
 const OPENING_VENDOR_ID = 55; // replace with your actual Opening Vendor ID
+const OPENING_NO_SERIAL_PREFIX = "MIG-OPENING-NOSERIAL";
 const BASE_AFFECTED_TABLES = ["ItemMasters", "Stocks", "StockMovements"];
 const SERIALIZED_AFFECTED_TABLES = [
   ...BASE_AFFECTED_TABLES,
@@ -64,6 +65,20 @@ class MigrationService {
       throw new Error(`Row ${rowNo}: ${fieldName} is required and must be a valid date`);
     }
     return dateValue;
+  }
+
+  optionalValidDate(value, fieldName, rowNo) {
+    if (value == null || String(value).trim() === "") return null;
+    const dateValue = this.parseExcelDate(value);
+    if (!dateValue) {
+      throw new Error(`Row ${rowNo}: ${fieldName} must be a valid date when provided`);
+    }
+    return dateValue;
+  }
+
+  buildMissingSerialNumber(rowNo, index = 0) {
+    const rowPart = String(rowNo || "ROW").replace(/[^0-9A-Za-z]/g, "");
+    return `${OPENING_NO_SERIAL_PREFIX}-${rowPart}-${String(index + 1).padStart(3, "0")}`;
   }
 
   generateAssetTag(categoryName, year, daybookItemId, seq) {
@@ -380,18 +395,18 @@ class MigrationService {
         const skuUnit = this.resolveSkuUnit(
           sourceRow.sku_unit ?? sourceRow.unit ?? sourceRow.uom,
         );
-        const purchasedAt = this.requireValidDate(
+        const purchasedAt = this.optionalValidDate(
           sourceRow.purchased_at,
           "purchased_at",
           rowNo,
         );
-        const warrantyExpiry = this.requireValidDate(
+        const warrantyExpiry = this.optionalValidDate(
           sourceRow.warranty_expiry,
           "warranty_expiry",
           rowNo,
         );
 
-        if (warrantyExpiry < purchasedAt) {
+        if (purchasedAt && warrantyExpiry && warrantyExpiry < purchasedAt) {
           throw new Error(
             `Row ${rowNo}: warranty_expiry cannot be before purchased_at`,
           );
@@ -416,38 +431,34 @@ class MigrationService {
               `Row ${rowNo}: quantity must be 1 for serialized category items`,
             );
           }
-          if (!rawSerial) {
-            throw new Error(
-              `Row ${rowNo}: serial_number is required for serialized category items`,
-            );
-          }
+          if (rawSerial) {
+            const serialKey = rawSerial.toUpperCase();
+            if (serialSeenInFile.has(serialKey)) {
+              throw new Error(
+                `Row ${rowNo}: duplicate serial_number '${rawSerial}' also found at row ${serialSeenInFile.get(serialKey)}`,
+              );
+            }
+            serialSeenInFile.set(serialKey, rowNo);
 
-          const serialKey = rawSerial.toUpperCase();
-          if (serialSeenInFile.has(serialKey)) {
-            throw new Error(
-              `Row ${rowNo}: duplicate serial_number '${rawSerial}' also found at row ${serialSeenInFile.get(serialKey)}`,
-            );
-          }
-          serialSeenInFile.set(serialKey, rowNo);
+            const existing = await Asset.findOne({
+              where: { serial_number: rawSerial, is_active: true },
+              attributes: ["id"],
+            });
+            if (existing) {
+              throw new Error(
+                `Row ${rowNo}: duplicate serial_number '${rawSerial}' already exists in system`,
+              );
+            }
 
-          const existing = await Asset.findOne({
-            where: { serial_number: rawSerial, is_active: true },
-            attributes: ["id"],
-          });
-          if (existing) {
-            throw new Error(
-              `Row ${rowNo}: duplicate serial_number '${rawSerial}' already exists in system`,
-            );
-          }
-
-          const existingInDayBookSerials = await DayBookItemSerial.findOne({
-            where: { serial_number: rawSerial },
-            attributes: ["id"],
-          });
-          if (existingInDayBookSerials) {
-            throw new Error(
-              `Row ${rowNo}: duplicate serial_number '${rawSerial}' already exists in DayBookItemSerials`,
-            );
+            const existingInDayBookSerials = await DayBookItemSerial.findOne({
+              where: { serial_number: rawSerial },
+              attributes: ["id"],
+            });
+            if (existingInDayBookSerials) {
+              throw new Error(
+                `Row ${rowNo}: duplicate serial_number '${rawSerial}' already exists in DayBookItemSerials`,
+              );
+            }
           }
         }
 
@@ -467,6 +478,9 @@ class MigrationService {
           quantity,
           sku_unit: skuUnit,
           serialized_required: serializedRequired,
+          missing_purchase_date: !purchasedAt,
+          missing_warranty_expiry: !warrantyExpiry,
+          serial_missing_migration: serializedRequired && !rawSerial,
           would_affect_tables: wouldAffectTables,
         });
       } catch (error) {
@@ -521,14 +535,14 @@ class MigrationService {
       row.category_name = this.requireText(row.category_name, "category_name", rowNo);
       row.quantity = this.requirePositiveNumber(row.quantity, "quantity", rowNo);
       row.sku_unit = this.resolveSkuUnit(row.sku_unit ?? row.unit ?? row.uom);
-      row.purchased_at = this.requireValidDate(row.purchased_at, "purchased_at", rowNo);
-      row.warranty_expiry = this.requireValidDate(
+      row.purchased_at = this.optionalValidDate(row.purchased_at, "purchased_at", rowNo);
+      row.warranty_expiry = this.optionalValidDate(
         row.warranty_expiry,
         "warranty_expiry",
         rowNo,
       );
 
-      if (row.warranty_expiry < row.purchased_at) {
+      if (row.purchased_at && row.warranty_expiry && row.warranty_expiry < row.purchased_at) {
         throw new Error(
           `Row ${rowNo}: warranty_expiry cannot be before purchased_at`,
         );
@@ -569,7 +583,8 @@ class MigrationService {
         const serializedRequired = Boolean(category.serialized_required);
         if (serializedRequired) {
           const serialToRowNo = new Map();
-          for (const record of records) {
+          for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
+            const record = records[recordIndex];
             const rowNo = this.getRowNo(record, 0);
             const rowQty = Number(record.quantity || 0);
             if (rowQty !== 1) {
@@ -577,11 +592,11 @@ class MigrationService {
                 `Row ${rowNo}: quantity must be 1 for serialized category items`,
               );
             }
-            const serial = String(record.serial_number || "").trim();
+            let serial = String(record.serial_number || "").trim();
             if (!serial) {
-              throw new Error(
-                `Row ${rowNo}: serial_number is required for serialized category items`,
-              );
+              serial = this.buildMissingSerialNumber(rowNo, recordIndex);
+              record.serial_number = serial;
+              record.serial_missing_migration = true;
             }
             const serialKey = serial.toUpperCase();
             if (serialToRowNo.has(serialKey)) {
@@ -790,8 +805,10 @@ class MigrationService {
 
           for (const r of records) {
             const rowNo = this.getRowNo(r, 0);
-            const purchasedDate = r.purchased_at;
-            const year = purchasedDate.getFullYear();
+            const purchasedDate = r.purchased_at || null;
+            const year = purchasedDate
+              ? purchasedDate.getFullYear()
+              : new Date().getFullYear();
 
             const assetTag = this.generateAssetTag(
               category.category_name,
@@ -801,6 +818,10 @@ class MigrationService {
             );
 
             const warrantyDate = r.warranty_expiry;
+            const serialMissingMigration = Boolean(r.serial_missing_migration);
+            const migrationNotes = serialMissingMigration
+              ? "MIGRATED_OPENING_STOCK | SOURCE_SERIAL_MISSING"
+              : "MIGRATED_OPENING_STOCK";
             const dayBookItemSerial = await DayBookItemSerial.create(
               {
                 daybook_item_id: daybookItem.id,
@@ -831,7 +852,7 @@ class MigrationService {
                 warranty_expiry: warrantyDate, // ✅ fixed date
                 status: "InStore",
                 location_scope: locationScope,
-                notes: "MIGRATED_OPENING_STOCK", // ✅ uniform tag
+                notes: migrationNotes, // ✅ uniform tag
               },
               { transaction },
             );
@@ -859,6 +880,10 @@ class MigrationService {
               asset_id: asset.id,
               asset_tag: asset.asset_tag,
               asset_event_id: assetEvent?.id || null,
+              serial_missing_migration: serialMissingMigration,
+              generated_serial_number: serialMissingMigration
+                ? r.serial_number
+                : null,
             });
           }
 
