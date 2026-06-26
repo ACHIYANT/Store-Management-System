@@ -143,10 +143,21 @@ class ProfileService {
     const authStatus = await this.fetchAuthSessionStatus(req);
     const liveUser = authStatus?.user || {};
     const actor = req.user || {};
-    const empcode = Number(liveUser.empcode || actor.empcode || 0) || null;
-    const employee = empcode
-      ? await this.employeeRepository.getEmployee(empcode)
+    const accountEmpcode = Number(liveUser.empcode || actor.empcode || 0) || null;
+    let employee = accountEmpcode
+      ? await this.employeeRepository.getEmployee(accountEmpcode)
       : null;
+
+    if (!employee) {
+      employee = await this.employeeRepository.findByMobileNo(
+        liveUser.mobileno || actor.mobileno,
+      );
+    }
+
+    const empcode = employee?.emp_id || accountEmpcode;
+    employee = employee || (empcode
+      ? await this.employeeRepository.getEmployee(empcode)
+      : null);
 
     const roles = toArray(liveUser.roles).length
       ? toArray(liveUser.roles)

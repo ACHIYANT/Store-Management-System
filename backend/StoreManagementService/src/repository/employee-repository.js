@@ -94,6 +94,22 @@ class EmployeeRepository {
     }
   }
 
+  async findByMobileNo(mobileNo) {
+    try {
+      const normalizedMobile = String(mobileNo || "").replace(/\D/g, "");
+      if (!normalizedMobile) return null;
+
+      return await Employee.findOne({
+        where: {
+          mobile_no: normalizedMobile,
+        },
+      });
+    } catch (error) {
+      console.log("Something went wrong in the repository layer.");
+      throw { error };
+    }
+  }
+
   async getAllEmployees({
     search = "",
     division = "",
