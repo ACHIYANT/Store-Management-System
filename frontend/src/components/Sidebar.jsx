@@ -124,9 +124,10 @@ export default function Sidebar() {
   const hasAnyRole = (allowedRoles = []) =>
     allowedRoles.some((role) => hasRole(role));
   const hasSubItemAccessStrict = (allowedRoles = []) =>
-    Array.isArray(allowedRoles) &&
-    allowedRoles.length > 0 &&
-    hasAnyRole(allowedRoles);
+    hasRole("SUPER_ADMIN") ||
+    (Array.isArray(allowedRoles) &&
+      allowedRoles.length > 0 &&
+      hasAnyRole(allowedRoles));
 
   const subItemRoleRules = {
     requisitionsMy: [
